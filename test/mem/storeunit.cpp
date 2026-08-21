@@ -53,6 +53,7 @@ struct Uop {
 struct WriteBeat {
     uint32_t addr = 0;
     uint64_t data = 0;
+    bool last_of_uop = false;
     std::string name;
 };
 
@@ -219,6 +220,9 @@ private:
             if (wr_hold_active_) {
                 fail("mem_wr_valid_o dropped while write request was stalled");
             }
+            if (dut_.done_valid_o) {
+                fail("done_valid_o asserted without a valid write");
+            }
             return;
         }
 
@@ -240,6 +244,16 @@ private:
                << " data=" << hex64(dut_.mem_wr_data_o)
                << ", expected addr=" << exp.addr
                << " data=" << hex64(exp.data);
+            fail(os.str());
+        }
+
+        const bool expect_done = fire && exp.last_of_uop;
+        if (static_cast<bool>(dut_.done_valid_o) != expect_done) {
+            std::ostringstream os;
+            os << "done_valid_o mismatch at cycle " << cycle_
+               << " for " << exp.name
+               << ": got " << static_cast<int>(dut_.done_valid_o)
+               << ", expected " << static_cast<int>(expect_done);
             fail(os.str());
         }
 
@@ -296,6 +310,8 @@ private:
                 WriteBeat exp;
                 exp.addr = beat_addr(burst_.base_addr, burst_.row, beat);
                 exp.data = beat_data(full_row, beat);
+                exp.last_of_uop =
+                    (burst_.row == kSaWidth - 1) && (beat == kRowWriteBeats - 1);
                 exp.name = burst_.name;
                 expected_writes_.push_back(exp);
             }

@@ -12,9 +12,15 @@
 // and high halves of each operand buffer; odd leftover entries are unused.
 //
 // Per output block, the first K-wave is loaded, swapped into read side, and
-// then the next K-wave is loaded before the current K-wave GEMMs.  After a
+// then the next K-wave is loaded before the current K-wave GEMMs.  The first
+// GEMM of each command is preceded by UOP_ACC_FENCE, but only after the
+// command's leading LOAD/PREFETCH work has been emitted, so the next command's
+// operand traffic can overlap prior asynchronous OUTPUT draining.  After a
 // block's OUTPUT uops, the next block's first loads are emitted before
-// UOP_ACC_FENCE so operand prefetch can overlap asynchronous output draining.
+// UOP_ACC_FENCE so operand prefetch can similarly overlap output draining.
+// Across command boundaries the initial operand buffer half alternates: the
+// first K-wave of a new command uses the opposite half from the prior command's
+// final GEMM wave.
 
 `default_nettype none
 
@@ -164,6 +170,7 @@ module static_uopparse #(
         ST_PREFETCH_A,
         ST_PREFETCH_B,
         ST_ACC_FENCE,
+        ST_CMD_ACC_FENCE,
         ST_BUF_SWAP,
         ST_GEMM,
         ST_OUTPUT
@@ -255,6 +262,8 @@ module static_uopparse #(
     tile_count_t out_n_idx_q;
     logic read_group_q;
     logic load_group_q;
+    logic next_command_load_group_q;
+    logic command_fence_pending_q;
     logic fence_before_swap_q;
 
     tile_count_t cmd_tm_comb;
@@ -326,7 +335,7 @@ module static_uopparse #(
                 uop_bbufidx_o = bbuf_slot(load_group_q, load_idx_q);
             end
 
-            ST_ACC_FENCE: begin
+            ST_ACC_FENCE, ST_CMD_ACC_FENCE: begin
                 uop_type_o = UOP_ACC_FENCE;
             end
 
@@ -381,6 +390,8 @@ module static_uopparse #(
             out_n_idx_q <= '0;
             read_group_q <= 1'b0;
             load_group_q <= 1'b0;
+            next_command_load_group_q <= 1'b0;
+            command_fence_pending_q <= 1'b0;
             fence_before_swap_q <= 1'b0;
         end else begin
             if (state_q == ST_IDLE) begin
@@ -402,8 +413,9 @@ module static_uopparse #(
                     gemm_n_idx_q <= '0;
                     out_m_idx_q <= '0;
                     out_n_idx_q <= '0;
-                    read_group_q <= 1'b0;
-                    load_group_q <= 1'b0;
+                    read_group_q <= ~next_command_load_group_q;
+                    load_group_q <= next_command_load_group_q;
+                    command_fence_pending_q <= 1'b1;
                     fence_before_swap_q <= 1'b0;
                 end
             end else if (uop_fire) begin
@@ -430,7 +442,7 @@ module static_uopparse #(
                         if ((load_idx_q + 1'b1) < block_n_q) begin
                             load_idx_q <= load_idx_q + 1'b1;
                         end else begin
-                            state_q <= ST_GEMM;
+                            state_q <= command_fence_pending_q ? ST_CMD_ACC_FENCE : ST_GEMM;
                             load_idx_q <= '0;
                             gemm_m_idx_q <= '0;
                             gemm_n_idx_q <= '0;
@@ -442,8 +454,17 @@ module static_uopparse #(
                         fence_before_swap_q <= 1'b0;
                     end
 
+                    ST_CMD_ACC_FENCE: begin
+                        state_q <= ST_GEMM;
+                        command_fence_pending_q <= 1'b0;
+                    end
+
                     ST_BUF_SWAP: begin
-                        state_q <= ((k_tile_q + 1'b1) < tk_q) ? ST_PREFETCH_A : ST_GEMM;
+                        if ((k_tile_q + 1'b1) < tk_q) begin
+                            state_q <= ST_PREFETCH_A;
+                        end else begin
+                            state_q <= command_fence_pending_q ? ST_CMD_ACC_FENCE : ST_GEMM;
+                        end
                         read_group_q <= load_group_q;
                         load_group_q <= ~load_group_q;
                         load_idx_q <= '0;
@@ -489,6 +510,7 @@ module static_uopparse #(
                             out_n_idx_q <= '0;
                             read_group_q <= 1'b0;
                             load_group_q <= 1'b0;
+                            command_fence_pending_q <= 1'b0;
                             fence_before_swap_q <= 1'b1;
                         end else begin
                             state_q <= ST_IDLE;
@@ -500,6 +522,8 @@ module static_uopparse #(
                             out_n_idx_q <= '0;
                             read_group_q <= 1'b0;
                             load_group_q <= 1'b0;
+                            next_command_load_group_q <= ~read_group_q;
+                            command_fence_pending_q <= 1'b0;
                             fence_before_swap_q <= 1'b0;
                         end
                     end

@@ -1,0 +1,1 @@
+请帮我在lab/static/static.cpp(.sh)中使用verilator写一个实验代码，分别使用不同规模（MNK）的连续GEMM命令流（单次实验的流内MNK保持不变，但数据没有依赖关系），测量指标是GEMM命令吞吐量和GEMM命令平均完成延迟。初步设定的主测试硬件是1lane 128x128, 4lane 64x64, 16lane 32x32。因此，这个脚本需要接收 Lane Width M N K Count 参数，表示硬件规模、GEMM命令规模和命令总个数。将结果以txt形式写入到./data/L{Lane}_W{SA_WIDTH}_{M}X{N}X{K}_Cnt{Count}.txt

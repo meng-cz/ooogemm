@@ -55,7 +55,9 @@ module storeunit #(
     output logic mem_wr_valid_o,
     input  logic mem_wr_ready_i,
     output logic [ADDR_WIDTH-1:0] mem_wr_addr_o,
-    output logic [MEM_DATA_WIDTH-1:0] mem_wr_data_o
+    output logic [MEM_DATA_WIDTH-1:0] mem_wr_data_o,
+
+    output logic done_valid_o
 );
 
     initial begin
@@ -101,6 +103,7 @@ module storeunit #(
 
     logic [ADDR_WIDTH-1:0] fifo_addr [FIFO_DEPTH];
     logic [ROW_DATA_WIDTH-1:0] fifo_data [FIFO_DEPTH];
+    logic fifo_last_row [FIFO_DEPTH];
     logic [FIFO_IDX_WIDTH-1:0] fifo_wr_ptr_q;
     logic [FIFO_IDX_WIDTH-1:0] fifo_rd_ptr_q;
     logic [FIFO_CNT_WIDTH-1:0] fifo_count_q;
@@ -108,6 +111,7 @@ module storeunit #(
     logic out_valid_q;
     logic [ADDR_WIDTH-1:0] out_addr_q;
     logic [ROW_DATA_WIDTH-1:0] out_data_q;
+    logic out_last_row_q;
     logic [BEAT_IDX_WIDTH-1:0] out_beat_q;
 
     function automatic logic [ADDR_WIDTH-1:0] row_base_addr(
@@ -170,6 +174,7 @@ module storeunit #(
     assign mem_wr_valid_o = out_valid_q;
     assign mem_wr_addr_o = out_addr_q + ADDR_WIDTH'(out_beat_q);
     assign mem_wr_data_o = beat_data(out_data_q, out_beat_q);
+    assign done_valid_o = mem_wr_fire && out_last_beat && out_last_row_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -185,10 +190,12 @@ module storeunit #(
             out_valid_q <= 1'b0;
             out_addr_q <= '0;
             out_data_q <= '0;
+            out_last_row_q <= 1'b0;
             out_beat_q <= '0;
             for (int i = 0; i < FIFO_DEPTH; i++) begin
                 fifo_addr[i] <= '0;
                 fifo_data[i] <= '0;
+                fifo_last_row[i] <= 1'b0;
             end
         end else begin
             if (uop_fire) begin
@@ -207,6 +214,7 @@ module storeunit #(
             if (row_push) begin
                 fifo_addr[int'(fifo_wr_ptr_q)] <= row_addr(active_row_base_q, recv_row_q);
                 fifo_data[int'(fifo_wr_ptr_q)] <= sa_getacc_data_i;
+                fifo_last_row[int'(fifo_wr_ptr_q)] <= recv_last_row;
                 fifo_wr_ptr_q <= fifo_ptr_inc(fifo_wr_ptr_q);
 
                 if (recv_last_row) begin
@@ -221,12 +229,14 @@ module storeunit #(
                 out_valid_q <= 1'b1;
                 out_addr_q <= fifo_addr[int'(fifo_rd_ptr_q)];
                 out_data_q <= fifo_data[int'(fifo_rd_ptr_q)];
+                out_last_row_q <= fifo_last_row[int'(fifo_rd_ptr_q)];
                 out_beat_q <= '0;
                 fifo_rd_ptr_q <= fifo_ptr_inc(fifo_rd_ptr_q);
             end else if (mem_wr_fire && !out_last_beat) begin
                 out_beat_q <= out_beat_q + BEAT_IDX_WIDTH'(1);
             end else if (mem_wr_fire) begin
                 out_valid_q <= 1'b0;
+                out_last_row_q <= 1'b0;
                 out_beat_q <= '0;
             end
 
