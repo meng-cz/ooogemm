@@ -44,6 +44,7 @@ struct Uop {
     uint32_t abuf = 0;
     uint32_t bbuf = 0;
     uint32_t pacc = 0;
+    uint32_t valid_rows = 0;
     bool accum = false;
 };
 
@@ -81,6 +82,7 @@ std::string describe(const Uop& u) {
        << " abuf=" << u.abuf
        << " bbuf=" << u.bbuf
        << " pacc=" << u.pacc
+       << " rows=" << u.valid_rows
        << " accum=" << (u.accum ? 1 : 0);
     return os.str();
 }
@@ -89,19 +91,21 @@ std::string describe(const Uop& u) {
     throw std::runtime_error(msg);
 }
 
-Uop la(uint32_t addr, uint32_t local_m, int group) {
+Uop la(uint32_t addr, uint32_t local_m, int group, uint32_t valid_rows = kSaWidth) {
     Uop u;
     u.type = UOP_LOAD_A;
     u.addr = addr;
     u.abuf = static_cast<uint32_t>(group * kABufGroupSize) + local_m;
+    u.valid_rows = valid_rows;
     return u;
 }
 
-Uop lb(uint32_t addr, uint32_t local_n, int group) {
+Uop lb(uint32_t addr, uint32_t local_n, int group, uint32_t valid_rows = kSaWidth) {
     Uop u;
     u.type = UOP_LOAD_B;
     u.addr = addr;
     u.bbuf = static_cast<uint32_t>(group * kBBufGroupSize) + local_n;
+    u.valid_rows = valid_rows;
     return u;
 }
 
@@ -135,6 +139,7 @@ bool same(const Uop& a, const Uop& b) {
            a.abuf == b.abuf &&
            a.bbuf == b.bbuf &&
            a.pacc == b.pacc &&
+           a.valid_rows == b.valid_rows &&
            a.accum == b.accum;
 }
 
@@ -188,6 +193,7 @@ Uop read_uop(const Vstatic_uopparse& dut) {
     u.abuf = static_cast<uint32_t>(dut.uop_abufidx_o);
     u.bbuf = static_cast<uint32_t>(dut.uop_bbufidx_o);
     u.pacc = static_cast<uint32_t>(dut.uop_paccidx_o);
+    u.valid_rows = static_cast<uint32_t>(dut.uop_valid_rows_o);
     u.accum = dut.uop_accum_o != 0;
     return u;
 }
@@ -423,6 +429,29 @@ std::vector<Uop> two_single_tile_commands(uint32_t a0, uint32_t b0, uint32_t c0,
     return e;
 }
 
+std::vector<Uop> tail_rows(uint32_t a, uint32_t b, uint32_t c) {
+    const uint32_t a_tail = 3;
+    const uint32_t b_tail = static_cast<uint32_t>(kSaWidth > 5 ? kSaWidth - 5 : 1);
+
+    std::vector<Uop> e;
+    e.push_back(la(a + 0, 0, 0));
+    e.push_back(la(a + 1, 1, 0, a_tail));
+    e.push_back(lb(b + 0, 0, 0));
+    e.push_back(lb(b + 1, 1, 0, b_tail));
+    e.push_back(special(UOP_BUF_SWAP));
+    e.push_back(special(UOP_ACC_FENCE));
+    for (int m = 0; m < 2; ++m) {
+        for (int n = 0; n < 2; ++n) {
+            e.push_back(gemm(m, n, 0, 2, false));
+        }
+    }
+    e.push_back(out(c + 0, 0, 0, 2));
+    e.push_back(out(c + 1, 0, 1, 2));
+    e.push_back(out(c + 2, 1, 0, 2));
+    e.push_back(out(c + 3, 1, 1, 2));
+    return e;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -443,6 +472,9 @@ int main(int argc, char** argv) {
             two_single_tile_commands(0x7000, 0x8000, 0x9000,
                                      0x7100, 0x8100, 0x9100)
         );
+        run_case("tail_rows", 0xa000, 0xb000, 0xc000,
+                 kSaWidth + 3, kSaWidth + (kSaWidth > 5 ? kSaWidth - 5 : 1), kSaWidth,
+                 tail_rows(0xa000, 0xb000, 0xc000));
         std::cout << "static_uopparse tests passed\n";
     } catch (const std::exception& e) {
         std::cerr << "static_uopparse test failed: " << e.what() << "\n";

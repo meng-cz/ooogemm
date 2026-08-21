@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include <array>
 #include <deque>
 #include <iomanip>
@@ -342,6 +343,7 @@ private:
     std::unordered_set<uint32_t> seen_writes_;
     std::deque<Rsp> pending_rsp_;
     size_t cmd_index_ = 0;
+    uint64_t expected_load_req_count_ = 0;
     uint64_t load_req_count_ = 0;
     uint64_t load_rsp_count_ = 0;
     uint64_t store_valid_count_ = 0;
@@ -407,6 +409,7 @@ private:
 
         for (const Cmd& cmd : commands_) {
             add_load_rows(cmd);
+            expected_load_req_count_ += expected_load_requests(cmd);
             add_expected_writes(cmd);
         }
     }
@@ -607,6 +610,42 @@ private:
         }
     }
 
+    int valid_tile_rows(int dim, int tile_idx) const {
+        const int start = tile_idx * kSaWidth;
+        if (dim <= start) {
+            return 0;
+        }
+        return std::min(kSaWidth, dim - start);
+    }
+
+    uint64_t expected_load_requests(const Cmd& cmd) const {
+        const int tm = ceil_tiles(cmd.m);
+        const int tn = ceil_tiles(cmd.n);
+        const int tk = ceil_tiles(cmd.k);
+        uint64_t count = 0;
+
+        for (int block_m_base = 0; block_m_base < tm; block_m_base += kParserBlockM) {
+            const int block_m = std::min(kParserBlockM, tm - block_m_base);
+            for (int block_n_base = 0; block_n_base < tn; block_n_base += kParserBlockN) {
+                const int block_n = std::min(kParserBlockN, tn - block_n_base);
+                for (int kt = 0; kt < tk; ++kt) {
+                    (void)kt;
+                    for (int local_m = 0; local_m < block_m; ++local_m) {
+                        count += static_cast<uint64_t>(
+                            valid_tile_rows(cmd.m, block_m_base + local_m)
+                        );
+                    }
+                    for (int local_n = 0; local_n < block_n; ++local_n) {
+                        count += static_cast<uint64_t>(
+                            valid_tile_rows(cmd.n, block_n_base + local_n)
+                        );
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
     void add_expected_writes(const Cmd& cmd) {
         const int tm = ceil_tiles(cmd.m);
         const int tn = ceil_tiles(cmd.n);
@@ -647,6 +686,12 @@ private:
             if (cmd_index_ == commands_.size() &&
                 pending_rsp_.empty() &&
                 seen_writes_.size() == expected_writes_.size()) {
+                if (load_req_count_ != expected_load_req_count_) {
+                    std::ostringstream os;
+                    os << "load request count mismatch: got=" << load_req_count_
+                       << " expected=" << expected_load_req_count_;
+                    fail(os.str());
+                }
                 for (int drain = 0; drain < 10; ++drain) {
                     drive_cycle();
                     if (dut_.store_mem_wr_valid_o) {

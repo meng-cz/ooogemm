@@ -1,0 +1,507 @@
+model,op_id,phase,layer,module,op_kind,batch_dims,M,N,K,deps,weight,weight_shape,provenance,notes
+models--Qwen--Qwen2.5-7B-Instruct,1,prefill,0,model.layers.0.self_attn.q_proj,linear,,B*S,3584,3584,,model.layers.0.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,2,prefill,0,model.layers.0.self_attn.k_proj,linear,,B*S,512,3584,,model.layers.0.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,3,prefill,0,model.layers.0.self_attn.v_proj,linear,,B*S,512,3584,,model.layers.0.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,4,prefill,0,model.layers.0.self_attn.qk,batched_matmul,B*QH,S,S,128,1;2,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,5,prefill,0,model.layers.0.self_attn.pv,batched_matmul,B*QH,S,128,S,4;3,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,6,prefill,0,model.layers.0.self_attn.o_proj,linear,,B*S,3584,3584,5,model.layers.0.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,7,prefill,0,model.layers.0.mlp.gate_proj,linear,,B*S,18944,3584,6,model.layers.0.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,8,prefill,0,model.layers.0.mlp.up_proj,linear,,B*S,18944,3584,6,model.layers.0.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,9,prefill,0,model.layers.0.mlp.down_proj,linear,,B*S,3584,18944,7;8,model.layers.0.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,10,prefill,1,model.layers.1.self_attn.q_proj,linear,,B*S,3584,3584,9,model.layers.1.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,11,prefill,1,model.layers.1.self_attn.k_proj,linear,,B*S,512,3584,9,model.layers.1.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,12,prefill,1,model.layers.1.self_attn.v_proj,linear,,B*S,512,3584,9,model.layers.1.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,13,prefill,1,model.layers.1.self_attn.qk,batched_matmul,B*QH,S,S,128,10;11,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,14,prefill,1,model.layers.1.self_attn.pv,batched_matmul,B*QH,S,128,S,13;12,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,15,prefill,1,model.layers.1.self_attn.o_proj,linear,,B*S,3584,3584,14,model.layers.1.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,16,prefill,1,model.layers.1.mlp.gate_proj,linear,,B*S,18944,3584,15,model.layers.1.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,17,prefill,1,model.layers.1.mlp.up_proj,linear,,B*S,18944,3584,15,model.layers.1.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,18,prefill,1,model.layers.1.mlp.down_proj,linear,,B*S,3584,18944,16;17,model.layers.1.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,19,prefill,2,model.layers.2.self_attn.q_proj,linear,,B*S,3584,3584,18,model.layers.2.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,20,prefill,2,model.layers.2.self_attn.k_proj,linear,,B*S,512,3584,18,model.layers.2.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,21,prefill,2,model.layers.2.self_attn.v_proj,linear,,B*S,512,3584,18,model.layers.2.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,22,prefill,2,model.layers.2.self_attn.qk,batched_matmul,B*QH,S,S,128,19;20,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,23,prefill,2,model.layers.2.self_attn.pv,batched_matmul,B*QH,S,128,S,22;21,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,24,prefill,2,model.layers.2.self_attn.o_proj,linear,,B*S,3584,3584,23,model.layers.2.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,25,prefill,2,model.layers.2.mlp.gate_proj,linear,,B*S,18944,3584,24,model.layers.2.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,26,prefill,2,model.layers.2.mlp.up_proj,linear,,B*S,18944,3584,24,model.layers.2.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,27,prefill,2,model.layers.2.mlp.down_proj,linear,,B*S,3584,18944,25;26,model.layers.2.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,28,prefill,3,model.layers.3.self_attn.q_proj,linear,,B*S,3584,3584,27,model.layers.3.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,29,prefill,3,model.layers.3.self_attn.k_proj,linear,,B*S,512,3584,27,model.layers.3.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,30,prefill,3,model.layers.3.self_attn.v_proj,linear,,B*S,512,3584,27,model.layers.3.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,31,prefill,3,model.layers.3.self_attn.qk,batched_matmul,B*QH,S,S,128,28;29,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,32,prefill,3,model.layers.3.self_attn.pv,batched_matmul,B*QH,S,128,S,31;30,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,33,prefill,3,model.layers.3.self_attn.o_proj,linear,,B*S,3584,3584,32,model.layers.3.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,34,prefill,3,model.layers.3.mlp.gate_proj,linear,,B*S,18944,3584,33,model.layers.3.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,35,prefill,3,model.layers.3.mlp.up_proj,linear,,B*S,18944,3584,33,model.layers.3.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,36,prefill,3,model.layers.3.mlp.down_proj,linear,,B*S,3584,18944,34;35,model.layers.3.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,37,prefill,4,model.layers.4.self_attn.q_proj,linear,,B*S,3584,3584,36,model.layers.4.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,38,prefill,4,model.layers.4.self_attn.k_proj,linear,,B*S,512,3584,36,model.layers.4.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,39,prefill,4,model.layers.4.self_attn.v_proj,linear,,B*S,512,3584,36,model.layers.4.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,40,prefill,4,model.layers.4.self_attn.qk,batched_matmul,B*QH,S,S,128,37;38,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,41,prefill,4,model.layers.4.self_attn.pv,batched_matmul,B*QH,S,128,S,40;39,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,42,prefill,4,model.layers.4.self_attn.o_proj,linear,,B*S,3584,3584,41,model.layers.4.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,43,prefill,4,model.layers.4.mlp.gate_proj,linear,,B*S,18944,3584,42,model.layers.4.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,44,prefill,4,model.layers.4.mlp.up_proj,linear,,B*S,18944,3584,42,model.layers.4.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,45,prefill,4,model.layers.4.mlp.down_proj,linear,,B*S,3584,18944,43;44,model.layers.4.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,46,prefill,5,model.layers.5.self_attn.q_proj,linear,,B*S,3584,3584,45,model.layers.5.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,47,prefill,5,model.layers.5.self_attn.k_proj,linear,,B*S,512,3584,45,model.layers.5.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,48,prefill,5,model.layers.5.self_attn.v_proj,linear,,B*S,512,3584,45,model.layers.5.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,49,prefill,5,model.layers.5.self_attn.qk,batched_matmul,B*QH,S,S,128,46;47,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,50,prefill,5,model.layers.5.self_attn.pv,batched_matmul,B*QH,S,128,S,49;48,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,51,prefill,5,model.layers.5.self_attn.o_proj,linear,,B*S,3584,3584,50,model.layers.5.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,52,prefill,5,model.layers.5.mlp.gate_proj,linear,,B*S,18944,3584,51,model.layers.5.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,53,prefill,5,model.layers.5.mlp.up_proj,linear,,B*S,18944,3584,51,model.layers.5.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,54,prefill,5,model.layers.5.mlp.down_proj,linear,,B*S,3584,18944,52;53,model.layers.5.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,55,prefill,6,model.layers.6.self_attn.q_proj,linear,,B*S,3584,3584,54,model.layers.6.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,56,prefill,6,model.layers.6.self_attn.k_proj,linear,,B*S,512,3584,54,model.layers.6.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,57,prefill,6,model.layers.6.self_attn.v_proj,linear,,B*S,512,3584,54,model.layers.6.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,58,prefill,6,model.layers.6.self_attn.qk,batched_matmul,B*QH,S,S,128,55;56,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,59,prefill,6,model.layers.6.self_attn.pv,batched_matmul,B*QH,S,128,S,58;57,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,60,prefill,6,model.layers.6.self_attn.o_proj,linear,,B*S,3584,3584,59,model.layers.6.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,61,prefill,6,model.layers.6.mlp.gate_proj,linear,,B*S,18944,3584,60,model.layers.6.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,62,prefill,6,model.layers.6.mlp.up_proj,linear,,B*S,18944,3584,60,model.layers.6.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,63,prefill,6,model.layers.6.mlp.down_proj,linear,,B*S,3584,18944,61;62,model.layers.6.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,64,prefill,7,model.layers.7.self_attn.q_proj,linear,,B*S,3584,3584,63,model.layers.7.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,65,prefill,7,model.layers.7.self_attn.k_proj,linear,,B*S,512,3584,63,model.layers.7.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,66,prefill,7,model.layers.7.self_attn.v_proj,linear,,B*S,512,3584,63,model.layers.7.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,67,prefill,7,model.layers.7.self_attn.qk,batched_matmul,B*QH,S,S,128,64;65,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,68,prefill,7,model.layers.7.self_attn.pv,batched_matmul,B*QH,S,128,S,67;66,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,69,prefill,7,model.layers.7.self_attn.o_proj,linear,,B*S,3584,3584,68,model.layers.7.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,70,prefill,7,model.layers.7.mlp.gate_proj,linear,,B*S,18944,3584,69,model.layers.7.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,71,prefill,7,model.layers.7.mlp.up_proj,linear,,B*S,18944,3584,69,model.layers.7.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,72,prefill,7,model.layers.7.mlp.down_proj,linear,,B*S,3584,18944,70;71,model.layers.7.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,73,prefill,8,model.layers.8.self_attn.q_proj,linear,,B*S,3584,3584,72,model.layers.8.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,74,prefill,8,model.layers.8.self_attn.k_proj,linear,,B*S,512,3584,72,model.layers.8.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,75,prefill,8,model.layers.8.self_attn.v_proj,linear,,B*S,512,3584,72,model.layers.8.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,76,prefill,8,model.layers.8.self_attn.qk,batched_matmul,B*QH,S,S,128,73;74,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,77,prefill,8,model.layers.8.self_attn.pv,batched_matmul,B*QH,S,128,S,76;75,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,78,prefill,8,model.layers.8.self_attn.o_proj,linear,,B*S,3584,3584,77,model.layers.8.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,79,prefill,8,model.layers.8.mlp.gate_proj,linear,,B*S,18944,3584,78,model.layers.8.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,80,prefill,8,model.layers.8.mlp.up_proj,linear,,B*S,18944,3584,78,model.layers.8.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,81,prefill,8,model.layers.8.mlp.down_proj,linear,,B*S,3584,18944,79;80,model.layers.8.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,82,prefill,9,model.layers.9.self_attn.q_proj,linear,,B*S,3584,3584,81,model.layers.9.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,83,prefill,9,model.layers.9.self_attn.k_proj,linear,,B*S,512,3584,81,model.layers.9.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,84,prefill,9,model.layers.9.self_attn.v_proj,linear,,B*S,512,3584,81,model.layers.9.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,85,prefill,9,model.layers.9.self_attn.qk,batched_matmul,B*QH,S,S,128,82;83,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,86,prefill,9,model.layers.9.self_attn.pv,batched_matmul,B*QH,S,128,S,85;84,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,87,prefill,9,model.layers.9.self_attn.o_proj,linear,,B*S,3584,3584,86,model.layers.9.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,88,prefill,9,model.layers.9.mlp.gate_proj,linear,,B*S,18944,3584,87,model.layers.9.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,89,prefill,9,model.layers.9.mlp.up_proj,linear,,B*S,18944,3584,87,model.layers.9.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,90,prefill,9,model.layers.9.mlp.down_proj,linear,,B*S,3584,18944,88;89,model.layers.9.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,91,prefill,10,model.layers.10.self_attn.q_proj,linear,,B*S,3584,3584,90,model.layers.10.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,92,prefill,10,model.layers.10.self_attn.k_proj,linear,,B*S,512,3584,90,model.layers.10.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,93,prefill,10,model.layers.10.self_attn.v_proj,linear,,B*S,512,3584,90,model.layers.10.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,94,prefill,10,model.layers.10.self_attn.qk,batched_matmul,B*QH,S,S,128,91;92,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,95,prefill,10,model.layers.10.self_attn.pv,batched_matmul,B*QH,S,128,S,94;93,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,96,prefill,10,model.layers.10.self_attn.o_proj,linear,,B*S,3584,3584,95,model.layers.10.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,97,prefill,10,model.layers.10.mlp.gate_proj,linear,,B*S,18944,3584,96,model.layers.10.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,98,prefill,10,model.layers.10.mlp.up_proj,linear,,B*S,18944,3584,96,model.layers.10.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,99,prefill,10,model.layers.10.mlp.down_proj,linear,,B*S,3584,18944,97;98,model.layers.10.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,100,prefill,11,model.layers.11.self_attn.q_proj,linear,,B*S,3584,3584,99,model.layers.11.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,101,prefill,11,model.layers.11.self_attn.k_proj,linear,,B*S,512,3584,99,model.layers.11.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,102,prefill,11,model.layers.11.self_attn.v_proj,linear,,B*S,512,3584,99,model.layers.11.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,103,prefill,11,model.layers.11.self_attn.qk,batched_matmul,B*QH,S,S,128,100;101,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,104,prefill,11,model.layers.11.self_attn.pv,batched_matmul,B*QH,S,128,S,103;102,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,105,prefill,11,model.layers.11.self_attn.o_proj,linear,,B*S,3584,3584,104,model.layers.11.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,106,prefill,11,model.layers.11.mlp.gate_proj,linear,,B*S,18944,3584,105,model.layers.11.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,107,prefill,11,model.layers.11.mlp.up_proj,linear,,B*S,18944,3584,105,model.layers.11.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,108,prefill,11,model.layers.11.mlp.down_proj,linear,,B*S,3584,18944,106;107,model.layers.11.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,109,prefill,12,model.layers.12.self_attn.q_proj,linear,,B*S,3584,3584,108,model.layers.12.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,110,prefill,12,model.layers.12.self_attn.k_proj,linear,,B*S,512,3584,108,model.layers.12.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,111,prefill,12,model.layers.12.self_attn.v_proj,linear,,B*S,512,3584,108,model.layers.12.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,112,prefill,12,model.layers.12.self_attn.qk,batched_matmul,B*QH,S,S,128,109;110,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,113,prefill,12,model.layers.12.self_attn.pv,batched_matmul,B*QH,S,128,S,112;111,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,114,prefill,12,model.layers.12.self_attn.o_proj,linear,,B*S,3584,3584,113,model.layers.12.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,115,prefill,12,model.layers.12.mlp.gate_proj,linear,,B*S,18944,3584,114,model.layers.12.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,116,prefill,12,model.layers.12.mlp.up_proj,linear,,B*S,18944,3584,114,model.layers.12.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,117,prefill,12,model.layers.12.mlp.down_proj,linear,,B*S,3584,18944,115;116,model.layers.12.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,118,prefill,13,model.layers.13.self_attn.q_proj,linear,,B*S,3584,3584,117,model.layers.13.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,119,prefill,13,model.layers.13.self_attn.k_proj,linear,,B*S,512,3584,117,model.layers.13.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,120,prefill,13,model.layers.13.self_attn.v_proj,linear,,B*S,512,3584,117,model.layers.13.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,121,prefill,13,model.layers.13.self_attn.qk,batched_matmul,B*QH,S,S,128,118;119,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,122,prefill,13,model.layers.13.self_attn.pv,batched_matmul,B*QH,S,128,S,121;120,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,123,prefill,13,model.layers.13.self_attn.o_proj,linear,,B*S,3584,3584,122,model.layers.13.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,124,prefill,13,model.layers.13.mlp.gate_proj,linear,,B*S,18944,3584,123,model.layers.13.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,125,prefill,13,model.layers.13.mlp.up_proj,linear,,B*S,18944,3584,123,model.layers.13.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,126,prefill,13,model.layers.13.mlp.down_proj,linear,,B*S,3584,18944,124;125,model.layers.13.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,127,prefill,14,model.layers.14.self_attn.q_proj,linear,,B*S,3584,3584,126,model.layers.14.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,128,prefill,14,model.layers.14.self_attn.k_proj,linear,,B*S,512,3584,126,model.layers.14.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,129,prefill,14,model.layers.14.self_attn.v_proj,linear,,B*S,512,3584,126,model.layers.14.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,130,prefill,14,model.layers.14.self_attn.qk,batched_matmul,B*QH,S,S,128,127;128,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,131,prefill,14,model.layers.14.self_attn.pv,batched_matmul,B*QH,S,128,S,130;129,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,132,prefill,14,model.layers.14.self_attn.o_proj,linear,,B*S,3584,3584,131,model.layers.14.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,133,prefill,14,model.layers.14.mlp.gate_proj,linear,,B*S,18944,3584,132,model.layers.14.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,134,prefill,14,model.layers.14.mlp.up_proj,linear,,B*S,18944,3584,132,model.layers.14.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,135,prefill,14,model.layers.14.mlp.down_proj,linear,,B*S,3584,18944,133;134,model.layers.14.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,136,prefill,15,model.layers.15.self_attn.q_proj,linear,,B*S,3584,3584,135,model.layers.15.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,137,prefill,15,model.layers.15.self_attn.k_proj,linear,,B*S,512,3584,135,model.layers.15.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,138,prefill,15,model.layers.15.self_attn.v_proj,linear,,B*S,512,3584,135,model.layers.15.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,139,prefill,15,model.layers.15.self_attn.qk,batched_matmul,B*QH,S,S,128,136;137,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,140,prefill,15,model.layers.15.self_attn.pv,batched_matmul,B*QH,S,128,S,139;138,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,141,prefill,15,model.layers.15.self_attn.o_proj,linear,,B*S,3584,3584,140,model.layers.15.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,142,prefill,15,model.layers.15.mlp.gate_proj,linear,,B*S,18944,3584,141,model.layers.15.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,143,prefill,15,model.layers.15.mlp.up_proj,linear,,B*S,18944,3584,141,model.layers.15.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,144,prefill,15,model.layers.15.mlp.down_proj,linear,,B*S,3584,18944,142;143,model.layers.15.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,145,prefill,16,model.layers.16.self_attn.q_proj,linear,,B*S,3584,3584,144,model.layers.16.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,146,prefill,16,model.layers.16.self_attn.k_proj,linear,,B*S,512,3584,144,model.layers.16.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,147,prefill,16,model.layers.16.self_attn.v_proj,linear,,B*S,512,3584,144,model.layers.16.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,148,prefill,16,model.layers.16.self_attn.qk,batched_matmul,B*QH,S,S,128,145;146,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,149,prefill,16,model.layers.16.self_attn.pv,batched_matmul,B*QH,S,128,S,148;147,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,150,prefill,16,model.layers.16.self_attn.o_proj,linear,,B*S,3584,3584,149,model.layers.16.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,151,prefill,16,model.layers.16.mlp.gate_proj,linear,,B*S,18944,3584,150,model.layers.16.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,152,prefill,16,model.layers.16.mlp.up_proj,linear,,B*S,18944,3584,150,model.layers.16.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,153,prefill,16,model.layers.16.mlp.down_proj,linear,,B*S,3584,18944,151;152,model.layers.16.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,154,prefill,17,model.layers.17.self_attn.q_proj,linear,,B*S,3584,3584,153,model.layers.17.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,155,prefill,17,model.layers.17.self_attn.k_proj,linear,,B*S,512,3584,153,model.layers.17.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,156,prefill,17,model.layers.17.self_attn.v_proj,linear,,B*S,512,3584,153,model.layers.17.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,157,prefill,17,model.layers.17.self_attn.qk,batched_matmul,B*QH,S,S,128,154;155,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,158,prefill,17,model.layers.17.self_attn.pv,batched_matmul,B*QH,S,128,S,157;156,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,159,prefill,17,model.layers.17.self_attn.o_proj,linear,,B*S,3584,3584,158,model.layers.17.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,160,prefill,17,model.layers.17.mlp.gate_proj,linear,,B*S,18944,3584,159,model.layers.17.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,161,prefill,17,model.layers.17.mlp.up_proj,linear,,B*S,18944,3584,159,model.layers.17.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,162,prefill,17,model.layers.17.mlp.down_proj,linear,,B*S,3584,18944,160;161,model.layers.17.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,163,prefill,18,model.layers.18.self_attn.q_proj,linear,,B*S,3584,3584,162,model.layers.18.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,164,prefill,18,model.layers.18.self_attn.k_proj,linear,,B*S,512,3584,162,model.layers.18.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,165,prefill,18,model.layers.18.self_attn.v_proj,linear,,B*S,512,3584,162,model.layers.18.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,166,prefill,18,model.layers.18.self_attn.qk,batched_matmul,B*QH,S,S,128,163;164,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,167,prefill,18,model.layers.18.self_attn.pv,batched_matmul,B*QH,S,128,S,166;165,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,168,prefill,18,model.layers.18.self_attn.o_proj,linear,,B*S,3584,3584,167,model.layers.18.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,169,prefill,18,model.layers.18.mlp.gate_proj,linear,,B*S,18944,3584,168,model.layers.18.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,170,prefill,18,model.layers.18.mlp.up_proj,linear,,B*S,18944,3584,168,model.layers.18.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,171,prefill,18,model.layers.18.mlp.down_proj,linear,,B*S,3584,18944,169;170,model.layers.18.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,172,prefill,19,model.layers.19.self_attn.q_proj,linear,,B*S,3584,3584,171,model.layers.19.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,173,prefill,19,model.layers.19.self_attn.k_proj,linear,,B*S,512,3584,171,model.layers.19.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,174,prefill,19,model.layers.19.self_attn.v_proj,linear,,B*S,512,3584,171,model.layers.19.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,175,prefill,19,model.layers.19.self_attn.qk,batched_matmul,B*QH,S,S,128,172;173,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,176,prefill,19,model.layers.19.self_attn.pv,batched_matmul,B*QH,S,128,S,175;174,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,177,prefill,19,model.layers.19.self_attn.o_proj,linear,,B*S,3584,3584,176,model.layers.19.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,178,prefill,19,model.layers.19.mlp.gate_proj,linear,,B*S,18944,3584,177,model.layers.19.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,179,prefill,19,model.layers.19.mlp.up_proj,linear,,B*S,18944,3584,177,model.layers.19.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,180,prefill,19,model.layers.19.mlp.down_proj,linear,,B*S,3584,18944,178;179,model.layers.19.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,181,prefill,20,model.layers.20.self_attn.q_proj,linear,,B*S,3584,3584,180,model.layers.20.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,182,prefill,20,model.layers.20.self_attn.k_proj,linear,,B*S,512,3584,180,model.layers.20.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,183,prefill,20,model.layers.20.self_attn.v_proj,linear,,B*S,512,3584,180,model.layers.20.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,184,prefill,20,model.layers.20.self_attn.qk,batched_matmul,B*QH,S,S,128,181;182,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,185,prefill,20,model.layers.20.self_attn.pv,batched_matmul,B*QH,S,128,S,184;183,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,186,prefill,20,model.layers.20.self_attn.o_proj,linear,,B*S,3584,3584,185,model.layers.20.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,187,prefill,20,model.layers.20.mlp.gate_proj,linear,,B*S,18944,3584,186,model.layers.20.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,188,prefill,20,model.layers.20.mlp.up_proj,linear,,B*S,18944,3584,186,model.layers.20.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,189,prefill,20,model.layers.20.mlp.down_proj,linear,,B*S,3584,18944,187;188,model.layers.20.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,190,prefill,21,model.layers.21.self_attn.q_proj,linear,,B*S,3584,3584,189,model.layers.21.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,191,prefill,21,model.layers.21.self_attn.k_proj,linear,,B*S,512,3584,189,model.layers.21.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,192,prefill,21,model.layers.21.self_attn.v_proj,linear,,B*S,512,3584,189,model.layers.21.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,193,prefill,21,model.layers.21.self_attn.qk,batched_matmul,B*QH,S,S,128,190;191,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,194,prefill,21,model.layers.21.self_attn.pv,batched_matmul,B*QH,S,128,S,193;192,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,195,prefill,21,model.layers.21.self_attn.o_proj,linear,,B*S,3584,3584,194,model.layers.21.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,196,prefill,21,model.layers.21.mlp.gate_proj,linear,,B*S,18944,3584,195,model.layers.21.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,197,prefill,21,model.layers.21.mlp.up_proj,linear,,B*S,18944,3584,195,model.layers.21.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,198,prefill,21,model.layers.21.mlp.down_proj,linear,,B*S,3584,18944,196;197,model.layers.21.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,199,prefill,22,model.layers.22.self_attn.q_proj,linear,,B*S,3584,3584,198,model.layers.22.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,200,prefill,22,model.layers.22.self_attn.k_proj,linear,,B*S,512,3584,198,model.layers.22.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,201,prefill,22,model.layers.22.self_attn.v_proj,linear,,B*S,512,3584,198,model.layers.22.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,202,prefill,22,model.layers.22.self_attn.qk,batched_matmul,B*QH,S,S,128,199;200,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,203,prefill,22,model.layers.22.self_attn.pv,batched_matmul,B*QH,S,128,S,202;201,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,204,prefill,22,model.layers.22.self_attn.o_proj,linear,,B*S,3584,3584,203,model.layers.22.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,205,prefill,22,model.layers.22.mlp.gate_proj,linear,,B*S,18944,3584,204,model.layers.22.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,206,prefill,22,model.layers.22.mlp.up_proj,linear,,B*S,18944,3584,204,model.layers.22.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,207,prefill,22,model.layers.22.mlp.down_proj,linear,,B*S,3584,18944,205;206,model.layers.22.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,208,prefill,23,model.layers.23.self_attn.q_proj,linear,,B*S,3584,3584,207,model.layers.23.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,209,prefill,23,model.layers.23.self_attn.k_proj,linear,,B*S,512,3584,207,model.layers.23.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,210,prefill,23,model.layers.23.self_attn.v_proj,linear,,B*S,512,3584,207,model.layers.23.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,211,prefill,23,model.layers.23.self_attn.qk,batched_matmul,B*QH,S,S,128,208;209,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,212,prefill,23,model.layers.23.self_attn.pv,batched_matmul,B*QH,S,128,S,211;210,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,213,prefill,23,model.layers.23.self_attn.o_proj,linear,,B*S,3584,3584,212,model.layers.23.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,214,prefill,23,model.layers.23.mlp.gate_proj,linear,,B*S,18944,3584,213,model.layers.23.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,215,prefill,23,model.layers.23.mlp.up_proj,linear,,B*S,18944,3584,213,model.layers.23.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,216,prefill,23,model.layers.23.mlp.down_proj,linear,,B*S,3584,18944,214;215,model.layers.23.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,217,prefill,24,model.layers.24.self_attn.q_proj,linear,,B*S,3584,3584,216,model.layers.24.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,218,prefill,24,model.layers.24.self_attn.k_proj,linear,,B*S,512,3584,216,model.layers.24.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,219,prefill,24,model.layers.24.self_attn.v_proj,linear,,B*S,512,3584,216,model.layers.24.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,220,prefill,24,model.layers.24.self_attn.qk,batched_matmul,B*QH,S,S,128,217;218,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,221,prefill,24,model.layers.24.self_attn.pv,batched_matmul,B*QH,S,128,S,220;219,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,222,prefill,24,model.layers.24.self_attn.o_proj,linear,,B*S,3584,3584,221,model.layers.24.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,223,prefill,24,model.layers.24.mlp.gate_proj,linear,,B*S,18944,3584,222,model.layers.24.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,224,prefill,24,model.layers.24.mlp.up_proj,linear,,B*S,18944,3584,222,model.layers.24.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,225,prefill,24,model.layers.24.mlp.down_proj,linear,,B*S,3584,18944,223;224,model.layers.24.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,226,prefill,25,model.layers.25.self_attn.q_proj,linear,,B*S,3584,3584,225,model.layers.25.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,227,prefill,25,model.layers.25.self_attn.k_proj,linear,,B*S,512,3584,225,model.layers.25.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,228,prefill,25,model.layers.25.self_attn.v_proj,linear,,B*S,512,3584,225,model.layers.25.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,229,prefill,25,model.layers.25.self_attn.qk,batched_matmul,B*QH,S,S,128,226;227,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,230,prefill,25,model.layers.25.self_attn.pv,batched_matmul,B*QH,S,128,S,229;228,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,231,prefill,25,model.layers.25.self_attn.o_proj,linear,,B*S,3584,3584,230,model.layers.25.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,232,prefill,25,model.layers.25.mlp.gate_proj,linear,,B*S,18944,3584,231,model.layers.25.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,233,prefill,25,model.layers.25.mlp.up_proj,linear,,B*S,18944,3584,231,model.layers.25.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,234,prefill,25,model.layers.25.mlp.down_proj,linear,,B*S,3584,18944,232;233,model.layers.25.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,235,prefill,26,model.layers.26.self_attn.q_proj,linear,,B*S,3584,3584,234,model.layers.26.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,236,prefill,26,model.layers.26.self_attn.k_proj,linear,,B*S,512,3584,234,model.layers.26.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,237,prefill,26,model.layers.26.self_attn.v_proj,linear,,B*S,512,3584,234,model.layers.26.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,238,prefill,26,model.layers.26.self_attn.qk,batched_matmul,B*QH,S,S,128,235;236,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,239,prefill,26,model.layers.26.self_attn.pv,batched_matmul,B*QH,S,128,S,238;237,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,240,prefill,26,model.layers.26.self_attn.o_proj,linear,,B*S,3584,3584,239,model.layers.26.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,241,prefill,26,model.layers.26.mlp.gate_proj,linear,,B*S,18944,3584,240,model.layers.26.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,242,prefill,26,model.layers.26.mlp.up_proj,linear,,B*S,18944,3584,240,model.layers.26.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,243,prefill,26,model.layers.26.mlp.down_proj,linear,,B*S,3584,18944,241;242,model.layers.26.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,244,prefill,27,model.layers.27.self_attn.q_proj,linear,,B*S,3584,3584,243,model.layers.27.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,245,prefill,27,model.layers.27.self_attn.k_proj,linear,,B*S,512,3584,243,model.layers.27.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,246,prefill,27,model.layers.27.self_attn.v_proj,linear,,B*S,512,3584,243,model.layers.27.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,247,prefill,27,model.layers.27.self_attn.qk,batched_matmul,B*QH,S,S,128,244;245,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,248,prefill,27,model.layers.27.self_attn.pv,batched_matmul,B*QH,S,128,S,247;246,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,249,prefill,27,model.layers.27.self_attn.o_proj,linear,,B*S,3584,3584,248,model.layers.27.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,250,prefill,27,model.layers.27.mlp.gate_proj,linear,,B*S,18944,3584,249,model.layers.27.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,251,prefill,27,model.layers.27.mlp.up_proj,linear,,B*S,18944,3584,249,model.layers.27.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,252,prefill,27,model.layers.27.mlp.down_proj,linear,,B*S,3584,18944,250;251,model.layers.27.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,253,prefill,output,lm_head,linear,,B*S,152064,3584,252,lm_head.weight or tied embed_tokens.weight,"[152064,3584]",config+architecture,prefill shape follows full Hugging Face forward; serving runtimes may compute only selected logits
+models--Qwen--Qwen2.5-7B-Instruct,254,decode_step,0,model.layers.0.self_attn.q_proj,linear,,B,3584,3584,,model.layers.0.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,255,decode_step,0,model.layers.0.self_attn.k_proj,linear,,B,512,3584,,model.layers.0.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,256,decode_step,0,model.layers.0.self_attn.v_proj,linear,,B,512,3584,,model.layers.0.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,257,decode_step,0,model.layers.0.self_attn.qk,batched_matmul,B*QH,1,KV,128,254;255,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,258,decode_step,0,model.layers.0.self_attn.pv,batched_matmul,B*QH,1,128,KV,257;256,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,259,decode_step,0,model.layers.0.self_attn.o_proj,linear,,B,3584,3584,258,model.layers.0.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,260,decode_step,0,model.layers.0.mlp.gate_proj,linear,,B,18944,3584,259,model.layers.0.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,261,decode_step,0,model.layers.0.mlp.up_proj,linear,,B,18944,3584,259,model.layers.0.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,262,decode_step,0,model.layers.0.mlp.down_proj,linear,,B,3584,18944,260;261,model.layers.0.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,263,decode_step,1,model.layers.1.self_attn.q_proj,linear,,B,3584,3584,262,model.layers.1.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,264,decode_step,1,model.layers.1.self_attn.k_proj,linear,,B,512,3584,262,model.layers.1.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,265,decode_step,1,model.layers.1.self_attn.v_proj,linear,,B,512,3584,262,model.layers.1.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,266,decode_step,1,model.layers.1.self_attn.qk,batched_matmul,B*QH,1,KV,128,263;264,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,267,decode_step,1,model.layers.1.self_attn.pv,batched_matmul,B*QH,1,128,KV,266;265,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,268,decode_step,1,model.layers.1.self_attn.o_proj,linear,,B,3584,3584,267,model.layers.1.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,269,decode_step,1,model.layers.1.mlp.gate_proj,linear,,B,18944,3584,268,model.layers.1.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,270,decode_step,1,model.layers.1.mlp.up_proj,linear,,B,18944,3584,268,model.layers.1.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,271,decode_step,1,model.layers.1.mlp.down_proj,linear,,B,3584,18944,269;270,model.layers.1.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,272,decode_step,2,model.layers.2.self_attn.q_proj,linear,,B,3584,3584,271,model.layers.2.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,273,decode_step,2,model.layers.2.self_attn.k_proj,linear,,B,512,3584,271,model.layers.2.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,274,decode_step,2,model.layers.2.self_attn.v_proj,linear,,B,512,3584,271,model.layers.2.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,275,decode_step,2,model.layers.2.self_attn.qk,batched_matmul,B*QH,1,KV,128,272;273,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,276,decode_step,2,model.layers.2.self_attn.pv,batched_matmul,B*QH,1,128,KV,275;274,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,277,decode_step,2,model.layers.2.self_attn.o_proj,linear,,B,3584,3584,276,model.layers.2.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,278,decode_step,2,model.layers.2.mlp.gate_proj,linear,,B,18944,3584,277,model.layers.2.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,279,decode_step,2,model.layers.2.mlp.up_proj,linear,,B,18944,3584,277,model.layers.2.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,280,decode_step,2,model.layers.2.mlp.down_proj,linear,,B,3584,18944,278;279,model.layers.2.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,281,decode_step,3,model.layers.3.self_attn.q_proj,linear,,B,3584,3584,280,model.layers.3.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,282,decode_step,3,model.layers.3.self_attn.k_proj,linear,,B,512,3584,280,model.layers.3.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,283,decode_step,3,model.layers.3.self_attn.v_proj,linear,,B,512,3584,280,model.layers.3.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,284,decode_step,3,model.layers.3.self_attn.qk,batched_matmul,B*QH,1,KV,128,281;282,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,285,decode_step,3,model.layers.3.self_attn.pv,batched_matmul,B*QH,1,128,KV,284;283,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,286,decode_step,3,model.layers.3.self_attn.o_proj,linear,,B,3584,3584,285,model.layers.3.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,287,decode_step,3,model.layers.3.mlp.gate_proj,linear,,B,18944,3584,286,model.layers.3.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,288,decode_step,3,model.layers.3.mlp.up_proj,linear,,B,18944,3584,286,model.layers.3.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,289,decode_step,3,model.layers.3.mlp.down_proj,linear,,B,3584,18944,287;288,model.layers.3.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,290,decode_step,4,model.layers.4.self_attn.q_proj,linear,,B,3584,3584,289,model.layers.4.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,291,decode_step,4,model.layers.4.self_attn.k_proj,linear,,B,512,3584,289,model.layers.4.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,292,decode_step,4,model.layers.4.self_attn.v_proj,linear,,B,512,3584,289,model.layers.4.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,293,decode_step,4,model.layers.4.self_attn.qk,batched_matmul,B*QH,1,KV,128,290;291,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,294,decode_step,4,model.layers.4.self_attn.pv,batched_matmul,B*QH,1,128,KV,293;292,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,295,decode_step,4,model.layers.4.self_attn.o_proj,linear,,B,3584,3584,294,model.layers.4.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,296,decode_step,4,model.layers.4.mlp.gate_proj,linear,,B,18944,3584,295,model.layers.4.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,297,decode_step,4,model.layers.4.mlp.up_proj,linear,,B,18944,3584,295,model.layers.4.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,298,decode_step,4,model.layers.4.mlp.down_proj,linear,,B,3584,18944,296;297,model.layers.4.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,299,decode_step,5,model.layers.5.self_attn.q_proj,linear,,B,3584,3584,298,model.layers.5.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,300,decode_step,5,model.layers.5.self_attn.k_proj,linear,,B,512,3584,298,model.layers.5.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,301,decode_step,5,model.layers.5.self_attn.v_proj,linear,,B,512,3584,298,model.layers.5.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,302,decode_step,5,model.layers.5.self_attn.qk,batched_matmul,B*QH,1,KV,128,299;300,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,303,decode_step,5,model.layers.5.self_attn.pv,batched_matmul,B*QH,1,128,KV,302;301,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,304,decode_step,5,model.layers.5.self_attn.o_proj,linear,,B,3584,3584,303,model.layers.5.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,305,decode_step,5,model.layers.5.mlp.gate_proj,linear,,B,18944,3584,304,model.layers.5.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,306,decode_step,5,model.layers.5.mlp.up_proj,linear,,B,18944,3584,304,model.layers.5.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,307,decode_step,5,model.layers.5.mlp.down_proj,linear,,B,3584,18944,305;306,model.layers.5.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,308,decode_step,6,model.layers.6.self_attn.q_proj,linear,,B,3584,3584,307,model.layers.6.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,309,decode_step,6,model.layers.6.self_attn.k_proj,linear,,B,512,3584,307,model.layers.6.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,310,decode_step,6,model.layers.6.self_attn.v_proj,linear,,B,512,3584,307,model.layers.6.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,311,decode_step,6,model.layers.6.self_attn.qk,batched_matmul,B*QH,1,KV,128,308;309,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,312,decode_step,6,model.layers.6.self_attn.pv,batched_matmul,B*QH,1,128,KV,311;310,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,313,decode_step,6,model.layers.6.self_attn.o_proj,linear,,B,3584,3584,312,model.layers.6.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,314,decode_step,6,model.layers.6.mlp.gate_proj,linear,,B,18944,3584,313,model.layers.6.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,315,decode_step,6,model.layers.6.mlp.up_proj,linear,,B,18944,3584,313,model.layers.6.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,316,decode_step,6,model.layers.6.mlp.down_proj,linear,,B,3584,18944,314;315,model.layers.6.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,317,decode_step,7,model.layers.7.self_attn.q_proj,linear,,B,3584,3584,316,model.layers.7.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,318,decode_step,7,model.layers.7.self_attn.k_proj,linear,,B,512,3584,316,model.layers.7.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,319,decode_step,7,model.layers.7.self_attn.v_proj,linear,,B,512,3584,316,model.layers.7.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,320,decode_step,7,model.layers.7.self_attn.qk,batched_matmul,B*QH,1,KV,128,317;318,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,321,decode_step,7,model.layers.7.self_attn.pv,batched_matmul,B*QH,1,128,KV,320;319,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,322,decode_step,7,model.layers.7.self_attn.o_proj,linear,,B,3584,3584,321,model.layers.7.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,323,decode_step,7,model.layers.7.mlp.gate_proj,linear,,B,18944,3584,322,model.layers.7.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,324,decode_step,7,model.layers.7.mlp.up_proj,linear,,B,18944,3584,322,model.layers.7.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,325,decode_step,7,model.layers.7.mlp.down_proj,linear,,B,3584,18944,323;324,model.layers.7.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,326,decode_step,8,model.layers.8.self_attn.q_proj,linear,,B,3584,3584,325,model.layers.8.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,327,decode_step,8,model.layers.8.self_attn.k_proj,linear,,B,512,3584,325,model.layers.8.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,328,decode_step,8,model.layers.8.self_attn.v_proj,linear,,B,512,3584,325,model.layers.8.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,329,decode_step,8,model.layers.8.self_attn.qk,batched_matmul,B*QH,1,KV,128,326;327,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,330,decode_step,8,model.layers.8.self_attn.pv,batched_matmul,B*QH,1,128,KV,329;328,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,331,decode_step,8,model.layers.8.self_attn.o_proj,linear,,B,3584,3584,330,model.layers.8.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,332,decode_step,8,model.layers.8.mlp.gate_proj,linear,,B,18944,3584,331,model.layers.8.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,333,decode_step,8,model.layers.8.mlp.up_proj,linear,,B,18944,3584,331,model.layers.8.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,334,decode_step,8,model.layers.8.mlp.down_proj,linear,,B,3584,18944,332;333,model.layers.8.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,335,decode_step,9,model.layers.9.self_attn.q_proj,linear,,B,3584,3584,334,model.layers.9.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,336,decode_step,9,model.layers.9.self_attn.k_proj,linear,,B,512,3584,334,model.layers.9.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,337,decode_step,9,model.layers.9.self_attn.v_proj,linear,,B,512,3584,334,model.layers.9.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,338,decode_step,9,model.layers.9.self_attn.qk,batched_matmul,B*QH,1,KV,128,335;336,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,339,decode_step,9,model.layers.9.self_attn.pv,batched_matmul,B*QH,1,128,KV,338;337,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,340,decode_step,9,model.layers.9.self_attn.o_proj,linear,,B,3584,3584,339,model.layers.9.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,341,decode_step,9,model.layers.9.mlp.gate_proj,linear,,B,18944,3584,340,model.layers.9.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,342,decode_step,9,model.layers.9.mlp.up_proj,linear,,B,18944,3584,340,model.layers.9.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,343,decode_step,9,model.layers.9.mlp.down_proj,linear,,B,3584,18944,341;342,model.layers.9.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,344,decode_step,10,model.layers.10.self_attn.q_proj,linear,,B,3584,3584,343,model.layers.10.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,345,decode_step,10,model.layers.10.self_attn.k_proj,linear,,B,512,3584,343,model.layers.10.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,346,decode_step,10,model.layers.10.self_attn.v_proj,linear,,B,512,3584,343,model.layers.10.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,347,decode_step,10,model.layers.10.self_attn.qk,batched_matmul,B*QH,1,KV,128,344;345,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,348,decode_step,10,model.layers.10.self_attn.pv,batched_matmul,B*QH,1,128,KV,347;346,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,349,decode_step,10,model.layers.10.self_attn.o_proj,linear,,B,3584,3584,348,model.layers.10.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,350,decode_step,10,model.layers.10.mlp.gate_proj,linear,,B,18944,3584,349,model.layers.10.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,351,decode_step,10,model.layers.10.mlp.up_proj,linear,,B,18944,3584,349,model.layers.10.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,352,decode_step,10,model.layers.10.mlp.down_proj,linear,,B,3584,18944,350;351,model.layers.10.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,353,decode_step,11,model.layers.11.self_attn.q_proj,linear,,B,3584,3584,352,model.layers.11.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,354,decode_step,11,model.layers.11.self_attn.k_proj,linear,,B,512,3584,352,model.layers.11.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,355,decode_step,11,model.layers.11.self_attn.v_proj,linear,,B,512,3584,352,model.layers.11.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,356,decode_step,11,model.layers.11.self_attn.qk,batched_matmul,B*QH,1,KV,128,353;354,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,357,decode_step,11,model.layers.11.self_attn.pv,batched_matmul,B*QH,1,128,KV,356;355,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,358,decode_step,11,model.layers.11.self_attn.o_proj,linear,,B,3584,3584,357,model.layers.11.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,359,decode_step,11,model.layers.11.mlp.gate_proj,linear,,B,18944,3584,358,model.layers.11.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,360,decode_step,11,model.layers.11.mlp.up_proj,linear,,B,18944,3584,358,model.layers.11.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,361,decode_step,11,model.layers.11.mlp.down_proj,linear,,B,3584,18944,359;360,model.layers.11.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,362,decode_step,12,model.layers.12.self_attn.q_proj,linear,,B,3584,3584,361,model.layers.12.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,363,decode_step,12,model.layers.12.self_attn.k_proj,linear,,B,512,3584,361,model.layers.12.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,364,decode_step,12,model.layers.12.self_attn.v_proj,linear,,B,512,3584,361,model.layers.12.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,365,decode_step,12,model.layers.12.self_attn.qk,batched_matmul,B*QH,1,KV,128,362;363,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,366,decode_step,12,model.layers.12.self_attn.pv,batched_matmul,B*QH,1,128,KV,365;364,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,367,decode_step,12,model.layers.12.self_attn.o_proj,linear,,B,3584,3584,366,model.layers.12.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,368,decode_step,12,model.layers.12.mlp.gate_proj,linear,,B,18944,3584,367,model.layers.12.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,369,decode_step,12,model.layers.12.mlp.up_proj,linear,,B,18944,3584,367,model.layers.12.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,370,decode_step,12,model.layers.12.mlp.down_proj,linear,,B,3584,18944,368;369,model.layers.12.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,371,decode_step,13,model.layers.13.self_attn.q_proj,linear,,B,3584,3584,370,model.layers.13.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,372,decode_step,13,model.layers.13.self_attn.k_proj,linear,,B,512,3584,370,model.layers.13.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,373,decode_step,13,model.layers.13.self_attn.v_proj,linear,,B,512,3584,370,model.layers.13.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,374,decode_step,13,model.layers.13.self_attn.qk,batched_matmul,B*QH,1,KV,128,371;372,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,375,decode_step,13,model.layers.13.self_attn.pv,batched_matmul,B*QH,1,128,KV,374;373,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,376,decode_step,13,model.layers.13.self_attn.o_proj,linear,,B,3584,3584,375,model.layers.13.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,377,decode_step,13,model.layers.13.mlp.gate_proj,linear,,B,18944,3584,376,model.layers.13.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,378,decode_step,13,model.layers.13.mlp.up_proj,linear,,B,18944,3584,376,model.layers.13.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,379,decode_step,13,model.layers.13.mlp.down_proj,linear,,B,3584,18944,377;378,model.layers.13.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,380,decode_step,14,model.layers.14.self_attn.q_proj,linear,,B,3584,3584,379,model.layers.14.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,381,decode_step,14,model.layers.14.self_attn.k_proj,linear,,B,512,3584,379,model.layers.14.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,382,decode_step,14,model.layers.14.self_attn.v_proj,linear,,B,512,3584,379,model.layers.14.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,383,decode_step,14,model.layers.14.self_attn.qk,batched_matmul,B*QH,1,KV,128,380;381,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,384,decode_step,14,model.layers.14.self_attn.pv,batched_matmul,B*QH,1,128,KV,383;382,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,385,decode_step,14,model.layers.14.self_attn.o_proj,linear,,B,3584,3584,384,model.layers.14.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,386,decode_step,14,model.layers.14.mlp.gate_proj,linear,,B,18944,3584,385,model.layers.14.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,387,decode_step,14,model.layers.14.mlp.up_proj,linear,,B,18944,3584,385,model.layers.14.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,388,decode_step,14,model.layers.14.mlp.down_proj,linear,,B,3584,18944,386;387,model.layers.14.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,389,decode_step,15,model.layers.15.self_attn.q_proj,linear,,B,3584,3584,388,model.layers.15.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,390,decode_step,15,model.layers.15.self_attn.k_proj,linear,,B,512,3584,388,model.layers.15.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,391,decode_step,15,model.layers.15.self_attn.v_proj,linear,,B,512,3584,388,model.layers.15.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,392,decode_step,15,model.layers.15.self_attn.qk,batched_matmul,B*QH,1,KV,128,389;390,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,393,decode_step,15,model.layers.15.self_attn.pv,batched_matmul,B*QH,1,128,KV,392;391,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,394,decode_step,15,model.layers.15.self_attn.o_proj,linear,,B,3584,3584,393,model.layers.15.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,395,decode_step,15,model.layers.15.mlp.gate_proj,linear,,B,18944,3584,394,model.layers.15.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,396,decode_step,15,model.layers.15.mlp.up_proj,linear,,B,18944,3584,394,model.layers.15.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,397,decode_step,15,model.layers.15.mlp.down_proj,linear,,B,3584,18944,395;396,model.layers.15.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,398,decode_step,16,model.layers.16.self_attn.q_proj,linear,,B,3584,3584,397,model.layers.16.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,399,decode_step,16,model.layers.16.self_attn.k_proj,linear,,B,512,3584,397,model.layers.16.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,400,decode_step,16,model.layers.16.self_attn.v_proj,linear,,B,512,3584,397,model.layers.16.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,401,decode_step,16,model.layers.16.self_attn.qk,batched_matmul,B*QH,1,KV,128,398;399,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,402,decode_step,16,model.layers.16.self_attn.pv,batched_matmul,B*QH,1,128,KV,401;400,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,403,decode_step,16,model.layers.16.self_attn.o_proj,linear,,B,3584,3584,402,model.layers.16.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,404,decode_step,16,model.layers.16.mlp.gate_proj,linear,,B,18944,3584,403,model.layers.16.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,405,decode_step,16,model.layers.16.mlp.up_proj,linear,,B,18944,3584,403,model.layers.16.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,406,decode_step,16,model.layers.16.mlp.down_proj,linear,,B,3584,18944,404;405,model.layers.16.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,407,decode_step,17,model.layers.17.self_attn.q_proj,linear,,B,3584,3584,406,model.layers.17.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,408,decode_step,17,model.layers.17.self_attn.k_proj,linear,,B,512,3584,406,model.layers.17.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,409,decode_step,17,model.layers.17.self_attn.v_proj,linear,,B,512,3584,406,model.layers.17.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,410,decode_step,17,model.layers.17.self_attn.qk,batched_matmul,B*QH,1,KV,128,407;408,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,411,decode_step,17,model.layers.17.self_attn.pv,batched_matmul,B*QH,1,128,KV,410;409,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,412,decode_step,17,model.layers.17.self_attn.o_proj,linear,,B,3584,3584,411,model.layers.17.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,413,decode_step,17,model.layers.17.mlp.gate_proj,linear,,B,18944,3584,412,model.layers.17.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,414,decode_step,17,model.layers.17.mlp.up_proj,linear,,B,18944,3584,412,model.layers.17.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,415,decode_step,17,model.layers.17.mlp.down_proj,linear,,B,3584,18944,413;414,model.layers.17.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,416,decode_step,18,model.layers.18.self_attn.q_proj,linear,,B,3584,3584,415,model.layers.18.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,417,decode_step,18,model.layers.18.self_attn.k_proj,linear,,B,512,3584,415,model.layers.18.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,418,decode_step,18,model.layers.18.self_attn.v_proj,linear,,B,512,3584,415,model.layers.18.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,419,decode_step,18,model.layers.18.self_attn.qk,batched_matmul,B*QH,1,KV,128,416;417,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,420,decode_step,18,model.layers.18.self_attn.pv,batched_matmul,B*QH,1,128,KV,419;418,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,421,decode_step,18,model.layers.18.self_attn.o_proj,linear,,B,3584,3584,420,model.layers.18.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,422,decode_step,18,model.layers.18.mlp.gate_proj,linear,,B,18944,3584,421,model.layers.18.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,423,decode_step,18,model.layers.18.mlp.up_proj,linear,,B,18944,3584,421,model.layers.18.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,424,decode_step,18,model.layers.18.mlp.down_proj,linear,,B,3584,18944,422;423,model.layers.18.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,425,decode_step,19,model.layers.19.self_attn.q_proj,linear,,B,3584,3584,424,model.layers.19.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,426,decode_step,19,model.layers.19.self_attn.k_proj,linear,,B,512,3584,424,model.layers.19.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,427,decode_step,19,model.layers.19.self_attn.v_proj,linear,,B,512,3584,424,model.layers.19.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,428,decode_step,19,model.layers.19.self_attn.qk,batched_matmul,B*QH,1,KV,128,425;426,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,429,decode_step,19,model.layers.19.self_attn.pv,batched_matmul,B*QH,1,128,KV,428;427,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,430,decode_step,19,model.layers.19.self_attn.o_proj,linear,,B,3584,3584,429,model.layers.19.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,431,decode_step,19,model.layers.19.mlp.gate_proj,linear,,B,18944,3584,430,model.layers.19.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,432,decode_step,19,model.layers.19.mlp.up_proj,linear,,B,18944,3584,430,model.layers.19.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,433,decode_step,19,model.layers.19.mlp.down_proj,linear,,B,3584,18944,431;432,model.layers.19.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,434,decode_step,20,model.layers.20.self_attn.q_proj,linear,,B,3584,3584,433,model.layers.20.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,435,decode_step,20,model.layers.20.self_attn.k_proj,linear,,B,512,3584,433,model.layers.20.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,436,decode_step,20,model.layers.20.self_attn.v_proj,linear,,B,512,3584,433,model.layers.20.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,437,decode_step,20,model.layers.20.self_attn.qk,batched_matmul,B*QH,1,KV,128,434;435,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,438,decode_step,20,model.layers.20.self_attn.pv,batched_matmul,B*QH,1,128,KV,437;436,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,439,decode_step,20,model.layers.20.self_attn.o_proj,linear,,B,3584,3584,438,model.layers.20.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,440,decode_step,20,model.layers.20.mlp.gate_proj,linear,,B,18944,3584,439,model.layers.20.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,441,decode_step,20,model.layers.20.mlp.up_proj,linear,,B,18944,3584,439,model.layers.20.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,442,decode_step,20,model.layers.20.mlp.down_proj,linear,,B,3584,18944,440;441,model.layers.20.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,443,decode_step,21,model.layers.21.self_attn.q_proj,linear,,B,3584,3584,442,model.layers.21.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,444,decode_step,21,model.layers.21.self_attn.k_proj,linear,,B,512,3584,442,model.layers.21.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,445,decode_step,21,model.layers.21.self_attn.v_proj,linear,,B,512,3584,442,model.layers.21.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,446,decode_step,21,model.layers.21.self_attn.qk,batched_matmul,B*QH,1,KV,128,443;444,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,447,decode_step,21,model.layers.21.self_attn.pv,batched_matmul,B*QH,1,128,KV,446;445,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,448,decode_step,21,model.layers.21.self_attn.o_proj,linear,,B,3584,3584,447,model.layers.21.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,449,decode_step,21,model.layers.21.mlp.gate_proj,linear,,B,18944,3584,448,model.layers.21.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,450,decode_step,21,model.layers.21.mlp.up_proj,linear,,B,18944,3584,448,model.layers.21.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,451,decode_step,21,model.layers.21.mlp.down_proj,linear,,B,3584,18944,449;450,model.layers.21.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,452,decode_step,22,model.layers.22.self_attn.q_proj,linear,,B,3584,3584,451,model.layers.22.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,453,decode_step,22,model.layers.22.self_attn.k_proj,linear,,B,512,3584,451,model.layers.22.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,454,decode_step,22,model.layers.22.self_attn.v_proj,linear,,B,512,3584,451,model.layers.22.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,455,decode_step,22,model.layers.22.self_attn.qk,batched_matmul,B*QH,1,KV,128,452;453,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,456,decode_step,22,model.layers.22.self_attn.pv,batched_matmul,B*QH,1,128,KV,455;454,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,457,decode_step,22,model.layers.22.self_attn.o_proj,linear,,B,3584,3584,456,model.layers.22.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,458,decode_step,22,model.layers.22.mlp.gate_proj,linear,,B,18944,3584,457,model.layers.22.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,459,decode_step,22,model.layers.22.mlp.up_proj,linear,,B,18944,3584,457,model.layers.22.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,460,decode_step,22,model.layers.22.mlp.down_proj,linear,,B,3584,18944,458;459,model.layers.22.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,461,decode_step,23,model.layers.23.self_attn.q_proj,linear,,B,3584,3584,460,model.layers.23.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,462,decode_step,23,model.layers.23.self_attn.k_proj,linear,,B,512,3584,460,model.layers.23.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,463,decode_step,23,model.layers.23.self_attn.v_proj,linear,,B,512,3584,460,model.layers.23.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,464,decode_step,23,model.layers.23.self_attn.qk,batched_matmul,B*QH,1,KV,128,461;462,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,465,decode_step,23,model.layers.23.self_attn.pv,batched_matmul,B*QH,1,128,KV,464;463,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,466,decode_step,23,model.layers.23.self_attn.o_proj,linear,,B,3584,3584,465,model.layers.23.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,467,decode_step,23,model.layers.23.mlp.gate_proj,linear,,B,18944,3584,466,model.layers.23.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,468,decode_step,23,model.layers.23.mlp.up_proj,linear,,B,18944,3584,466,model.layers.23.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,469,decode_step,23,model.layers.23.mlp.down_proj,linear,,B,3584,18944,467;468,model.layers.23.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,470,decode_step,24,model.layers.24.self_attn.q_proj,linear,,B,3584,3584,469,model.layers.24.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,471,decode_step,24,model.layers.24.self_attn.k_proj,linear,,B,512,3584,469,model.layers.24.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,472,decode_step,24,model.layers.24.self_attn.v_proj,linear,,B,512,3584,469,model.layers.24.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,473,decode_step,24,model.layers.24.self_attn.qk,batched_matmul,B*QH,1,KV,128,470;471,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,474,decode_step,24,model.layers.24.self_attn.pv,batched_matmul,B*QH,1,128,KV,473;472,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,475,decode_step,24,model.layers.24.self_attn.o_proj,linear,,B,3584,3584,474,model.layers.24.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,476,decode_step,24,model.layers.24.mlp.gate_proj,linear,,B,18944,3584,475,model.layers.24.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,477,decode_step,24,model.layers.24.mlp.up_proj,linear,,B,18944,3584,475,model.layers.24.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,478,decode_step,24,model.layers.24.mlp.down_proj,linear,,B,3584,18944,476;477,model.layers.24.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,479,decode_step,25,model.layers.25.self_attn.q_proj,linear,,B,3584,3584,478,model.layers.25.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,480,decode_step,25,model.layers.25.self_attn.k_proj,linear,,B,512,3584,478,model.layers.25.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,481,decode_step,25,model.layers.25.self_attn.v_proj,linear,,B,512,3584,478,model.layers.25.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,482,decode_step,25,model.layers.25.self_attn.qk,batched_matmul,B*QH,1,KV,128,479;480,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,483,decode_step,25,model.layers.25.self_attn.pv,batched_matmul,B*QH,1,128,KV,482;481,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,484,decode_step,25,model.layers.25.self_attn.o_proj,linear,,B,3584,3584,483,model.layers.25.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,485,decode_step,25,model.layers.25.mlp.gate_proj,linear,,B,18944,3584,484,model.layers.25.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,486,decode_step,25,model.layers.25.mlp.up_proj,linear,,B,18944,3584,484,model.layers.25.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,487,decode_step,25,model.layers.25.mlp.down_proj,linear,,B,3584,18944,485;486,model.layers.25.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,488,decode_step,26,model.layers.26.self_attn.q_proj,linear,,B,3584,3584,487,model.layers.26.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,489,decode_step,26,model.layers.26.self_attn.k_proj,linear,,B,512,3584,487,model.layers.26.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,490,decode_step,26,model.layers.26.self_attn.v_proj,linear,,B,512,3584,487,model.layers.26.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,491,decode_step,26,model.layers.26.self_attn.qk,batched_matmul,B*QH,1,KV,128,488;489,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,492,decode_step,26,model.layers.26.self_attn.pv,batched_matmul,B*QH,1,128,KV,491;490,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,493,decode_step,26,model.layers.26.self_attn.o_proj,linear,,B,3584,3584,492,model.layers.26.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,494,decode_step,26,model.layers.26.mlp.gate_proj,linear,,B,18944,3584,493,model.layers.26.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,495,decode_step,26,model.layers.26.mlp.up_proj,linear,,B,18944,3584,493,model.layers.26.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,496,decode_step,26,model.layers.26.mlp.down_proj,linear,,B,3584,18944,494;495,model.layers.26.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,497,decode_step,27,model.layers.27.self_attn.q_proj,linear,,B,3584,3584,496,model.layers.27.self_attn.q_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,498,decode_step,27,model.layers.27.self_attn.k_proj,linear,,B,512,3584,496,model.layers.27.self_attn.k_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,499,decode_step,27,model.layers.27.self_attn.v_proj,linear,,B,512,3584,496,model.layers.27.self_attn.v_proj.weight,"[512,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,500,decode_step,27,model.layers.27.self_attn.qk,batched_matmul,B*QH,1,KV,128,497;498,,,config+architecture,"GQA QH=28, KVH=4; effective KV may be capped by sliding_window=131072"
+models--Qwen--Qwen2.5-7B-Instruct,501,decode_step,27,model.layers.27.self_attn.pv,batched_matmul,B*QH,1,128,KV,500;499,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen2.5-7B-Instruct,502,decode_step,27,model.layers.27.self_attn.o_proj,linear,,B,3584,3584,501,model.layers.27.self_attn.o_proj.weight,"[3584,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,503,decode_step,27,model.layers.27.mlp.gate_proj,linear,,B,18944,3584,502,model.layers.27.mlp.gate_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,504,decode_step,27,model.layers.27.mlp.up_proj,linear,,B,18944,3584,502,model.layers.27.mlp.up_proj.weight,"[18944,3584]",config+architecture,
+models--Qwen--Qwen2.5-7B-Instruct,505,decode_step,27,model.layers.27.mlp.down_proj,linear,,B,3584,18944,503;504,model.layers.27.mlp.down_proj.weight,"[3584,18944]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen2.5-7B-Instruct,506,decode_step,output,lm_head,linear,,B,152064,3584,505,lm_head.weight or tied embed_tokens.weight,"[152064,3584]",config+architecture,prefill shape follows full Hugging Face forward; serving runtimes may compute only selected logits

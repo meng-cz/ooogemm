@@ -1,0 +1,579 @@
+model,op_id,phase,layer,module,op_kind,batch_dims,M,N,K,deps,weight,weight_shape,provenance,notes
+models--mistralai--Mistral-7B-Instruct-v0.3,1,prefill,0,model.layers.0.self_attn.q_proj,linear,,B*S,4096,4096,,model.layers.0.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,2,prefill,0,model.layers.0.self_attn.k_proj,linear,,B*S,1024,4096,,model.layers.0.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,3,prefill,0,model.layers.0.self_attn.v_proj,linear,,B*S,1024,4096,,model.layers.0.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,4,prefill,0,model.layers.0.self_attn.qk,batched_matmul,B*QH,S,S,128,1;2,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,5,prefill,0,model.layers.0.self_attn.pv,batched_matmul,B*QH,S,128,S,4;3,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,6,prefill,0,model.layers.0.self_attn.o_proj,linear,,B*S,4096,4096,5,model.layers.0.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,7,prefill,0,model.layers.0.mlp.gate_proj,linear,,B*S,14336,4096,6,model.layers.0.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,8,prefill,0,model.layers.0.mlp.up_proj,linear,,B*S,14336,4096,6,model.layers.0.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,9,prefill,0,model.layers.0.mlp.down_proj,linear,,B*S,4096,14336,7;8,model.layers.0.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,10,prefill,1,model.layers.1.self_attn.q_proj,linear,,B*S,4096,4096,9,model.layers.1.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,11,prefill,1,model.layers.1.self_attn.k_proj,linear,,B*S,1024,4096,9,model.layers.1.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,12,prefill,1,model.layers.1.self_attn.v_proj,linear,,B*S,1024,4096,9,model.layers.1.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,13,prefill,1,model.layers.1.self_attn.qk,batched_matmul,B*QH,S,S,128,10;11,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,14,prefill,1,model.layers.1.self_attn.pv,batched_matmul,B*QH,S,128,S,13;12,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,15,prefill,1,model.layers.1.self_attn.o_proj,linear,,B*S,4096,4096,14,model.layers.1.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,16,prefill,1,model.layers.1.mlp.gate_proj,linear,,B*S,14336,4096,15,model.layers.1.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,17,prefill,1,model.layers.1.mlp.up_proj,linear,,B*S,14336,4096,15,model.layers.1.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,18,prefill,1,model.layers.1.mlp.down_proj,linear,,B*S,4096,14336,16;17,model.layers.1.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,19,prefill,2,model.layers.2.self_attn.q_proj,linear,,B*S,4096,4096,18,model.layers.2.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,20,prefill,2,model.layers.2.self_attn.k_proj,linear,,B*S,1024,4096,18,model.layers.2.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,21,prefill,2,model.layers.2.self_attn.v_proj,linear,,B*S,1024,4096,18,model.layers.2.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,22,prefill,2,model.layers.2.self_attn.qk,batched_matmul,B*QH,S,S,128,19;20,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,23,prefill,2,model.layers.2.self_attn.pv,batched_matmul,B*QH,S,128,S,22;21,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,24,prefill,2,model.layers.2.self_attn.o_proj,linear,,B*S,4096,4096,23,model.layers.2.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,25,prefill,2,model.layers.2.mlp.gate_proj,linear,,B*S,14336,4096,24,model.layers.2.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,26,prefill,2,model.layers.2.mlp.up_proj,linear,,B*S,14336,4096,24,model.layers.2.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,27,prefill,2,model.layers.2.mlp.down_proj,linear,,B*S,4096,14336,25;26,model.layers.2.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,28,prefill,3,model.layers.3.self_attn.q_proj,linear,,B*S,4096,4096,27,model.layers.3.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,29,prefill,3,model.layers.3.self_attn.k_proj,linear,,B*S,1024,4096,27,model.layers.3.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,30,prefill,3,model.layers.3.self_attn.v_proj,linear,,B*S,1024,4096,27,model.layers.3.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,31,prefill,3,model.layers.3.self_attn.qk,batched_matmul,B*QH,S,S,128,28;29,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,32,prefill,3,model.layers.3.self_attn.pv,batched_matmul,B*QH,S,128,S,31;30,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,33,prefill,3,model.layers.3.self_attn.o_proj,linear,,B*S,4096,4096,32,model.layers.3.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,34,prefill,3,model.layers.3.mlp.gate_proj,linear,,B*S,14336,4096,33,model.layers.3.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,35,prefill,3,model.layers.3.mlp.up_proj,linear,,B*S,14336,4096,33,model.layers.3.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,36,prefill,3,model.layers.3.mlp.down_proj,linear,,B*S,4096,14336,34;35,model.layers.3.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,37,prefill,4,model.layers.4.self_attn.q_proj,linear,,B*S,4096,4096,36,model.layers.4.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,38,prefill,4,model.layers.4.self_attn.k_proj,linear,,B*S,1024,4096,36,model.layers.4.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,39,prefill,4,model.layers.4.self_attn.v_proj,linear,,B*S,1024,4096,36,model.layers.4.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,40,prefill,4,model.layers.4.self_attn.qk,batched_matmul,B*QH,S,S,128,37;38,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,41,prefill,4,model.layers.4.self_attn.pv,batched_matmul,B*QH,S,128,S,40;39,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,42,prefill,4,model.layers.4.self_attn.o_proj,linear,,B*S,4096,4096,41,model.layers.4.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,43,prefill,4,model.layers.4.mlp.gate_proj,linear,,B*S,14336,4096,42,model.layers.4.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,44,prefill,4,model.layers.4.mlp.up_proj,linear,,B*S,14336,4096,42,model.layers.4.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,45,prefill,4,model.layers.4.mlp.down_proj,linear,,B*S,4096,14336,43;44,model.layers.4.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,46,prefill,5,model.layers.5.self_attn.q_proj,linear,,B*S,4096,4096,45,model.layers.5.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,47,prefill,5,model.layers.5.self_attn.k_proj,linear,,B*S,1024,4096,45,model.layers.5.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,48,prefill,5,model.layers.5.self_attn.v_proj,linear,,B*S,1024,4096,45,model.layers.5.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,49,prefill,5,model.layers.5.self_attn.qk,batched_matmul,B*QH,S,S,128,46;47,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,50,prefill,5,model.layers.5.self_attn.pv,batched_matmul,B*QH,S,128,S,49;48,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,51,prefill,5,model.layers.5.self_attn.o_proj,linear,,B*S,4096,4096,50,model.layers.5.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,52,prefill,5,model.layers.5.mlp.gate_proj,linear,,B*S,14336,4096,51,model.layers.5.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,53,prefill,5,model.layers.5.mlp.up_proj,linear,,B*S,14336,4096,51,model.layers.5.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,54,prefill,5,model.layers.5.mlp.down_proj,linear,,B*S,4096,14336,52;53,model.layers.5.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,55,prefill,6,model.layers.6.self_attn.q_proj,linear,,B*S,4096,4096,54,model.layers.6.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,56,prefill,6,model.layers.6.self_attn.k_proj,linear,,B*S,1024,4096,54,model.layers.6.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,57,prefill,6,model.layers.6.self_attn.v_proj,linear,,B*S,1024,4096,54,model.layers.6.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,58,prefill,6,model.layers.6.self_attn.qk,batched_matmul,B*QH,S,S,128,55;56,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,59,prefill,6,model.layers.6.self_attn.pv,batched_matmul,B*QH,S,128,S,58;57,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,60,prefill,6,model.layers.6.self_attn.o_proj,linear,,B*S,4096,4096,59,model.layers.6.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,61,prefill,6,model.layers.6.mlp.gate_proj,linear,,B*S,14336,4096,60,model.layers.6.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,62,prefill,6,model.layers.6.mlp.up_proj,linear,,B*S,14336,4096,60,model.layers.6.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,63,prefill,6,model.layers.6.mlp.down_proj,linear,,B*S,4096,14336,61;62,model.layers.6.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,64,prefill,7,model.layers.7.self_attn.q_proj,linear,,B*S,4096,4096,63,model.layers.7.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,65,prefill,7,model.layers.7.self_attn.k_proj,linear,,B*S,1024,4096,63,model.layers.7.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,66,prefill,7,model.layers.7.self_attn.v_proj,linear,,B*S,1024,4096,63,model.layers.7.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,67,prefill,7,model.layers.7.self_attn.qk,batched_matmul,B*QH,S,S,128,64;65,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,68,prefill,7,model.layers.7.self_attn.pv,batched_matmul,B*QH,S,128,S,67;66,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,69,prefill,7,model.layers.7.self_attn.o_proj,linear,,B*S,4096,4096,68,model.layers.7.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,70,prefill,7,model.layers.7.mlp.gate_proj,linear,,B*S,14336,4096,69,model.layers.7.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,71,prefill,7,model.layers.7.mlp.up_proj,linear,,B*S,14336,4096,69,model.layers.7.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,72,prefill,7,model.layers.7.mlp.down_proj,linear,,B*S,4096,14336,70;71,model.layers.7.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,73,prefill,8,model.layers.8.self_attn.q_proj,linear,,B*S,4096,4096,72,model.layers.8.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,74,prefill,8,model.layers.8.self_attn.k_proj,linear,,B*S,1024,4096,72,model.layers.8.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,75,prefill,8,model.layers.8.self_attn.v_proj,linear,,B*S,1024,4096,72,model.layers.8.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,76,prefill,8,model.layers.8.self_attn.qk,batched_matmul,B*QH,S,S,128,73;74,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,77,prefill,8,model.layers.8.self_attn.pv,batched_matmul,B*QH,S,128,S,76;75,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,78,prefill,8,model.layers.8.self_attn.o_proj,linear,,B*S,4096,4096,77,model.layers.8.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,79,prefill,8,model.layers.8.mlp.gate_proj,linear,,B*S,14336,4096,78,model.layers.8.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,80,prefill,8,model.layers.8.mlp.up_proj,linear,,B*S,14336,4096,78,model.layers.8.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,81,prefill,8,model.layers.8.mlp.down_proj,linear,,B*S,4096,14336,79;80,model.layers.8.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,82,prefill,9,model.layers.9.self_attn.q_proj,linear,,B*S,4096,4096,81,model.layers.9.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,83,prefill,9,model.layers.9.self_attn.k_proj,linear,,B*S,1024,4096,81,model.layers.9.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,84,prefill,9,model.layers.9.self_attn.v_proj,linear,,B*S,1024,4096,81,model.layers.9.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,85,prefill,9,model.layers.9.self_attn.qk,batched_matmul,B*QH,S,S,128,82;83,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,86,prefill,9,model.layers.9.self_attn.pv,batched_matmul,B*QH,S,128,S,85;84,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,87,prefill,9,model.layers.9.self_attn.o_proj,linear,,B*S,4096,4096,86,model.layers.9.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,88,prefill,9,model.layers.9.mlp.gate_proj,linear,,B*S,14336,4096,87,model.layers.9.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,89,prefill,9,model.layers.9.mlp.up_proj,linear,,B*S,14336,4096,87,model.layers.9.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,90,prefill,9,model.layers.9.mlp.down_proj,linear,,B*S,4096,14336,88;89,model.layers.9.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,91,prefill,10,model.layers.10.self_attn.q_proj,linear,,B*S,4096,4096,90,model.layers.10.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,92,prefill,10,model.layers.10.self_attn.k_proj,linear,,B*S,1024,4096,90,model.layers.10.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,93,prefill,10,model.layers.10.self_attn.v_proj,linear,,B*S,1024,4096,90,model.layers.10.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,94,prefill,10,model.layers.10.self_attn.qk,batched_matmul,B*QH,S,S,128,91;92,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,95,prefill,10,model.layers.10.self_attn.pv,batched_matmul,B*QH,S,128,S,94;93,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,96,prefill,10,model.layers.10.self_attn.o_proj,linear,,B*S,4096,4096,95,model.layers.10.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,97,prefill,10,model.layers.10.mlp.gate_proj,linear,,B*S,14336,4096,96,model.layers.10.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,98,prefill,10,model.layers.10.mlp.up_proj,linear,,B*S,14336,4096,96,model.layers.10.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,99,prefill,10,model.layers.10.mlp.down_proj,linear,,B*S,4096,14336,97;98,model.layers.10.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,100,prefill,11,model.layers.11.self_attn.q_proj,linear,,B*S,4096,4096,99,model.layers.11.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,101,prefill,11,model.layers.11.self_attn.k_proj,linear,,B*S,1024,4096,99,model.layers.11.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,102,prefill,11,model.layers.11.self_attn.v_proj,linear,,B*S,1024,4096,99,model.layers.11.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,103,prefill,11,model.layers.11.self_attn.qk,batched_matmul,B*QH,S,S,128,100;101,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,104,prefill,11,model.layers.11.self_attn.pv,batched_matmul,B*QH,S,128,S,103;102,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,105,prefill,11,model.layers.11.self_attn.o_proj,linear,,B*S,4096,4096,104,model.layers.11.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,106,prefill,11,model.layers.11.mlp.gate_proj,linear,,B*S,14336,4096,105,model.layers.11.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,107,prefill,11,model.layers.11.mlp.up_proj,linear,,B*S,14336,4096,105,model.layers.11.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,108,prefill,11,model.layers.11.mlp.down_proj,linear,,B*S,4096,14336,106;107,model.layers.11.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,109,prefill,12,model.layers.12.self_attn.q_proj,linear,,B*S,4096,4096,108,model.layers.12.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,110,prefill,12,model.layers.12.self_attn.k_proj,linear,,B*S,1024,4096,108,model.layers.12.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,111,prefill,12,model.layers.12.self_attn.v_proj,linear,,B*S,1024,4096,108,model.layers.12.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,112,prefill,12,model.layers.12.self_attn.qk,batched_matmul,B*QH,S,S,128,109;110,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,113,prefill,12,model.layers.12.self_attn.pv,batched_matmul,B*QH,S,128,S,112;111,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,114,prefill,12,model.layers.12.self_attn.o_proj,linear,,B*S,4096,4096,113,model.layers.12.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,115,prefill,12,model.layers.12.mlp.gate_proj,linear,,B*S,14336,4096,114,model.layers.12.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,116,prefill,12,model.layers.12.mlp.up_proj,linear,,B*S,14336,4096,114,model.layers.12.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,117,prefill,12,model.layers.12.mlp.down_proj,linear,,B*S,4096,14336,115;116,model.layers.12.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,118,prefill,13,model.layers.13.self_attn.q_proj,linear,,B*S,4096,4096,117,model.layers.13.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,119,prefill,13,model.layers.13.self_attn.k_proj,linear,,B*S,1024,4096,117,model.layers.13.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,120,prefill,13,model.layers.13.self_attn.v_proj,linear,,B*S,1024,4096,117,model.layers.13.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,121,prefill,13,model.layers.13.self_attn.qk,batched_matmul,B*QH,S,S,128,118;119,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,122,prefill,13,model.layers.13.self_attn.pv,batched_matmul,B*QH,S,128,S,121;120,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,123,prefill,13,model.layers.13.self_attn.o_proj,linear,,B*S,4096,4096,122,model.layers.13.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,124,prefill,13,model.layers.13.mlp.gate_proj,linear,,B*S,14336,4096,123,model.layers.13.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,125,prefill,13,model.layers.13.mlp.up_proj,linear,,B*S,14336,4096,123,model.layers.13.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,126,prefill,13,model.layers.13.mlp.down_proj,linear,,B*S,4096,14336,124;125,model.layers.13.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,127,prefill,14,model.layers.14.self_attn.q_proj,linear,,B*S,4096,4096,126,model.layers.14.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,128,prefill,14,model.layers.14.self_attn.k_proj,linear,,B*S,1024,4096,126,model.layers.14.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,129,prefill,14,model.layers.14.self_attn.v_proj,linear,,B*S,1024,4096,126,model.layers.14.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,130,prefill,14,model.layers.14.self_attn.qk,batched_matmul,B*QH,S,S,128,127;128,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,131,prefill,14,model.layers.14.self_attn.pv,batched_matmul,B*QH,S,128,S,130;129,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,132,prefill,14,model.layers.14.self_attn.o_proj,linear,,B*S,4096,4096,131,model.layers.14.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,133,prefill,14,model.layers.14.mlp.gate_proj,linear,,B*S,14336,4096,132,model.layers.14.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,134,prefill,14,model.layers.14.mlp.up_proj,linear,,B*S,14336,4096,132,model.layers.14.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,135,prefill,14,model.layers.14.mlp.down_proj,linear,,B*S,4096,14336,133;134,model.layers.14.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,136,prefill,15,model.layers.15.self_attn.q_proj,linear,,B*S,4096,4096,135,model.layers.15.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,137,prefill,15,model.layers.15.self_attn.k_proj,linear,,B*S,1024,4096,135,model.layers.15.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,138,prefill,15,model.layers.15.self_attn.v_proj,linear,,B*S,1024,4096,135,model.layers.15.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,139,prefill,15,model.layers.15.self_attn.qk,batched_matmul,B*QH,S,S,128,136;137,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,140,prefill,15,model.layers.15.self_attn.pv,batched_matmul,B*QH,S,128,S,139;138,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,141,prefill,15,model.layers.15.self_attn.o_proj,linear,,B*S,4096,4096,140,model.layers.15.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,142,prefill,15,model.layers.15.mlp.gate_proj,linear,,B*S,14336,4096,141,model.layers.15.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,143,prefill,15,model.layers.15.mlp.up_proj,linear,,B*S,14336,4096,141,model.layers.15.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,144,prefill,15,model.layers.15.mlp.down_proj,linear,,B*S,4096,14336,142;143,model.layers.15.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,145,prefill,16,model.layers.16.self_attn.q_proj,linear,,B*S,4096,4096,144,model.layers.16.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,146,prefill,16,model.layers.16.self_attn.k_proj,linear,,B*S,1024,4096,144,model.layers.16.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,147,prefill,16,model.layers.16.self_attn.v_proj,linear,,B*S,1024,4096,144,model.layers.16.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,148,prefill,16,model.layers.16.self_attn.qk,batched_matmul,B*QH,S,S,128,145;146,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,149,prefill,16,model.layers.16.self_attn.pv,batched_matmul,B*QH,S,128,S,148;147,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,150,prefill,16,model.layers.16.self_attn.o_proj,linear,,B*S,4096,4096,149,model.layers.16.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,151,prefill,16,model.layers.16.mlp.gate_proj,linear,,B*S,14336,4096,150,model.layers.16.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,152,prefill,16,model.layers.16.mlp.up_proj,linear,,B*S,14336,4096,150,model.layers.16.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,153,prefill,16,model.layers.16.mlp.down_proj,linear,,B*S,4096,14336,151;152,model.layers.16.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,154,prefill,17,model.layers.17.self_attn.q_proj,linear,,B*S,4096,4096,153,model.layers.17.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,155,prefill,17,model.layers.17.self_attn.k_proj,linear,,B*S,1024,4096,153,model.layers.17.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,156,prefill,17,model.layers.17.self_attn.v_proj,linear,,B*S,1024,4096,153,model.layers.17.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,157,prefill,17,model.layers.17.self_attn.qk,batched_matmul,B*QH,S,S,128,154;155,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,158,prefill,17,model.layers.17.self_attn.pv,batched_matmul,B*QH,S,128,S,157;156,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,159,prefill,17,model.layers.17.self_attn.o_proj,linear,,B*S,4096,4096,158,model.layers.17.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,160,prefill,17,model.layers.17.mlp.gate_proj,linear,,B*S,14336,4096,159,model.layers.17.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,161,prefill,17,model.layers.17.mlp.up_proj,linear,,B*S,14336,4096,159,model.layers.17.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,162,prefill,17,model.layers.17.mlp.down_proj,linear,,B*S,4096,14336,160;161,model.layers.17.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,163,prefill,18,model.layers.18.self_attn.q_proj,linear,,B*S,4096,4096,162,model.layers.18.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,164,prefill,18,model.layers.18.self_attn.k_proj,linear,,B*S,1024,4096,162,model.layers.18.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,165,prefill,18,model.layers.18.self_attn.v_proj,linear,,B*S,1024,4096,162,model.layers.18.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,166,prefill,18,model.layers.18.self_attn.qk,batched_matmul,B*QH,S,S,128,163;164,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,167,prefill,18,model.layers.18.self_attn.pv,batched_matmul,B*QH,S,128,S,166;165,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,168,prefill,18,model.layers.18.self_attn.o_proj,linear,,B*S,4096,4096,167,model.layers.18.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,169,prefill,18,model.layers.18.mlp.gate_proj,linear,,B*S,14336,4096,168,model.layers.18.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,170,prefill,18,model.layers.18.mlp.up_proj,linear,,B*S,14336,4096,168,model.layers.18.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,171,prefill,18,model.layers.18.mlp.down_proj,linear,,B*S,4096,14336,169;170,model.layers.18.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,172,prefill,19,model.layers.19.self_attn.q_proj,linear,,B*S,4096,4096,171,model.layers.19.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,173,prefill,19,model.layers.19.self_attn.k_proj,linear,,B*S,1024,4096,171,model.layers.19.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,174,prefill,19,model.layers.19.self_attn.v_proj,linear,,B*S,1024,4096,171,model.layers.19.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,175,prefill,19,model.layers.19.self_attn.qk,batched_matmul,B*QH,S,S,128,172;173,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,176,prefill,19,model.layers.19.self_attn.pv,batched_matmul,B*QH,S,128,S,175;174,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,177,prefill,19,model.layers.19.self_attn.o_proj,linear,,B*S,4096,4096,176,model.layers.19.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,178,prefill,19,model.layers.19.mlp.gate_proj,linear,,B*S,14336,4096,177,model.layers.19.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,179,prefill,19,model.layers.19.mlp.up_proj,linear,,B*S,14336,4096,177,model.layers.19.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,180,prefill,19,model.layers.19.mlp.down_proj,linear,,B*S,4096,14336,178;179,model.layers.19.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,181,prefill,20,model.layers.20.self_attn.q_proj,linear,,B*S,4096,4096,180,model.layers.20.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,182,prefill,20,model.layers.20.self_attn.k_proj,linear,,B*S,1024,4096,180,model.layers.20.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,183,prefill,20,model.layers.20.self_attn.v_proj,linear,,B*S,1024,4096,180,model.layers.20.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,184,prefill,20,model.layers.20.self_attn.qk,batched_matmul,B*QH,S,S,128,181;182,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,185,prefill,20,model.layers.20.self_attn.pv,batched_matmul,B*QH,S,128,S,184;183,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,186,prefill,20,model.layers.20.self_attn.o_proj,linear,,B*S,4096,4096,185,model.layers.20.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,187,prefill,20,model.layers.20.mlp.gate_proj,linear,,B*S,14336,4096,186,model.layers.20.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,188,prefill,20,model.layers.20.mlp.up_proj,linear,,B*S,14336,4096,186,model.layers.20.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,189,prefill,20,model.layers.20.mlp.down_proj,linear,,B*S,4096,14336,187;188,model.layers.20.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,190,prefill,21,model.layers.21.self_attn.q_proj,linear,,B*S,4096,4096,189,model.layers.21.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,191,prefill,21,model.layers.21.self_attn.k_proj,linear,,B*S,1024,4096,189,model.layers.21.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,192,prefill,21,model.layers.21.self_attn.v_proj,linear,,B*S,1024,4096,189,model.layers.21.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,193,prefill,21,model.layers.21.self_attn.qk,batched_matmul,B*QH,S,S,128,190;191,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,194,prefill,21,model.layers.21.self_attn.pv,batched_matmul,B*QH,S,128,S,193;192,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,195,prefill,21,model.layers.21.self_attn.o_proj,linear,,B*S,4096,4096,194,model.layers.21.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,196,prefill,21,model.layers.21.mlp.gate_proj,linear,,B*S,14336,4096,195,model.layers.21.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,197,prefill,21,model.layers.21.mlp.up_proj,linear,,B*S,14336,4096,195,model.layers.21.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,198,prefill,21,model.layers.21.mlp.down_proj,linear,,B*S,4096,14336,196;197,model.layers.21.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,199,prefill,22,model.layers.22.self_attn.q_proj,linear,,B*S,4096,4096,198,model.layers.22.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,200,prefill,22,model.layers.22.self_attn.k_proj,linear,,B*S,1024,4096,198,model.layers.22.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,201,prefill,22,model.layers.22.self_attn.v_proj,linear,,B*S,1024,4096,198,model.layers.22.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,202,prefill,22,model.layers.22.self_attn.qk,batched_matmul,B*QH,S,S,128,199;200,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,203,prefill,22,model.layers.22.self_attn.pv,batched_matmul,B*QH,S,128,S,202;201,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,204,prefill,22,model.layers.22.self_attn.o_proj,linear,,B*S,4096,4096,203,model.layers.22.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,205,prefill,22,model.layers.22.mlp.gate_proj,linear,,B*S,14336,4096,204,model.layers.22.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,206,prefill,22,model.layers.22.mlp.up_proj,linear,,B*S,14336,4096,204,model.layers.22.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,207,prefill,22,model.layers.22.mlp.down_proj,linear,,B*S,4096,14336,205;206,model.layers.22.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,208,prefill,23,model.layers.23.self_attn.q_proj,linear,,B*S,4096,4096,207,model.layers.23.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,209,prefill,23,model.layers.23.self_attn.k_proj,linear,,B*S,1024,4096,207,model.layers.23.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,210,prefill,23,model.layers.23.self_attn.v_proj,linear,,B*S,1024,4096,207,model.layers.23.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,211,prefill,23,model.layers.23.self_attn.qk,batched_matmul,B*QH,S,S,128,208;209,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,212,prefill,23,model.layers.23.self_attn.pv,batched_matmul,B*QH,S,128,S,211;210,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,213,prefill,23,model.layers.23.self_attn.o_proj,linear,,B*S,4096,4096,212,model.layers.23.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,214,prefill,23,model.layers.23.mlp.gate_proj,linear,,B*S,14336,4096,213,model.layers.23.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,215,prefill,23,model.layers.23.mlp.up_proj,linear,,B*S,14336,4096,213,model.layers.23.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,216,prefill,23,model.layers.23.mlp.down_proj,linear,,B*S,4096,14336,214;215,model.layers.23.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,217,prefill,24,model.layers.24.self_attn.q_proj,linear,,B*S,4096,4096,216,model.layers.24.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,218,prefill,24,model.layers.24.self_attn.k_proj,linear,,B*S,1024,4096,216,model.layers.24.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,219,prefill,24,model.layers.24.self_attn.v_proj,linear,,B*S,1024,4096,216,model.layers.24.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,220,prefill,24,model.layers.24.self_attn.qk,batched_matmul,B*QH,S,S,128,217;218,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,221,prefill,24,model.layers.24.self_attn.pv,batched_matmul,B*QH,S,128,S,220;219,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,222,prefill,24,model.layers.24.self_attn.o_proj,linear,,B*S,4096,4096,221,model.layers.24.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,223,prefill,24,model.layers.24.mlp.gate_proj,linear,,B*S,14336,4096,222,model.layers.24.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,224,prefill,24,model.layers.24.mlp.up_proj,linear,,B*S,14336,4096,222,model.layers.24.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,225,prefill,24,model.layers.24.mlp.down_proj,linear,,B*S,4096,14336,223;224,model.layers.24.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,226,prefill,25,model.layers.25.self_attn.q_proj,linear,,B*S,4096,4096,225,model.layers.25.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,227,prefill,25,model.layers.25.self_attn.k_proj,linear,,B*S,1024,4096,225,model.layers.25.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,228,prefill,25,model.layers.25.self_attn.v_proj,linear,,B*S,1024,4096,225,model.layers.25.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,229,prefill,25,model.layers.25.self_attn.qk,batched_matmul,B*QH,S,S,128,226;227,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,230,prefill,25,model.layers.25.self_attn.pv,batched_matmul,B*QH,S,128,S,229;228,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,231,prefill,25,model.layers.25.self_attn.o_proj,linear,,B*S,4096,4096,230,model.layers.25.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,232,prefill,25,model.layers.25.mlp.gate_proj,linear,,B*S,14336,4096,231,model.layers.25.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,233,prefill,25,model.layers.25.mlp.up_proj,linear,,B*S,14336,4096,231,model.layers.25.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,234,prefill,25,model.layers.25.mlp.down_proj,linear,,B*S,4096,14336,232;233,model.layers.25.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,235,prefill,26,model.layers.26.self_attn.q_proj,linear,,B*S,4096,4096,234,model.layers.26.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,236,prefill,26,model.layers.26.self_attn.k_proj,linear,,B*S,1024,4096,234,model.layers.26.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,237,prefill,26,model.layers.26.self_attn.v_proj,linear,,B*S,1024,4096,234,model.layers.26.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,238,prefill,26,model.layers.26.self_attn.qk,batched_matmul,B*QH,S,S,128,235;236,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,239,prefill,26,model.layers.26.self_attn.pv,batched_matmul,B*QH,S,128,S,238;237,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,240,prefill,26,model.layers.26.self_attn.o_proj,linear,,B*S,4096,4096,239,model.layers.26.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,241,prefill,26,model.layers.26.mlp.gate_proj,linear,,B*S,14336,4096,240,model.layers.26.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,242,prefill,26,model.layers.26.mlp.up_proj,linear,,B*S,14336,4096,240,model.layers.26.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,243,prefill,26,model.layers.26.mlp.down_proj,linear,,B*S,4096,14336,241;242,model.layers.26.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,244,prefill,27,model.layers.27.self_attn.q_proj,linear,,B*S,4096,4096,243,model.layers.27.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,245,prefill,27,model.layers.27.self_attn.k_proj,linear,,B*S,1024,4096,243,model.layers.27.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,246,prefill,27,model.layers.27.self_attn.v_proj,linear,,B*S,1024,4096,243,model.layers.27.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,247,prefill,27,model.layers.27.self_attn.qk,batched_matmul,B*QH,S,S,128,244;245,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,248,prefill,27,model.layers.27.self_attn.pv,batched_matmul,B*QH,S,128,S,247;246,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,249,prefill,27,model.layers.27.self_attn.o_proj,linear,,B*S,4096,4096,248,model.layers.27.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,250,prefill,27,model.layers.27.mlp.gate_proj,linear,,B*S,14336,4096,249,model.layers.27.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,251,prefill,27,model.layers.27.mlp.up_proj,linear,,B*S,14336,4096,249,model.layers.27.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,252,prefill,27,model.layers.27.mlp.down_proj,linear,,B*S,4096,14336,250;251,model.layers.27.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,253,prefill,28,model.layers.28.self_attn.q_proj,linear,,B*S,4096,4096,252,model.layers.28.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,254,prefill,28,model.layers.28.self_attn.k_proj,linear,,B*S,1024,4096,252,model.layers.28.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,255,prefill,28,model.layers.28.self_attn.v_proj,linear,,B*S,1024,4096,252,model.layers.28.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,256,prefill,28,model.layers.28.self_attn.qk,batched_matmul,B*QH,S,S,128,253;254,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,257,prefill,28,model.layers.28.self_attn.pv,batched_matmul,B*QH,S,128,S,256;255,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,258,prefill,28,model.layers.28.self_attn.o_proj,linear,,B*S,4096,4096,257,model.layers.28.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,259,prefill,28,model.layers.28.mlp.gate_proj,linear,,B*S,14336,4096,258,model.layers.28.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,260,prefill,28,model.layers.28.mlp.up_proj,linear,,B*S,14336,4096,258,model.layers.28.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,261,prefill,28,model.layers.28.mlp.down_proj,linear,,B*S,4096,14336,259;260,model.layers.28.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,262,prefill,29,model.layers.29.self_attn.q_proj,linear,,B*S,4096,4096,261,model.layers.29.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,263,prefill,29,model.layers.29.self_attn.k_proj,linear,,B*S,1024,4096,261,model.layers.29.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,264,prefill,29,model.layers.29.self_attn.v_proj,linear,,B*S,1024,4096,261,model.layers.29.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,265,prefill,29,model.layers.29.self_attn.qk,batched_matmul,B*QH,S,S,128,262;263,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,266,prefill,29,model.layers.29.self_attn.pv,batched_matmul,B*QH,S,128,S,265;264,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,267,prefill,29,model.layers.29.self_attn.o_proj,linear,,B*S,4096,4096,266,model.layers.29.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,268,prefill,29,model.layers.29.mlp.gate_proj,linear,,B*S,14336,4096,267,model.layers.29.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,269,prefill,29,model.layers.29.mlp.up_proj,linear,,B*S,14336,4096,267,model.layers.29.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,270,prefill,29,model.layers.29.mlp.down_proj,linear,,B*S,4096,14336,268;269,model.layers.29.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,271,prefill,30,model.layers.30.self_attn.q_proj,linear,,B*S,4096,4096,270,model.layers.30.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,272,prefill,30,model.layers.30.self_attn.k_proj,linear,,B*S,1024,4096,270,model.layers.30.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,273,prefill,30,model.layers.30.self_attn.v_proj,linear,,B*S,1024,4096,270,model.layers.30.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,274,prefill,30,model.layers.30.self_attn.qk,batched_matmul,B*QH,S,S,128,271;272,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,275,prefill,30,model.layers.30.self_attn.pv,batched_matmul,B*QH,S,128,S,274;273,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,276,prefill,30,model.layers.30.self_attn.o_proj,linear,,B*S,4096,4096,275,model.layers.30.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,277,prefill,30,model.layers.30.mlp.gate_proj,linear,,B*S,14336,4096,276,model.layers.30.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,278,prefill,30,model.layers.30.mlp.up_proj,linear,,B*S,14336,4096,276,model.layers.30.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,279,prefill,30,model.layers.30.mlp.down_proj,linear,,B*S,4096,14336,277;278,model.layers.30.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,280,prefill,31,model.layers.31.self_attn.q_proj,linear,,B*S,4096,4096,279,model.layers.31.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,281,prefill,31,model.layers.31.self_attn.k_proj,linear,,B*S,1024,4096,279,model.layers.31.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,282,prefill,31,model.layers.31.self_attn.v_proj,linear,,B*S,1024,4096,279,model.layers.31.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,283,prefill,31,model.layers.31.self_attn.qk,batched_matmul,B*QH,S,S,128,280;281,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,284,prefill,31,model.layers.31.self_attn.pv,batched_matmul,B*QH,S,128,S,283;282,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,285,prefill,31,model.layers.31.self_attn.o_proj,linear,,B*S,4096,4096,284,model.layers.31.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,286,prefill,31,model.layers.31.mlp.gate_proj,linear,,B*S,14336,4096,285,model.layers.31.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,287,prefill,31,model.layers.31.mlp.up_proj,linear,,B*S,14336,4096,285,model.layers.31.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,288,prefill,31,model.layers.31.mlp.down_proj,linear,,B*S,4096,14336,286;287,model.layers.31.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,289,prefill,output,lm_head,linear,,B*S,32768,4096,288,lm_head.weight or tied embed_tokens.weight,"[32768,4096]",config+architecture,prefill shape follows full Hugging Face forward; serving runtimes may compute only selected logits
+models--mistralai--Mistral-7B-Instruct-v0.3,290,decode_step,0,model.layers.0.self_attn.q_proj,linear,,B,4096,4096,,model.layers.0.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,291,decode_step,0,model.layers.0.self_attn.k_proj,linear,,B,1024,4096,,model.layers.0.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,292,decode_step,0,model.layers.0.self_attn.v_proj,linear,,B,1024,4096,,model.layers.0.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,293,decode_step,0,model.layers.0.self_attn.qk,batched_matmul,B*QH,1,KV,128,290;291,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,294,decode_step,0,model.layers.0.self_attn.pv,batched_matmul,B*QH,1,128,KV,293;292,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,295,decode_step,0,model.layers.0.self_attn.o_proj,linear,,B,4096,4096,294,model.layers.0.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,296,decode_step,0,model.layers.0.mlp.gate_proj,linear,,B,14336,4096,295,model.layers.0.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,297,decode_step,0,model.layers.0.mlp.up_proj,linear,,B,14336,4096,295,model.layers.0.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,298,decode_step,0,model.layers.0.mlp.down_proj,linear,,B,4096,14336,296;297,model.layers.0.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,299,decode_step,1,model.layers.1.self_attn.q_proj,linear,,B,4096,4096,298,model.layers.1.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,300,decode_step,1,model.layers.1.self_attn.k_proj,linear,,B,1024,4096,298,model.layers.1.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,301,decode_step,1,model.layers.1.self_attn.v_proj,linear,,B,1024,4096,298,model.layers.1.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,302,decode_step,1,model.layers.1.self_attn.qk,batched_matmul,B*QH,1,KV,128,299;300,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,303,decode_step,1,model.layers.1.self_attn.pv,batched_matmul,B*QH,1,128,KV,302;301,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,304,decode_step,1,model.layers.1.self_attn.o_proj,linear,,B,4096,4096,303,model.layers.1.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,305,decode_step,1,model.layers.1.mlp.gate_proj,linear,,B,14336,4096,304,model.layers.1.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,306,decode_step,1,model.layers.1.mlp.up_proj,linear,,B,14336,4096,304,model.layers.1.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,307,decode_step,1,model.layers.1.mlp.down_proj,linear,,B,4096,14336,305;306,model.layers.1.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,308,decode_step,2,model.layers.2.self_attn.q_proj,linear,,B,4096,4096,307,model.layers.2.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,309,decode_step,2,model.layers.2.self_attn.k_proj,linear,,B,1024,4096,307,model.layers.2.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,310,decode_step,2,model.layers.2.self_attn.v_proj,linear,,B,1024,4096,307,model.layers.2.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,311,decode_step,2,model.layers.2.self_attn.qk,batched_matmul,B*QH,1,KV,128,308;309,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,312,decode_step,2,model.layers.2.self_attn.pv,batched_matmul,B*QH,1,128,KV,311;310,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,313,decode_step,2,model.layers.2.self_attn.o_proj,linear,,B,4096,4096,312,model.layers.2.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,314,decode_step,2,model.layers.2.mlp.gate_proj,linear,,B,14336,4096,313,model.layers.2.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,315,decode_step,2,model.layers.2.mlp.up_proj,linear,,B,14336,4096,313,model.layers.2.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,316,decode_step,2,model.layers.2.mlp.down_proj,linear,,B,4096,14336,314;315,model.layers.2.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,317,decode_step,3,model.layers.3.self_attn.q_proj,linear,,B,4096,4096,316,model.layers.3.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,318,decode_step,3,model.layers.3.self_attn.k_proj,linear,,B,1024,4096,316,model.layers.3.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,319,decode_step,3,model.layers.3.self_attn.v_proj,linear,,B,1024,4096,316,model.layers.3.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,320,decode_step,3,model.layers.3.self_attn.qk,batched_matmul,B*QH,1,KV,128,317;318,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,321,decode_step,3,model.layers.3.self_attn.pv,batched_matmul,B*QH,1,128,KV,320;319,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,322,decode_step,3,model.layers.3.self_attn.o_proj,linear,,B,4096,4096,321,model.layers.3.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,323,decode_step,3,model.layers.3.mlp.gate_proj,linear,,B,14336,4096,322,model.layers.3.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,324,decode_step,3,model.layers.3.mlp.up_proj,linear,,B,14336,4096,322,model.layers.3.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,325,decode_step,3,model.layers.3.mlp.down_proj,linear,,B,4096,14336,323;324,model.layers.3.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,326,decode_step,4,model.layers.4.self_attn.q_proj,linear,,B,4096,4096,325,model.layers.4.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,327,decode_step,4,model.layers.4.self_attn.k_proj,linear,,B,1024,4096,325,model.layers.4.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,328,decode_step,4,model.layers.4.self_attn.v_proj,linear,,B,1024,4096,325,model.layers.4.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,329,decode_step,4,model.layers.4.self_attn.qk,batched_matmul,B*QH,1,KV,128,326;327,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,330,decode_step,4,model.layers.4.self_attn.pv,batched_matmul,B*QH,1,128,KV,329;328,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,331,decode_step,4,model.layers.4.self_attn.o_proj,linear,,B,4096,4096,330,model.layers.4.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,332,decode_step,4,model.layers.4.mlp.gate_proj,linear,,B,14336,4096,331,model.layers.4.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,333,decode_step,4,model.layers.4.mlp.up_proj,linear,,B,14336,4096,331,model.layers.4.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,334,decode_step,4,model.layers.4.mlp.down_proj,linear,,B,4096,14336,332;333,model.layers.4.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,335,decode_step,5,model.layers.5.self_attn.q_proj,linear,,B,4096,4096,334,model.layers.5.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,336,decode_step,5,model.layers.5.self_attn.k_proj,linear,,B,1024,4096,334,model.layers.5.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,337,decode_step,5,model.layers.5.self_attn.v_proj,linear,,B,1024,4096,334,model.layers.5.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,338,decode_step,5,model.layers.5.self_attn.qk,batched_matmul,B*QH,1,KV,128,335;336,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,339,decode_step,5,model.layers.5.self_attn.pv,batched_matmul,B*QH,1,128,KV,338;337,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,340,decode_step,5,model.layers.5.self_attn.o_proj,linear,,B,4096,4096,339,model.layers.5.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,341,decode_step,5,model.layers.5.mlp.gate_proj,linear,,B,14336,4096,340,model.layers.5.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,342,decode_step,5,model.layers.5.mlp.up_proj,linear,,B,14336,4096,340,model.layers.5.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,343,decode_step,5,model.layers.5.mlp.down_proj,linear,,B,4096,14336,341;342,model.layers.5.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,344,decode_step,6,model.layers.6.self_attn.q_proj,linear,,B,4096,4096,343,model.layers.6.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,345,decode_step,6,model.layers.6.self_attn.k_proj,linear,,B,1024,4096,343,model.layers.6.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,346,decode_step,6,model.layers.6.self_attn.v_proj,linear,,B,1024,4096,343,model.layers.6.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,347,decode_step,6,model.layers.6.self_attn.qk,batched_matmul,B*QH,1,KV,128,344;345,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,348,decode_step,6,model.layers.6.self_attn.pv,batched_matmul,B*QH,1,128,KV,347;346,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,349,decode_step,6,model.layers.6.self_attn.o_proj,linear,,B,4096,4096,348,model.layers.6.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,350,decode_step,6,model.layers.6.mlp.gate_proj,linear,,B,14336,4096,349,model.layers.6.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,351,decode_step,6,model.layers.6.mlp.up_proj,linear,,B,14336,4096,349,model.layers.6.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,352,decode_step,6,model.layers.6.mlp.down_proj,linear,,B,4096,14336,350;351,model.layers.6.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,353,decode_step,7,model.layers.7.self_attn.q_proj,linear,,B,4096,4096,352,model.layers.7.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,354,decode_step,7,model.layers.7.self_attn.k_proj,linear,,B,1024,4096,352,model.layers.7.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,355,decode_step,7,model.layers.7.self_attn.v_proj,linear,,B,1024,4096,352,model.layers.7.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,356,decode_step,7,model.layers.7.self_attn.qk,batched_matmul,B*QH,1,KV,128,353;354,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,357,decode_step,7,model.layers.7.self_attn.pv,batched_matmul,B*QH,1,128,KV,356;355,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,358,decode_step,7,model.layers.7.self_attn.o_proj,linear,,B,4096,4096,357,model.layers.7.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,359,decode_step,7,model.layers.7.mlp.gate_proj,linear,,B,14336,4096,358,model.layers.7.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,360,decode_step,7,model.layers.7.mlp.up_proj,linear,,B,14336,4096,358,model.layers.7.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,361,decode_step,7,model.layers.7.mlp.down_proj,linear,,B,4096,14336,359;360,model.layers.7.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,362,decode_step,8,model.layers.8.self_attn.q_proj,linear,,B,4096,4096,361,model.layers.8.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,363,decode_step,8,model.layers.8.self_attn.k_proj,linear,,B,1024,4096,361,model.layers.8.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,364,decode_step,8,model.layers.8.self_attn.v_proj,linear,,B,1024,4096,361,model.layers.8.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,365,decode_step,8,model.layers.8.self_attn.qk,batched_matmul,B*QH,1,KV,128,362;363,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,366,decode_step,8,model.layers.8.self_attn.pv,batched_matmul,B*QH,1,128,KV,365;364,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,367,decode_step,8,model.layers.8.self_attn.o_proj,linear,,B,4096,4096,366,model.layers.8.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,368,decode_step,8,model.layers.8.mlp.gate_proj,linear,,B,14336,4096,367,model.layers.8.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,369,decode_step,8,model.layers.8.mlp.up_proj,linear,,B,14336,4096,367,model.layers.8.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,370,decode_step,8,model.layers.8.mlp.down_proj,linear,,B,4096,14336,368;369,model.layers.8.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,371,decode_step,9,model.layers.9.self_attn.q_proj,linear,,B,4096,4096,370,model.layers.9.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,372,decode_step,9,model.layers.9.self_attn.k_proj,linear,,B,1024,4096,370,model.layers.9.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,373,decode_step,9,model.layers.9.self_attn.v_proj,linear,,B,1024,4096,370,model.layers.9.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,374,decode_step,9,model.layers.9.self_attn.qk,batched_matmul,B*QH,1,KV,128,371;372,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,375,decode_step,9,model.layers.9.self_attn.pv,batched_matmul,B*QH,1,128,KV,374;373,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,376,decode_step,9,model.layers.9.self_attn.o_proj,linear,,B,4096,4096,375,model.layers.9.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,377,decode_step,9,model.layers.9.mlp.gate_proj,linear,,B,14336,4096,376,model.layers.9.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,378,decode_step,9,model.layers.9.mlp.up_proj,linear,,B,14336,4096,376,model.layers.9.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,379,decode_step,9,model.layers.9.mlp.down_proj,linear,,B,4096,14336,377;378,model.layers.9.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,380,decode_step,10,model.layers.10.self_attn.q_proj,linear,,B,4096,4096,379,model.layers.10.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,381,decode_step,10,model.layers.10.self_attn.k_proj,linear,,B,1024,4096,379,model.layers.10.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,382,decode_step,10,model.layers.10.self_attn.v_proj,linear,,B,1024,4096,379,model.layers.10.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,383,decode_step,10,model.layers.10.self_attn.qk,batched_matmul,B*QH,1,KV,128,380;381,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,384,decode_step,10,model.layers.10.self_attn.pv,batched_matmul,B*QH,1,128,KV,383;382,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,385,decode_step,10,model.layers.10.self_attn.o_proj,linear,,B,4096,4096,384,model.layers.10.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,386,decode_step,10,model.layers.10.mlp.gate_proj,linear,,B,14336,4096,385,model.layers.10.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,387,decode_step,10,model.layers.10.mlp.up_proj,linear,,B,14336,4096,385,model.layers.10.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,388,decode_step,10,model.layers.10.mlp.down_proj,linear,,B,4096,14336,386;387,model.layers.10.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,389,decode_step,11,model.layers.11.self_attn.q_proj,linear,,B,4096,4096,388,model.layers.11.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,390,decode_step,11,model.layers.11.self_attn.k_proj,linear,,B,1024,4096,388,model.layers.11.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,391,decode_step,11,model.layers.11.self_attn.v_proj,linear,,B,1024,4096,388,model.layers.11.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,392,decode_step,11,model.layers.11.self_attn.qk,batched_matmul,B*QH,1,KV,128,389;390,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,393,decode_step,11,model.layers.11.self_attn.pv,batched_matmul,B*QH,1,128,KV,392;391,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,394,decode_step,11,model.layers.11.self_attn.o_proj,linear,,B,4096,4096,393,model.layers.11.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,395,decode_step,11,model.layers.11.mlp.gate_proj,linear,,B,14336,4096,394,model.layers.11.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,396,decode_step,11,model.layers.11.mlp.up_proj,linear,,B,14336,4096,394,model.layers.11.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,397,decode_step,11,model.layers.11.mlp.down_proj,linear,,B,4096,14336,395;396,model.layers.11.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,398,decode_step,12,model.layers.12.self_attn.q_proj,linear,,B,4096,4096,397,model.layers.12.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,399,decode_step,12,model.layers.12.self_attn.k_proj,linear,,B,1024,4096,397,model.layers.12.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,400,decode_step,12,model.layers.12.self_attn.v_proj,linear,,B,1024,4096,397,model.layers.12.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,401,decode_step,12,model.layers.12.self_attn.qk,batched_matmul,B*QH,1,KV,128,398;399,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,402,decode_step,12,model.layers.12.self_attn.pv,batched_matmul,B*QH,1,128,KV,401;400,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,403,decode_step,12,model.layers.12.self_attn.o_proj,linear,,B,4096,4096,402,model.layers.12.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,404,decode_step,12,model.layers.12.mlp.gate_proj,linear,,B,14336,4096,403,model.layers.12.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,405,decode_step,12,model.layers.12.mlp.up_proj,linear,,B,14336,4096,403,model.layers.12.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,406,decode_step,12,model.layers.12.mlp.down_proj,linear,,B,4096,14336,404;405,model.layers.12.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,407,decode_step,13,model.layers.13.self_attn.q_proj,linear,,B,4096,4096,406,model.layers.13.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,408,decode_step,13,model.layers.13.self_attn.k_proj,linear,,B,1024,4096,406,model.layers.13.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,409,decode_step,13,model.layers.13.self_attn.v_proj,linear,,B,1024,4096,406,model.layers.13.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,410,decode_step,13,model.layers.13.self_attn.qk,batched_matmul,B*QH,1,KV,128,407;408,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,411,decode_step,13,model.layers.13.self_attn.pv,batched_matmul,B*QH,1,128,KV,410;409,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,412,decode_step,13,model.layers.13.self_attn.o_proj,linear,,B,4096,4096,411,model.layers.13.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,413,decode_step,13,model.layers.13.mlp.gate_proj,linear,,B,14336,4096,412,model.layers.13.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,414,decode_step,13,model.layers.13.mlp.up_proj,linear,,B,14336,4096,412,model.layers.13.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,415,decode_step,13,model.layers.13.mlp.down_proj,linear,,B,4096,14336,413;414,model.layers.13.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,416,decode_step,14,model.layers.14.self_attn.q_proj,linear,,B,4096,4096,415,model.layers.14.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,417,decode_step,14,model.layers.14.self_attn.k_proj,linear,,B,1024,4096,415,model.layers.14.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,418,decode_step,14,model.layers.14.self_attn.v_proj,linear,,B,1024,4096,415,model.layers.14.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,419,decode_step,14,model.layers.14.self_attn.qk,batched_matmul,B*QH,1,KV,128,416;417,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,420,decode_step,14,model.layers.14.self_attn.pv,batched_matmul,B*QH,1,128,KV,419;418,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,421,decode_step,14,model.layers.14.self_attn.o_proj,linear,,B,4096,4096,420,model.layers.14.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,422,decode_step,14,model.layers.14.mlp.gate_proj,linear,,B,14336,4096,421,model.layers.14.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,423,decode_step,14,model.layers.14.mlp.up_proj,linear,,B,14336,4096,421,model.layers.14.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,424,decode_step,14,model.layers.14.mlp.down_proj,linear,,B,4096,14336,422;423,model.layers.14.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,425,decode_step,15,model.layers.15.self_attn.q_proj,linear,,B,4096,4096,424,model.layers.15.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,426,decode_step,15,model.layers.15.self_attn.k_proj,linear,,B,1024,4096,424,model.layers.15.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,427,decode_step,15,model.layers.15.self_attn.v_proj,linear,,B,1024,4096,424,model.layers.15.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,428,decode_step,15,model.layers.15.self_attn.qk,batched_matmul,B*QH,1,KV,128,425;426,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,429,decode_step,15,model.layers.15.self_attn.pv,batched_matmul,B*QH,1,128,KV,428;427,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,430,decode_step,15,model.layers.15.self_attn.o_proj,linear,,B,4096,4096,429,model.layers.15.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,431,decode_step,15,model.layers.15.mlp.gate_proj,linear,,B,14336,4096,430,model.layers.15.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,432,decode_step,15,model.layers.15.mlp.up_proj,linear,,B,14336,4096,430,model.layers.15.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,433,decode_step,15,model.layers.15.mlp.down_proj,linear,,B,4096,14336,431;432,model.layers.15.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,434,decode_step,16,model.layers.16.self_attn.q_proj,linear,,B,4096,4096,433,model.layers.16.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,435,decode_step,16,model.layers.16.self_attn.k_proj,linear,,B,1024,4096,433,model.layers.16.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,436,decode_step,16,model.layers.16.self_attn.v_proj,linear,,B,1024,4096,433,model.layers.16.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,437,decode_step,16,model.layers.16.self_attn.qk,batched_matmul,B*QH,1,KV,128,434;435,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,438,decode_step,16,model.layers.16.self_attn.pv,batched_matmul,B*QH,1,128,KV,437;436,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,439,decode_step,16,model.layers.16.self_attn.o_proj,linear,,B,4096,4096,438,model.layers.16.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,440,decode_step,16,model.layers.16.mlp.gate_proj,linear,,B,14336,4096,439,model.layers.16.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,441,decode_step,16,model.layers.16.mlp.up_proj,linear,,B,14336,4096,439,model.layers.16.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,442,decode_step,16,model.layers.16.mlp.down_proj,linear,,B,4096,14336,440;441,model.layers.16.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,443,decode_step,17,model.layers.17.self_attn.q_proj,linear,,B,4096,4096,442,model.layers.17.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,444,decode_step,17,model.layers.17.self_attn.k_proj,linear,,B,1024,4096,442,model.layers.17.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,445,decode_step,17,model.layers.17.self_attn.v_proj,linear,,B,1024,4096,442,model.layers.17.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,446,decode_step,17,model.layers.17.self_attn.qk,batched_matmul,B*QH,1,KV,128,443;444,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,447,decode_step,17,model.layers.17.self_attn.pv,batched_matmul,B*QH,1,128,KV,446;445,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,448,decode_step,17,model.layers.17.self_attn.o_proj,linear,,B,4096,4096,447,model.layers.17.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,449,decode_step,17,model.layers.17.mlp.gate_proj,linear,,B,14336,4096,448,model.layers.17.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,450,decode_step,17,model.layers.17.mlp.up_proj,linear,,B,14336,4096,448,model.layers.17.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,451,decode_step,17,model.layers.17.mlp.down_proj,linear,,B,4096,14336,449;450,model.layers.17.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,452,decode_step,18,model.layers.18.self_attn.q_proj,linear,,B,4096,4096,451,model.layers.18.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,453,decode_step,18,model.layers.18.self_attn.k_proj,linear,,B,1024,4096,451,model.layers.18.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,454,decode_step,18,model.layers.18.self_attn.v_proj,linear,,B,1024,4096,451,model.layers.18.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,455,decode_step,18,model.layers.18.self_attn.qk,batched_matmul,B*QH,1,KV,128,452;453,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,456,decode_step,18,model.layers.18.self_attn.pv,batched_matmul,B*QH,1,128,KV,455;454,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,457,decode_step,18,model.layers.18.self_attn.o_proj,linear,,B,4096,4096,456,model.layers.18.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,458,decode_step,18,model.layers.18.mlp.gate_proj,linear,,B,14336,4096,457,model.layers.18.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,459,decode_step,18,model.layers.18.mlp.up_proj,linear,,B,14336,4096,457,model.layers.18.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,460,decode_step,18,model.layers.18.mlp.down_proj,linear,,B,4096,14336,458;459,model.layers.18.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,461,decode_step,19,model.layers.19.self_attn.q_proj,linear,,B,4096,4096,460,model.layers.19.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,462,decode_step,19,model.layers.19.self_attn.k_proj,linear,,B,1024,4096,460,model.layers.19.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,463,decode_step,19,model.layers.19.self_attn.v_proj,linear,,B,1024,4096,460,model.layers.19.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,464,decode_step,19,model.layers.19.self_attn.qk,batched_matmul,B*QH,1,KV,128,461;462,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,465,decode_step,19,model.layers.19.self_attn.pv,batched_matmul,B*QH,1,128,KV,464;463,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,466,decode_step,19,model.layers.19.self_attn.o_proj,linear,,B,4096,4096,465,model.layers.19.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,467,decode_step,19,model.layers.19.mlp.gate_proj,linear,,B,14336,4096,466,model.layers.19.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,468,decode_step,19,model.layers.19.mlp.up_proj,linear,,B,14336,4096,466,model.layers.19.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,469,decode_step,19,model.layers.19.mlp.down_proj,linear,,B,4096,14336,467;468,model.layers.19.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,470,decode_step,20,model.layers.20.self_attn.q_proj,linear,,B,4096,4096,469,model.layers.20.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,471,decode_step,20,model.layers.20.self_attn.k_proj,linear,,B,1024,4096,469,model.layers.20.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,472,decode_step,20,model.layers.20.self_attn.v_proj,linear,,B,1024,4096,469,model.layers.20.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,473,decode_step,20,model.layers.20.self_attn.qk,batched_matmul,B*QH,1,KV,128,470;471,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,474,decode_step,20,model.layers.20.self_attn.pv,batched_matmul,B*QH,1,128,KV,473;472,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,475,decode_step,20,model.layers.20.self_attn.o_proj,linear,,B,4096,4096,474,model.layers.20.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,476,decode_step,20,model.layers.20.mlp.gate_proj,linear,,B,14336,4096,475,model.layers.20.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,477,decode_step,20,model.layers.20.mlp.up_proj,linear,,B,14336,4096,475,model.layers.20.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,478,decode_step,20,model.layers.20.mlp.down_proj,linear,,B,4096,14336,476;477,model.layers.20.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,479,decode_step,21,model.layers.21.self_attn.q_proj,linear,,B,4096,4096,478,model.layers.21.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,480,decode_step,21,model.layers.21.self_attn.k_proj,linear,,B,1024,4096,478,model.layers.21.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,481,decode_step,21,model.layers.21.self_attn.v_proj,linear,,B,1024,4096,478,model.layers.21.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,482,decode_step,21,model.layers.21.self_attn.qk,batched_matmul,B*QH,1,KV,128,479;480,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,483,decode_step,21,model.layers.21.self_attn.pv,batched_matmul,B*QH,1,128,KV,482;481,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,484,decode_step,21,model.layers.21.self_attn.o_proj,linear,,B,4096,4096,483,model.layers.21.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,485,decode_step,21,model.layers.21.mlp.gate_proj,linear,,B,14336,4096,484,model.layers.21.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,486,decode_step,21,model.layers.21.mlp.up_proj,linear,,B,14336,4096,484,model.layers.21.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,487,decode_step,21,model.layers.21.mlp.down_proj,linear,,B,4096,14336,485;486,model.layers.21.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,488,decode_step,22,model.layers.22.self_attn.q_proj,linear,,B,4096,4096,487,model.layers.22.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,489,decode_step,22,model.layers.22.self_attn.k_proj,linear,,B,1024,4096,487,model.layers.22.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,490,decode_step,22,model.layers.22.self_attn.v_proj,linear,,B,1024,4096,487,model.layers.22.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,491,decode_step,22,model.layers.22.self_attn.qk,batched_matmul,B*QH,1,KV,128,488;489,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,492,decode_step,22,model.layers.22.self_attn.pv,batched_matmul,B*QH,1,128,KV,491;490,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,493,decode_step,22,model.layers.22.self_attn.o_proj,linear,,B,4096,4096,492,model.layers.22.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,494,decode_step,22,model.layers.22.mlp.gate_proj,linear,,B,14336,4096,493,model.layers.22.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,495,decode_step,22,model.layers.22.mlp.up_proj,linear,,B,14336,4096,493,model.layers.22.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,496,decode_step,22,model.layers.22.mlp.down_proj,linear,,B,4096,14336,494;495,model.layers.22.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,497,decode_step,23,model.layers.23.self_attn.q_proj,linear,,B,4096,4096,496,model.layers.23.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,498,decode_step,23,model.layers.23.self_attn.k_proj,linear,,B,1024,4096,496,model.layers.23.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,499,decode_step,23,model.layers.23.self_attn.v_proj,linear,,B,1024,4096,496,model.layers.23.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,500,decode_step,23,model.layers.23.self_attn.qk,batched_matmul,B*QH,1,KV,128,497;498,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,501,decode_step,23,model.layers.23.self_attn.pv,batched_matmul,B*QH,1,128,KV,500;499,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,502,decode_step,23,model.layers.23.self_attn.o_proj,linear,,B,4096,4096,501,model.layers.23.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,503,decode_step,23,model.layers.23.mlp.gate_proj,linear,,B,14336,4096,502,model.layers.23.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,504,decode_step,23,model.layers.23.mlp.up_proj,linear,,B,14336,4096,502,model.layers.23.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,505,decode_step,23,model.layers.23.mlp.down_proj,linear,,B,4096,14336,503;504,model.layers.23.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,506,decode_step,24,model.layers.24.self_attn.q_proj,linear,,B,4096,4096,505,model.layers.24.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,507,decode_step,24,model.layers.24.self_attn.k_proj,linear,,B,1024,4096,505,model.layers.24.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,508,decode_step,24,model.layers.24.self_attn.v_proj,linear,,B,1024,4096,505,model.layers.24.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,509,decode_step,24,model.layers.24.self_attn.qk,batched_matmul,B*QH,1,KV,128,506;507,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,510,decode_step,24,model.layers.24.self_attn.pv,batched_matmul,B*QH,1,128,KV,509;508,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,511,decode_step,24,model.layers.24.self_attn.o_proj,linear,,B,4096,4096,510,model.layers.24.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,512,decode_step,24,model.layers.24.mlp.gate_proj,linear,,B,14336,4096,511,model.layers.24.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,513,decode_step,24,model.layers.24.mlp.up_proj,linear,,B,14336,4096,511,model.layers.24.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,514,decode_step,24,model.layers.24.mlp.down_proj,linear,,B,4096,14336,512;513,model.layers.24.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,515,decode_step,25,model.layers.25.self_attn.q_proj,linear,,B,4096,4096,514,model.layers.25.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,516,decode_step,25,model.layers.25.self_attn.k_proj,linear,,B,1024,4096,514,model.layers.25.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,517,decode_step,25,model.layers.25.self_attn.v_proj,linear,,B,1024,4096,514,model.layers.25.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,518,decode_step,25,model.layers.25.self_attn.qk,batched_matmul,B*QH,1,KV,128,515;516,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,519,decode_step,25,model.layers.25.self_attn.pv,batched_matmul,B*QH,1,128,KV,518;517,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,520,decode_step,25,model.layers.25.self_attn.o_proj,linear,,B,4096,4096,519,model.layers.25.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,521,decode_step,25,model.layers.25.mlp.gate_proj,linear,,B,14336,4096,520,model.layers.25.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,522,decode_step,25,model.layers.25.mlp.up_proj,linear,,B,14336,4096,520,model.layers.25.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,523,decode_step,25,model.layers.25.mlp.down_proj,linear,,B,4096,14336,521;522,model.layers.25.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,524,decode_step,26,model.layers.26.self_attn.q_proj,linear,,B,4096,4096,523,model.layers.26.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,525,decode_step,26,model.layers.26.self_attn.k_proj,linear,,B,1024,4096,523,model.layers.26.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,526,decode_step,26,model.layers.26.self_attn.v_proj,linear,,B,1024,4096,523,model.layers.26.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,527,decode_step,26,model.layers.26.self_attn.qk,batched_matmul,B*QH,1,KV,128,524;525,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,528,decode_step,26,model.layers.26.self_attn.pv,batched_matmul,B*QH,1,128,KV,527;526,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,529,decode_step,26,model.layers.26.self_attn.o_proj,linear,,B,4096,4096,528,model.layers.26.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,530,decode_step,26,model.layers.26.mlp.gate_proj,linear,,B,14336,4096,529,model.layers.26.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,531,decode_step,26,model.layers.26.mlp.up_proj,linear,,B,14336,4096,529,model.layers.26.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,532,decode_step,26,model.layers.26.mlp.down_proj,linear,,B,4096,14336,530;531,model.layers.26.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,533,decode_step,27,model.layers.27.self_attn.q_proj,linear,,B,4096,4096,532,model.layers.27.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,534,decode_step,27,model.layers.27.self_attn.k_proj,linear,,B,1024,4096,532,model.layers.27.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,535,decode_step,27,model.layers.27.self_attn.v_proj,linear,,B,1024,4096,532,model.layers.27.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,536,decode_step,27,model.layers.27.self_attn.qk,batched_matmul,B*QH,1,KV,128,533;534,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,537,decode_step,27,model.layers.27.self_attn.pv,batched_matmul,B*QH,1,128,KV,536;535,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,538,decode_step,27,model.layers.27.self_attn.o_proj,linear,,B,4096,4096,537,model.layers.27.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,539,decode_step,27,model.layers.27.mlp.gate_proj,linear,,B,14336,4096,538,model.layers.27.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,540,decode_step,27,model.layers.27.mlp.up_proj,linear,,B,14336,4096,538,model.layers.27.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,541,decode_step,27,model.layers.27.mlp.down_proj,linear,,B,4096,14336,539;540,model.layers.27.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,542,decode_step,28,model.layers.28.self_attn.q_proj,linear,,B,4096,4096,541,model.layers.28.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,543,decode_step,28,model.layers.28.self_attn.k_proj,linear,,B,1024,4096,541,model.layers.28.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,544,decode_step,28,model.layers.28.self_attn.v_proj,linear,,B,1024,4096,541,model.layers.28.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,545,decode_step,28,model.layers.28.self_attn.qk,batched_matmul,B*QH,1,KV,128,542;543,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,546,decode_step,28,model.layers.28.self_attn.pv,batched_matmul,B*QH,1,128,KV,545;544,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,547,decode_step,28,model.layers.28.self_attn.o_proj,linear,,B,4096,4096,546,model.layers.28.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,548,decode_step,28,model.layers.28.mlp.gate_proj,linear,,B,14336,4096,547,model.layers.28.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,549,decode_step,28,model.layers.28.mlp.up_proj,linear,,B,14336,4096,547,model.layers.28.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,550,decode_step,28,model.layers.28.mlp.down_proj,linear,,B,4096,14336,548;549,model.layers.28.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,551,decode_step,29,model.layers.29.self_attn.q_proj,linear,,B,4096,4096,550,model.layers.29.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,552,decode_step,29,model.layers.29.self_attn.k_proj,linear,,B,1024,4096,550,model.layers.29.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,553,decode_step,29,model.layers.29.self_attn.v_proj,linear,,B,1024,4096,550,model.layers.29.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,554,decode_step,29,model.layers.29.self_attn.qk,batched_matmul,B*QH,1,KV,128,551;552,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,555,decode_step,29,model.layers.29.self_attn.pv,batched_matmul,B*QH,1,128,KV,554;553,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,556,decode_step,29,model.layers.29.self_attn.o_proj,linear,,B,4096,4096,555,model.layers.29.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,557,decode_step,29,model.layers.29.mlp.gate_proj,linear,,B,14336,4096,556,model.layers.29.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,558,decode_step,29,model.layers.29.mlp.up_proj,linear,,B,14336,4096,556,model.layers.29.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,559,decode_step,29,model.layers.29.mlp.down_proj,linear,,B,4096,14336,557;558,model.layers.29.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,560,decode_step,30,model.layers.30.self_attn.q_proj,linear,,B,4096,4096,559,model.layers.30.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,561,decode_step,30,model.layers.30.self_attn.k_proj,linear,,B,1024,4096,559,model.layers.30.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,562,decode_step,30,model.layers.30.self_attn.v_proj,linear,,B,1024,4096,559,model.layers.30.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,563,decode_step,30,model.layers.30.self_attn.qk,batched_matmul,B*QH,1,KV,128,560;561,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,564,decode_step,30,model.layers.30.self_attn.pv,batched_matmul,B*QH,1,128,KV,563;562,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,565,decode_step,30,model.layers.30.self_attn.o_proj,linear,,B,4096,4096,564,model.layers.30.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,566,decode_step,30,model.layers.30.mlp.gate_proj,linear,,B,14336,4096,565,model.layers.30.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,567,decode_step,30,model.layers.30.mlp.up_proj,linear,,B,14336,4096,565,model.layers.30.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,568,decode_step,30,model.layers.30.mlp.down_proj,linear,,B,4096,14336,566;567,model.layers.30.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,569,decode_step,31,model.layers.31.self_attn.q_proj,linear,,B,4096,4096,568,model.layers.31.self_attn.q_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,570,decode_step,31,model.layers.31.self_attn.k_proj,linear,,B,1024,4096,568,model.layers.31.self_attn.k_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,571,decode_step,31,model.layers.31.self_attn.v_proj,linear,,B,1024,4096,568,model.layers.31.self_attn.v_proj.weight,"[1024,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,572,decode_step,31,model.layers.31.self_attn.qk,batched_matmul,B*QH,1,KV,128,569;570,,,config+architecture,"GQA QH=32, KVH=8"
+models--mistralai--Mistral-7B-Instruct-v0.3,573,decode_step,31,model.layers.31.self_attn.pv,batched_matmul,B*QH,1,128,KV,572;571,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--mistralai--Mistral-7B-Instruct-v0.3,574,decode_step,31,model.layers.31.self_attn.o_proj,linear,,B,4096,4096,573,model.layers.31.self_attn.o_proj.weight,"[4096,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,575,decode_step,31,model.layers.31.mlp.gate_proj,linear,,B,14336,4096,574,model.layers.31.mlp.gate_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,576,decode_step,31,model.layers.31.mlp.up_proj,linear,,B,14336,4096,574,model.layers.31.mlp.up_proj.weight,"[14336,4096]",config+architecture,
+models--mistralai--Mistral-7B-Instruct-v0.3,577,decode_step,31,model.layers.31.mlp.down_proj,linear,,B,4096,14336,575;576,model.layers.31.mlp.down_proj.weight,"[4096,14336]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--mistralai--Mistral-7B-Instruct-v0.3,578,decode_step,output,lm_head,linear,,B,32768,4096,577,lm_head.weight or tied embed_tokens.weight,"[32768,4096]",config+architecture,prefill shape follows full Hugging Face forward; serving runtimes may compute only selected logits

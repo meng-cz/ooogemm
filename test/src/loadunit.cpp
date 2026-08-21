@@ -42,6 +42,7 @@ struct Load {
     uint32_t addr = 0;
     uint32_t abuf = 0;
     uint32_t bbuf = 0;
+    uint32_t valid_rows = 0;
     std::string name;
 };
 
@@ -128,6 +129,7 @@ private:
         dut_.uop_addr_i = 0;
         dut_.uop_abufidx_i = 0;
         dut_.uop_bbufidx_i = 0;
+        dut_.uop_valid_rows_i = 0;
         dut_.mem_req_ready_i = 0;
         dut_.mem_rsp_valid_i = 0;
         dut_.mem_rsp_id_i = 0;
@@ -161,6 +163,7 @@ private:
         dut_.uop_addr_i = load.addr;
         dut_.uop_abufidx_i = load.abuf;
         dut_.uop_bbufidx_i = load.bbuf;
+        dut_.uop_valid_rows_i = load.valid_rows;
     }
 
     void clear_load() {
@@ -169,6 +172,14 @@ private:
         dut_.uop_addr_i = 0;
         dut_.uop_abufidx_i = 0;
         dut_.uop_bbufidx_i = 0;
+        dut_.uop_valid_rows_i = 0;
+    }
+
+    int rows_eff(const Load& load) const {
+        if (load.valid_rows == 0 || load.valid_rows > static_cast<uint32_t>(kSaWidth)) {
+            return kSaWidth;
+        }
+        return static_cast<int>(load.valid_rows);
     }
 
     void enqueue_expected_reqs(const Load& load) {
@@ -181,9 +192,18 @@ private:
                << " while " << rows_left << " rows are still outstanding";
             fail(os.str());
         }
-        rows_left = kSaWidth;
+        const int rows = rows_eff(load);
+        rows_left = rows;
 
-        for (int row = 0; row < kSaWidth; ++row) {
+        for (int row = rows; row < kSaWidth; ++row) {
+            if (load.is_b) {
+                b_model_[bufidx][row] = 0;
+            } else {
+                a_model_[bufidx][row] = 0;
+            }
+        }
+
+        for (int row = 0; row < rows; ++row) {
             ReqInfo req;
             req.is_b = load.is_b;
             req.addr = row_addr(load.addr, row);
@@ -191,6 +211,61 @@ private:
             req.row = static_cast<uint32_t>(row);
             req.name = load.name;
             expected_reqs_.push_back(req);
+        }
+    }
+
+    void check_zero_init_outputs(const Load& load) {
+        const int rows = rows_eff(load);
+        if (rows == kSaWidth) {
+            check_no_pending_outputs();
+            return;
+        }
+
+        uint32_t expected_mask = 0;
+        for (int row = rows; row < kSaWidth; ++row) {
+            expected_mask |= uint32_t{1} << row;
+        }
+
+        if (load.is_b) {
+            if (dut_.abuf_wr_valid_o || dut_.abuf_ready_valid_o ||
+                dut_.bbuf_ready_valid_o ||
+                !dut_.bbuf_wr_valid_o ||
+                dut_.bbuf_wr_idx_o != load.bbuf ||
+                dut_.bbuf_wr_bank_en_o != expected_mask) {
+                std::ostringstream os;
+                os << "B zero-init mismatch at cycle " << cycle_
+                   << " for " << load.name
+                   << ": expected mask=" << hex32(expected_mask)
+                   << " got valid=" << static_cast<int>(dut_.bbuf_wr_valid_o)
+                   << " idx=" << static_cast<uint32_t>(dut_.bbuf_wr_idx_o)
+                   << " mask=" << hex32(static_cast<uint32_t>(dut_.bbuf_wr_bank_en_o));
+                fail(os.str());
+            }
+            for (int row = rows; row < kSaWidth; ++row) {
+                if (dut_.bbuf_wr_data_o[row] != 0) {
+                    fail("B zero-init wrote non-zero data");
+                }
+            }
+        } else {
+            if (dut_.bbuf_wr_valid_o || dut_.bbuf_ready_valid_o ||
+                dut_.abuf_ready_valid_o ||
+                !dut_.abuf_wr_valid_o ||
+                dut_.abuf_wr_idx_o != load.abuf ||
+                dut_.abuf_wr_bank_en_o != expected_mask) {
+                std::ostringstream os;
+                os << "A zero-init mismatch at cycle " << cycle_
+                   << " for " << load.name
+                   << ": expected mask=" << hex32(expected_mask)
+                   << " got valid=" << static_cast<int>(dut_.abuf_wr_valid_o)
+                   << " idx=" << static_cast<uint32_t>(dut_.abuf_wr_idx_o)
+                   << " mask=" << hex32(static_cast<uint32_t>(dut_.abuf_wr_bank_en_o));
+                fail(os.str());
+            }
+            for (int row = rows; row < kSaWidth; ++row) {
+                if (dut_.abuf_wr_data_o[row] != 0) {
+                    fail("A zero-init wrote non-zero data");
+                }
+            }
         }
     }
 
@@ -370,7 +445,11 @@ private:
             const bool uop_fire = dut_.uop_valid_i && dut_.uop_ready_o;
             const bool req_fire = dut_.mem_req_valid_o && dut_.mem_req_ready_i;
 
-            check_pending_output();
+            if (pending_outputs_.empty() && uop_fire) {
+                check_zero_init_outputs(loads[load_idx]);
+            } else {
+                check_pending_output();
+            }
 
             if (uop_fire) {
                 enqueue_expected_reqs(loads[load_idx]);
@@ -428,11 +507,11 @@ private:
         run_sequence(
             "directed_mixed_ooo",
             {
-                Load{false, 0x100, 2, 0, "A0"},
-                Load{true,  0x240, 0, 5, "B0"},
-                Load{false, 0x111, 3, 0, "A1"},
-                Load{true,  0x280, 0, 1, "B1"},
-                Load{false, 0x130, 2, 0, "A0_reuse_after_ready"},
+                Load{false, 0x100, 2, 0, 0, "A0"},
+                Load{true,  0x240, 0, 5, 0, "B0"},
+                Load{false, 0x111, 3, 0, 1, "A1_partial_one_row"},
+                Load{true,  0x280, 0, 1, 3, "B1_partial_three_rows"},
+                Load{false, 0x130, 2, 0, 0, "A0_reuse_after_ready"},
             },
             2000
         );
@@ -451,6 +530,7 @@ private:
             load.addr = 0x1000u + addr_dist(rng_) + static_cast<uint32_t>(i * 17);
             load.abuf = static_cast<uint32_t>(abuf_dist(rng_));
             load.bbuf = static_cast<uint32_t>(bbuf_dist(rng_));
+            load.valid_rows = static_cast<uint32_t>(i % (kSaWidth + 1));
             load.name = "rand" + std::to_string(i);
             loads.push_back(load);
         }

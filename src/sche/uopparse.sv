@@ -30,6 +30,7 @@ module uopparse #(
     parameter int ABUF_IDX_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
+    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
     parameter int BLOCK_M        = choose_block_m(ABUF_SIZE, BBUF_SIZE, PACC_NUM),
     parameter int BLOCK_N        = choose_block_n(ABUF_SIZE, BBUF_SIZE, PACC_NUM),
     parameter int TILE_COUNT_WIDTH = DIM_WIDTH + 1
@@ -53,6 +54,7 @@ module uopparse #(
     output logic [ABUF_IDX_WIDTH-1:0] uop_abufidx_o,
     output logic [BBUF_IDX_WIDTH-1:0] uop_bbufidx_o,
     output logic [PACC_IDX_WIDTH-1:0] uop_paccidx_o,
+    output logic [LOAD_ROWS_WIDTH-1:0] uop_valid_rows_o,
     output logic uop_accum_o
 );
 
@@ -205,6 +207,28 @@ module uopparse #(
         end
     endfunction
 
+    function automatic logic [LOAD_ROWS_WIDTH-1:0] tile_valid_rows(
+        input logic [DIM_WIDTH-1:0] dim,
+        input tile_count_t          tile_idx
+    );
+        logic [TILE_COUNT_WIDTH:0] dim_ext;
+        logic [TILE_COUNT_WIDTH:0] tile_start;
+        logic [TILE_COUNT_WIDTH:0] rows_left;
+        begin
+            dim_ext = {{(TILE_COUNT_WIDTH + 1 - DIM_WIDTH){1'b0}}, dim};
+            tile_start = (TILE_COUNT_WIDTH + 1)'(tile_idx) *
+                         (TILE_COUNT_WIDTH + 1)'(SA_WIDTH);
+            if (dim_ext <= tile_start) begin
+                return '0;
+            end
+            rows_left = dim_ext - tile_start;
+            if (rows_left >= (TILE_COUNT_WIDTH + 1)'(SA_WIDTH)) begin
+                return LOAD_ROWS_WIDTH'(SA_WIDTH);
+            end
+            return LOAD_ROWS_WIDTH'(rows_left);
+        end
+    endfunction
+
     function automatic logic [PACC_IDX_WIDTH-1:0] pacc_of(
         input tile_count_t local_m,
         input tile_count_t local_n,
@@ -222,6 +246,8 @@ module uopparse #(
     logic [ADDR_WIDTH-1:0] a_base_q;
     logic [ADDR_WIDTH-1:0] b_base_q;
     logic [ADDR_WIDTH-1:0] c_base_q;
+    logic [DIM_WIDTH-1:0] m_dim_q;
+    logic [DIM_WIDTH-1:0] n_dim_q;
 
     tile_count_t tm_q;
     tile_count_t tn_q;
@@ -283,6 +309,7 @@ module uopparse #(
         uop_abufidx_o = '0;
         uop_bbufidx_o = '0;
         uop_paccidx_o = '0;
+        uop_valid_rows_o = '0;
         uop_accum_o   = 1'b0;
 
         unique case (state_q)
@@ -293,6 +320,7 @@ module uopparse #(
                     ((block_m_base_q + load_idx_q) * tk_q) + k_tile_q
                 );
                 uop_abufidx_o = load_idx_q[ABUF_IDX_WIDTH-1:0];
+                uop_valid_rows_o = tile_valid_rows(m_dim_q, block_m_base_q + load_idx_q);
             end
 
             ST_LOAD_B: begin
@@ -302,6 +330,7 @@ module uopparse #(
                     (k_tile_q * tn_q) + block_n_base_q + load_idx_q
                 );
                 uop_bbufidx_o = load_idx_q[BBUF_IDX_WIDTH-1:0];
+                uop_valid_rows_o = tile_valid_rows(n_dim_q, block_n_base_q + load_idx_q);
             end
 
             ST_GEMM: begin
@@ -336,6 +365,8 @@ module uopparse #(
             a_base_q <= '0;
             b_base_q <= '0;
             c_base_q <= '0;
+            m_dim_q <= '0;
+            n_dim_q <= '0;
             tm_q <= '0;
             tn_q <= '0;
             tk_q <= '0;
@@ -356,6 +387,8 @@ module uopparse #(
                     a_base_q <= cmd_a_base_i;
                     b_base_q <= cmd_b_base_i;
                     c_base_q <= cmd_c_base_i;
+                    m_dim_q <= cmd_m_i;
+                    n_dim_q <= cmd_n_i;
                     tm_q <= cmd_tm_comb;
                     tn_q <= cmd_tn_comb;
                     tk_q <= cmd_tk_comb;

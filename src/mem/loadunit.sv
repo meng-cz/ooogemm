@@ -1,9 +1,10 @@
 // Load uop pipeline.
 //
 // A LOAD uop names one SA_WIDTH x SA_WIDTH operand tile in external memory and
-// one destination slot in ABuf or BBuf.  The load unit splits the tile into
-// SA_WIDTH row requests.  Each request transfers one row whose width is
-// SA_WIDTH * 8 bits.
+// one destination slot in ABuf or BBuf.  The uop also carries the number of
+// valid rows in the tile.  The load unit only issues memory requests for those
+// rows and writes zero to invalid destination row banks locally.  This preserves
+// padded GEMM semantics while saving tail-tile memory bandwidth.
 //
 // The external memory interface is a simplified read-only, AXI-lite-like
 // protocol with explicit transaction IDs:
@@ -50,6 +51,7 @@ module loadunit #(
     input  logic [ADDR_WIDTH-1:0] uop_addr_i,
     input  logic [ABUF_IDX_WIDTH-1:0] uop_abufidx_i,
     input  logic [BBUF_IDX_WIDTH-1:0] uop_bbufidx_i,
+    input  logic [ROWS_LEFT_WIDTH-1:0] uop_valid_rows_i,
 
     output logic mem_req_valid_o,
     input  logic mem_req_ready_i,
@@ -123,6 +125,7 @@ module loadunit #(
     logic [ABUF_IDX_WIDTH-1:0] issue_abufidx_q;
     logic [BBUF_IDX_WIDTH-1:0] issue_bbufidx_q;
     logic [ROW_IDX_WIDTH-1:0] issue_row_q;
+    logic [ROWS_LEFT_WIDTH-1:0] issue_rows_q;
 
     logic req_hold_valid_q;
     logic [BUS_ID_WIDTH-1:0] req_hold_id_q;
@@ -160,10 +163,24 @@ module loadunit #(
         end
     end
 
+    logic [ROWS_LEFT_WIDTH-1:0] uop_rows_eff;
+    logic uop_needs_zero_init;
+
+    always_comb begin
+        if (uop_valid_rows_i == '0 ||
+            uop_valid_rows_i > ROWS_LEFT_WIDTH'(SA_WIDTH)) begin
+            uop_rows_eff = ROWS_LEFT_WIDTH'(SA_WIDTH);
+        end else begin
+            uop_rows_eff = uop_valid_rows_i;
+        end
+        uop_needs_zero_init = uop_rows_eff < ROWS_LEFT_WIDTH'(SA_WIDTH);
+    end
+
     assign uop_ready_o = !issue_active_q &&
                          !req_hold_valid_q &&
-                         (free_count_q >= FREE_COUNT_WIDTH'(SA_WIDTH)) &&
-                         !target_busy;
+                         (free_count_q >= FREE_COUNT_WIDTH'(uop_rows_eff)) &&
+                         !target_busy &&
+                         !(uop_needs_zero_init && rsp_valid_q);
 
     wire uop_fire = uop_valid_i && uop_ready_o;
     wire req_fire = mem_req_valid_o && mem_req_ready_i;
@@ -232,6 +249,15 @@ module loadunit #(
         if (rsp_valid_q && !rsp_is_b_q) begin
             abuf_wr_bank_en_o[int'(rsp_row_q)] = 1'b1;
             abuf_wr_data_o[int'(rsp_row_q)] = rsp_data_q;
+        end else if (uop_fire && !uop_is_b_i && uop_needs_zero_init) begin
+            abuf_wr_valid_o = 1'b1;
+            abuf_wr_idx_o = uop_abufidx_i;
+            for (int row = 0; row < SA_WIDTH; row++) begin
+                if (row >= int'(uop_rows_eff)) begin
+                    abuf_wr_bank_en_o[row] = 1'b1;
+                    abuf_wr_data_o[row] = '0;
+                end
+            end
         end
 
         bbuf_wr_valid_o = rsp_valid_q && rsp_is_b_q;
@@ -243,6 +269,15 @@ module loadunit #(
         if (rsp_valid_q && rsp_is_b_q) begin
             bbuf_wr_bank_en_o[int'(rsp_row_q)] = 1'b1;
             bbuf_wr_data_o[int'(rsp_row_q)] = rsp_data_q;
+        end else if (uop_fire && uop_is_b_i && uop_needs_zero_init) begin
+            bbuf_wr_valid_o = 1'b1;
+            bbuf_wr_idx_o = uop_bbufidx_i;
+            for (int row = 0; row < SA_WIDTH; row++) begin
+                if (row >= int'(uop_rows_eff)) begin
+                    bbuf_wr_bank_en_o[row] = 1'b1;
+                    bbuf_wr_data_o[row] = '0;
+                end
+            end
         end
 
         abuf_ready_valid_o = rsp_valid_q && !rsp_is_b_q && rsp_a_last_q;
@@ -254,7 +289,8 @@ module loadunit #(
     wire can_reserve_req = issue_active_q &&
                            (!req_hold_valid_q || req_fire) &&
                            free_found;
-    wire issue_reserve_last = int'(issue_row_q) == (SA_WIDTH - 1);
+    wire issue_reserve_last = ROWS_LEFT_WIDTH'(issue_row_q) ==
+                              (issue_rows_q - ROWS_LEFT_WIDTH'(1));
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -264,6 +300,7 @@ module loadunit #(
             issue_abufidx_q <= '0;
             issue_bbufidx_q <= '0;
             issue_row_q <= '0;
+            issue_rows_q <= '0;
             req_hold_valid_q <= 1'b0;
             req_hold_id_q <= '0;
             req_hold_addr_q <= '0;
@@ -335,10 +372,11 @@ module loadunit #(
                 issue_abufidx_q <= uop_abufidx_i;
                 issue_bbufidx_q <= uop_bbufidx_i;
                 issue_row_q <= '0;
+                issue_rows_q <= uop_rows_eff;
                 if (uop_is_b_i) begin
-                    b_rows_left[int'(uop_bbufidx_i)] <= ROWS_LEFT_WIDTH'(SA_WIDTH);
+                    b_rows_left[int'(uop_bbufidx_i)] <= uop_rows_eff;
                 end else begin
-                    a_rows_left[int'(uop_abufidx_i)] <= ROWS_LEFT_WIDTH'(SA_WIDTH);
+                    a_rows_left[int'(uop_abufidx_i)] <= uop_rows_eff;
                 end
             end
 

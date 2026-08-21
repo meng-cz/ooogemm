@@ -56,6 +56,7 @@ struct Uop {
     uint32_t abuf = 0;
     uint32_t bbuf = 0;
     uint32_t pacc = 0;
+    uint32_t valid_rows = 0;
     bool accum = false;
     std::string tag;
 };
@@ -83,6 +84,7 @@ std::string describe(const Uop& uop) {
        << " abuf=" << uop.abuf
        << " bbuf=" << uop.bbuf
        << " pacc=" << uop.pacc
+       << " rows=" << uop.valid_rows
        << " accum=" << (uop.accum ? 1 : 0);
     if (!uop.tag.empty()) {
         os << " tag=" << uop.tag;
@@ -97,6 +99,15 @@ std::string describe(const Uop& uop) {
 int ceil_div(uint32_t value, int div) {
     return static_cast<int>((value + static_cast<uint32_t>(div) - 1u) /
                             static_cast<uint32_t>(div));
+}
+
+uint32_t tile_valid_rows(uint32_t dim, int tile_idx) {
+    const uint32_t tile_start = static_cast<uint32_t>(tile_idx * kSaWidth);
+    if (dim <= tile_start) {
+        return 0;
+    }
+    const uint32_t rows_left = dim - tile_start;
+    return std::min<uint32_t>(static_cast<uint32_t>(kSaWidth), rows_left);
 }
 
 std::pair<int, int> choose_block() {
@@ -148,6 +159,7 @@ std::vector<Uop> reference_for_cmd(const Cmd& cmd) {
                     u.type = UOP_LOAD_A;
                     u.addr = cmd.a_base + static_cast<uint32_t>((block_m_base + lm) * tk + kt);
                     u.abuf = static_cast<uint32_t>(lm);
+                    u.valid_rows = tile_valid_rows(cmd.m, block_m_base + lm);
                     u.tag = cmd.name;
                     out.push_back(u);
                 }
@@ -157,6 +169,7 @@ std::vector<Uop> reference_for_cmd(const Cmd& cmd) {
                     u.type = UOP_LOAD_B;
                     u.addr = cmd.b_base + static_cast<uint32_t>(kt * tn + block_n_base + ln);
                     u.bbuf = static_cast<uint32_t>(ln);
+                    u.valid_rows = tile_valid_rows(cmd.n, block_n_base + ln);
                     u.tag = cmd.name;
                     out.push_back(u);
                 }
@@ -263,6 +276,7 @@ Uop read_uop(const Vuopparse& dut) {
     u.abuf = static_cast<uint32_t>(dut.uop_abufidx_o);
     u.bbuf = static_cast<uint32_t>(dut.uop_bbufidx_o);
     u.pacc = static_cast<uint32_t>(dut.uop_paccidx_o);
+    u.valid_rows = static_cast<uint32_t>(dut.uop_valid_rows_o);
     u.accum = dut.uop_accum_o != 0;
     return u;
 }
@@ -273,6 +287,7 @@ bool same_uop(const Uop& a, const Uop& b) {
            a.abuf == b.abuf &&
            a.bbuf == b.bbuf &&
            a.pacc == b.pacc &&
+           a.valid_rows == b.valid_rows &&
            a.accum == b.accum;
 }
 

@@ -1,0 +1,141 @@
+model,op_id,phase,layer,module,op_kind,batch_dims,M,N,K,deps,weight,weight_shape,provenance,notes
+models--Systran--faster-whisper-tiny,1,encoder,frontend,encoder.conv1,conv1d_im2col_equivalent,,B*T_audio,384,240,,encoder.conv1.weight,"[384,80,3]",variant+standard_whisper,"kernel=3,stride=1,padding=1"
+models--Systran--faster-whisper-tiny,2,encoder,frontend,encoder.conv2,conv1d_im2col_equivalent,,B*T_enc,384,1152,1,encoder.conv2.weight,"[384,384,3]",variant+standard_whisper,"kernel=3,stride=2,padding=1; T_enc=ceil(T_audio/2)"
+models--Systran--faster-whisper-tiny,3,encoder,0,encoder.layers.0.self_attn.q_proj,linear,,B*T_enc,384,384,2,encoder.layers.0.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,4,encoder,0,encoder.layers.0.self_attn.k_proj,linear,,B*T_enc,384,384,2,encoder.layers.0.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,5,encoder,0,encoder.layers.0.self_attn.v_proj,linear,,B*T_enc,384,384,2,encoder.layers.0.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,6,encoder,0,encoder.layers.0.self_attn.qk,batched_matmul,B*heads,T_enc,T_enc,64,3;4,,,config+architecture,
+models--Systran--faster-whisper-tiny,7,encoder,0,encoder.layers.0.self_attn.pv,batched_matmul,B*heads,T_enc,64,T_enc,6;5,,,config+architecture,
+models--Systran--faster-whisper-tiny,8,encoder,0,encoder.layers.0.self_attn.out_proj,linear,,B*T_enc,384,384,7,encoder.layers.0.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,9,encoder,0,encoder.layers.0.fc1,linear,,B*T_enc,1536,384,8,encoder.layers.0.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,10,encoder,0,encoder.layers.0.fc2,linear,,B*T_enc,384,1536,9,encoder.layers.0.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,11,encoder,1,encoder.layers.1.self_attn.q_proj,linear,,B*T_enc,384,384,10,encoder.layers.1.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,12,encoder,1,encoder.layers.1.self_attn.k_proj,linear,,B*T_enc,384,384,10,encoder.layers.1.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,13,encoder,1,encoder.layers.1.self_attn.v_proj,linear,,B*T_enc,384,384,10,encoder.layers.1.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,14,encoder,1,encoder.layers.1.self_attn.qk,batched_matmul,B*heads,T_enc,T_enc,64,11;12,,,config+architecture,
+models--Systran--faster-whisper-tiny,15,encoder,1,encoder.layers.1.self_attn.pv,batched_matmul,B*heads,T_enc,64,T_enc,14;13,,,config+architecture,
+models--Systran--faster-whisper-tiny,16,encoder,1,encoder.layers.1.self_attn.out_proj,linear,,B*T_enc,384,384,15,encoder.layers.1.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,17,encoder,1,encoder.layers.1.fc1,linear,,B*T_enc,1536,384,16,encoder.layers.1.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,18,encoder,1,encoder.layers.1.fc2,linear,,B*T_enc,384,1536,17,encoder.layers.1.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,19,encoder,2,encoder.layers.2.self_attn.q_proj,linear,,B*T_enc,384,384,18,encoder.layers.2.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,20,encoder,2,encoder.layers.2.self_attn.k_proj,linear,,B*T_enc,384,384,18,encoder.layers.2.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,21,encoder,2,encoder.layers.2.self_attn.v_proj,linear,,B*T_enc,384,384,18,encoder.layers.2.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,22,encoder,2,encoder.layers.2.self_attn.qk,batched_matmul,B*heads,T_enc,T_enc,64,19;20,,,config+architecture,
+models--Systran--faster-whisper-tiny,23,encoder,2,encoder.layers.2.self_attn.pv,batched_matmul,B*heads,T_enc,64,T_enc,22;21,,,config+architecture,
+models--Systran--faster-whisper-tiny,24,encoder,2,encoder.layers.2.self_attn.out_proj,linear,,B*T_enc,384,384,23,encoder.layers.2.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,25,encoder,2,encoder.layers.2.fc1,linear,,B*T_enc,1536,384,24,encoder.layers.2.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,26,encoder,2,encoder.layers.2.fc2,linear,,B*T_enc,384,1536,25,encoder.layers.2.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,27,encoder,3,encoder.layers.3.self_attn.q_proj,linear,,B*T_enc,384,384,26,encoder.layers.3.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,28,encoder,3,encoder.layers.3.self_attn.k_proj,linear,,B*T_enc,384,384,26,encoder.layers.3.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,29,encoder,3,encoder.layers.3.self_attn.v_proj,linear,,B*T_enc,384,384,26,encoder.layers.3.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,30,encoder,3,encoder.layers.3.self_attn.qk,batched_matmul,B*heads,T_enc,T_enc,64,27;28,,,config+architecture,
+models--Systran--faster-whisper-tiny,31,encoder,3,encoder.layers.3.self_attn.pv,batched_matmul,B*heads,T_enc,64,T_enc,30;29,,,config+architecture,
+models--Systran--faster-whisper-tiny,32,encoder,3,encoder.layers.3.self_attn.out_proj,linear,,B*T_enc,384,384,31,encoder.layers.3.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,33,encoder,3,encoder.layers.3.fc1,linear,,B*T_enc,1536,384,32,encoder.layers.3.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,34,encoder,3,encoder.layers.3.fc2,linear,,B*T_enc,384,1536,33,encoder.layers.3.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,35,decoder_prefill,0,decoder.layers.0.self_attn.q_proj,linear,,B*T_dec,384,384,,decoder.layers.0.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,36,decoder_prefill,0,decoder.layers.0.self_attn.k_proj,linear,,B*T_dec,384,384,,decoder.layers.0.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,37,decoder_prefill,0,decoder.layers.0.self_attn.v_proj,linear,,B*T_dec,384,384,,decoder.layers.0.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,38,decoder_prefill,0,decoder.layers.0.self_attn.qk,batched_matmul,B*heads,T_dec,T_dec,64,35;36,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,39,decoder_prefill,0,decoder.layers.0.self_attn.pv,batched_matmul,B*heads,T_dec,64,T_dec,38;37,,,config+architecture,
+models--Systran--faster-whisper-tiny,40,decoder_prefill,0,decoder.layers.0.self_attn.out_proj,linear,,B*T_dec,384,384,39,decoder.layers.0.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,41,decoder_prefill,0,decoder.layers.0.encoder_attn.q_proj,linear,,B*T_dec,384,384,40,decoder.layers.0.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,42,decoder_prefill,0,decoder.layers.0.encoder_attn.k_proj,linear,,B*T_enc,384,384,34,decoder.layers.0.encoder_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,43,decoder_prefill,0,decoder.layers.0.encoder_attn.v_proj,linear,,B*T_enc,384,384,34,decoder.layers.0.encoder_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,44,decoder_prefill,0,decoder.layers.0.encoder_attn.qk,batched_matmul,B*heads,T_dec,T_enc,64,41;42,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,45,decoder_prefill,0,decoder.layers.0.encoder_attn.pv,batched_matmul,B*heads,T_dec,64,T_enc,44;43,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,46,decoder_prefill,0,decoder.layers.0.encoder_attn.out_proj,linear,,B*T_dec,384,384,45,decoder.layers.0.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,47,decoder_prefill,0,decoder.layers.0.fc1,linear,,B*T_dec,1536,384,46,decoder.layers.0.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,48,decoder_prefill,0,decoder.layers.0.fc2,linear,,B*T_dec,384,1536,47,decoder.layers.0.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,49,decoder_prefill,1,decoder.layers.1.self_attn.q_proj,linear,,B*T_dec,384,384,48,decoder.layers.1.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,50,decoder_prefill,1,decoder.layers.1.self_attn.k_proj,linear,,B*T_dec,384,384,48,decoder.layers.1.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,51,decoder_prefill,1,decoder.layers.1.self_attn.v_proj,linear,,B*T_dec,384,384,48,decoder.layers.1.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,52,decoder_prefill,1,decoder.layers.1.self_attn.qk,batched_matmul,B*heads,T_dec,T_dec,64,49;50,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,53,decoder_prefill,1,decoder.layers.1.self_attn.pv,batched_matmul,B*heads,T_dec,64,T_dec,52;51,,,config+architecture,
+models--Systran--faster-whisper-tiny,54,decoder_prefill,1,decoder.layers.1.self_attn.out_proj,linear,,B*T_dec,384,384,53,decoder.layers.1.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,55,decoder_prefill,1,decoder.layers.1.encoder_attn.q_proj,linear,,B*T_dec,384,384,54,decoder.layers.1.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,56,decoder_prefill,1,decoder.layers.1.encoder_attn.k_proj,linear,,B*T_enc,384,384,34,decoder.layers.1.encoder_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,57,decoder_prefill,1,decoder.layers.1.encoder_attn.v_proj,linear,,B*T_enc,384,384,34,decoder.layers.1.encoder_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,58,decoder_prefill,1,decoder.layers.1.encoder_attn.qk,batched_matmul,B*heads,T_dec,T_enc,64,55;56,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,59,decoder_prefill,1,decoder.layers.1.encoder_attn.pv,batched_matmul,B*heads,T_dec,64,T_enc,58;57,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,60,decoder_prefill,1,decoder.layers.1.encoder_attn.out_proj,linear,,B*T_dec,384,384,59,decoder.layers.1.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,61,decoder_prefill,1,decoder.layers.1.fc1,linear,,B*T_dec,1536,384,60,decoder.layers.1.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,62,decoder_prefill,1,decoder.layers.1.fc2,linear,,B*T_dec,384,1536,61,decoder.layers.1.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,63,decoder_prefill,2,decoder.layers.2.self_attn.q_proj,linear,,B*T_dec,384,384,62,decoder.layers.2.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,64,decoder_prefill,2,decoder.layers.2.self_attn.k_proj,linear,,B*T_dec,384,384,62,decoder.layers.2.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,65,decoder_prefill,2,decoder.layers.2.self_attn.v_proj,linear,,B*T_dec,384,384,62,decoder.layers.2.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,66,decoder_prefill,2,decoder.layers.2.self_attn.qk,batched_matmul,B*heads,T_dec,T_dec,64,63;64,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,67,decoder_prefill,2,decoder.layers.2.self_attn.pv,batched_matmul,B*heads,T_dec,64,T_dec,66;65,,,config+architecture,
+models--Systran--faster-whisper-tiny,68,decoder_prefill,2,decoder.layers.2.self_attn.out_proj,linear,,B*T_dec,384,384,67,decoder.layers.2.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,69,decoder_prefill,2,decoder.layers.2.encoder_attn.q_proj,linear,,B*T_dec,384,384,68,decoder.layers.2.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,70,decoder_prefill,2,decoder.layers.2.encoder_attn.k_proj,linear,,B*T_enc,384,384,34,decoder.layers.2.encoder_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,71,decoder_prefill,2,decoder.layers.2.encoder_attn.v_proj,linear,,B*T_enc,384,384,34,decoder.layers.2.encoder_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,72,decoder_prefill,2,decoder.layers.2.encoder_attn.qk,batched_matmul,B*heads,T_dec,T_enc,64,69;70,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,73,decoder_prefill,2,decoder.layers.2.encoder_attn.pv,batched_matmul,B*heads,T_dec,64,T_enc,72;71,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,74,decoder_prefill,2,decoder.layers.2.encoder_attn.out_proj,linear,,B*T_dec,384,384,73,decoder.layers.2.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,75,decoder_prefill,2,decoder.layers.2.fc1,linear,,B*T_dec,1536,384,74,decoder.layers.2.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,76,decoder_prefill,2,decoder.layers.2.fc2,linear,,B*T_dec,384,1536,75,decoder.layers.2.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,77,decoder_prefill,3,decoder.layers.3.self_attn.q_proj,linear,,B*T_dec,384,384,76,decoder.layers.3.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,78,decoder_prefill,3,decoder.layers.3.self_attn.k_proj,linear,,B*T_dec,384,384,76,decoder.layers.3.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,79,decoder_prefill,3,decoder.layers.3.self_attn.v_proj,linear,,B*T_dec,384,384,76,decoder.layers.3.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,80,decoder_prefill,3,decoder.layers.3.self_attn.qk,batched_matmul,B*heads,T_dec,T_dec,64,77;78,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,81,decoder_prefill,3,decoder.layers.3.self_attn.pv,batched_matmul,B*heads,T_dec,64,T_dec,80;79,,,config+architecture,
+models--Systran--faster-whisper-tiny,82,decoder_prefill,3,decoder.layers.3.self_attn.out_proj,linear,,B*T_dec,384,384,81,decoder.layers.3.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,83,decoder_prefill,3,decoder.layers.3.encoder_attn.q_proj,linear,,B*T_dec,384,384,82,decoder.layers.3.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,84,decoder_prefill,3,decoder.layers.3.encoder_attn.k_proj,linear,,B*T_enc,384,384,34,decoder.layers.3.encoder_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,85,decoder_prefill,3,decoder.layers.3.encoder_attn.v_proj,linear,,B*T_enc,384,384,34,decoder.layers.3.encoder_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,86,decoder_prefill,3,decoder.layers.3.encoder_attn.qk,batched_matmul,B*heads,T_dec,T_enc,64,83;84,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,87,decoder_prefill,3,decoder.layers.3.encoder_attn.pv,batched_matmul,B*heads,T_dec,64,T_enc,86;85,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,88,decoder_prefill,3,decoder.layers.3.encoder_attn.out_proj,linear,,B*T_dec,384,384,87,decoder.layers.3.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,89,decoder_prefill,3,decoder.layers.3.fc1,linear,,B*T_dec,1536,384,88,decoder.layers.3.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,90,decoder_prefill,3,decoder.layers.3.fc2,linear,,B*T_dec,384,1536,89,decoder.layers.3.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,91,decoder_prefill,output,proj_out,linear,,B*T_dec,51865,384,90,proj_out.weight/tied decoder embed_tokens,"[51865,384]",config+architecture,
+models--Systran--faster-whisper-tiny,92,decoder_decode_step,0,decoder.layers.0.self_attn.q_proj,linear,,B,384,384,,decoder.layers.0.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,93,decoder_decode_step,0,decoder.layers.0.self_attn.k_proj,linear,,B,384,384,,decoder.layers.0.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,94,decoder_decode_step,0,decoder.layers.0.self_attn.v_proj,linear,,B,384,384,,decoder.layers.0.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,95,decoder_decode_step,0,decoder.layers.0.self_attn.qk,batched_matmul,B*heads,1,KV_dec,64,92;93,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,96,decoder_decode_step,0,decoder.layers.0.self_attn.pv,batched_matmul,B*heads,1,64,KV_dec,95;94,,,config+architecture,
+models--Systran--faster-whisper-tiny,97,decoder_decode_step,0,decoder.layers.0.self_attn.out_proj,linear,,B,384,384,96,decoder.layers.0.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,98,decoder_decode_step,0,decoder.layers.0.encoder_attn.q_proj,linear,,B,384,384,97,decoder.layers.0.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,99,decoder_decode_step,0,decoder.layers.0.encoder_attn.qk,batched_matmul,B*heads,1,T_enc,64,98,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,100,decoder_decode_step,0,decoder.layers.0.encoder_attn.pv,batched_matmul,B*heads,1,64,T_enc,99,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,101,decoder_decode_step,0,decoder.layers.0.encoder_attn.out_proj,linear,,B,384,384,100,decoder.layers.0.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,102,decoder_decode_step,0,decoder.layers.0.fc1,linear,,B,1536,384,101,decoder.layers.0.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,103,decoder_decode_step,0,decoder.layers.0.fc2,linear,,B,384,1536,102,decoder.layers.0.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,104,decoder_decode_step,1,decoder.layers.1.self_attn.q_proj,linear,,B,384,384,103,decoder.layers.1.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,105,decoder_decode_step,1,decoder.layers.1.self_attn.k_proj,linear,,B,384,384,103,decoder.layers.1.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,106,decoder_decode_step,1,decoder.layers.1.self_attn.v_proj,linear,,B,384,384,103,decoder.layers.1.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,107,decoder_decode_step,1,decoder.layers.1.self_attn.qk,batched_matmul,B*heads,1,KV_dec,64,104;105,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,108,decoder_decode_step,1,decoder.layers.1.self_attn.pv,batched_matmul,B*heads,1,64,KV_dec,107;106,,,config+architecture,
+models--Systran--faster-whisper-tiny,109,decoder_decode_step,1,decoder.layers.1.self_attn.out_proj,linear,,B,384,384,108,decoder.layers.1.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,110,decoder_decode_step,1,decoder.layers.1.encoder_attn.q_proj,linear,,B,384,384,109,decoder.layers.1.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,111,decoder_decode_step,1,decoder.layers.1.encoder_attn.qk,batched_matmul,B*heads,1,T_enc,64,110,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,112,decoder_decode_step,1,decoder.layers.1.encoder_attn.pv,batched_matmul,B*heads,1,64,T_enc,111,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,113,decoder_decode_step,1,decoder.layers.1.encoder_attn.out_proj,linear,,B,384,384,112,decoder.layers.1.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,114,decoder_decode_step,1,decoder.layers.1.fc1,linear,,B,1536,384,113,decoder.layers.1.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,115,decoder_decode_step,1,decoder.layers.1.fc2,linear,,B,384,1536,114,decoder.layers.1.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,116,decoder_decode_step,2,decoder.layers.2.self_attn.q_proj,linear,,B,384,384,115,decoder.layers.2.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,117,decoder_decode_step,2,decoder.layers.2.self_attn.k_proj,linear,,B,384,384,115,decoder.layers.2.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,118,decoder_decode_step,2,decoder.layers.2.self_attn.v_proj,linear,,B,384,384,115,decoder.layers.2.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,119,decoder_decode_step,2,decoder.layers.2.self_attn.qk,batched_matmul,B*heads,1,KV_dec,64,116;117,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,120,decoder_decode_step,2,decoder.layers.2.self_attn.pv,batched_matmul,B*heads,1,64,KV_dec,119;118,,,config+architecture,
+models--Systran--faster-whisper-tiny,121,decoder_decode_step,2,decoder.layers.2.self_attn.out_proj,linear,,B,384,384,120,decoder.layers.2.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,122,decoder_decode_step,2,decoder.layers.2.encoder_attn.q_proj,linear,,B,384,384,121,decoder.layers.2.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,123,decoder_decode_step,2,decoder.layers.2.encoder_attn.qk,batched_matmul,B*heads,1,T_enc,64,122,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,124,decoder_decode_step,2,decoder.layers.2.encoder_attn.pv,batched_matmul,B*heads,1,64,T_enc,123,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,125,decoder_decode_step,2,decoder.layers.2.encoder_attn.out_proj,linear,,B,384,384,124,decoder.layers.2.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,126,decoder_decode_step,2,decoder.layers.2.fc1,linear,,B,1536,384,125,decoder.layers.2.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,127,decoder_decode_step,2,decoder.layers.2.fc2,linear,,B,384,1536,126,decoder.layers.2.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,128,decoder_decode_step,3,decoder.layers.3.self_attn.q_proj,linear,,B,384,384,127,decoder.layers.3.self_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,129,decoder_decode_step,3,decoder.layers.3.self_attn.k_proj,linear,,B,384,384,127,decoder.layers.3.self_attn.k_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,130,decoder_decode_step,3,decoder.layers.3.self_attn.v_proj,linear,,B,384,384,127,decoder.layers.3.self_attn.v_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,131,decoder_decode_step,3,decoder.layers.3.self_attn.qk,batched_matmul,B*heads,1,KV_dec,64,128;129,,,config+architecture,decode uses existing self-attention KV cache
+models--Systran--faster-whisper-tiny,132,decoder_decode_step,3,decoder.layers.3.self_attn.pv,batched_matmul,B*heads,1,64,KV_dec,131;130,,,config+architecture,
+models--Systran--faster-whisper-tiny,133,decoder_decode_step,3,decoder.layers.3.self_attn.out_proj,linear,,B,384,384,132,decoder.layers.3.self_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,134,decoder_decode_step,3,decoder.layers.3.encoder_attn.q_proj,linear,,B,384,384,133,decoder.layers.3.encoder_attn.q_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,135,decoder_decode_step,3,decoder.layers.3.encoder_attn.qk,batched_matmul,B*heads,1,T_enc,64,134,,,config+architecture,cross-attention K is cached during decode step
+models--Systran--faster-whisper-tiny,136,decoder_decode_step,3,decoder.layers.3.encoder_attn.pv,batched_matmul,B*heads,1,64,T_enc,135,,,config+architecture,cross-attention V is cached during decode step
+models--Systran--faster-whisper-tiny,137,decoder_decode_step,3,decoder.layers.3.encoder_attn.out_proj,linear,,B,384,384,136,decoder.layers.3.encoder_attn.out_proj.weight,"[384,384]",config+architecture,
+models--Systran--faster-whisper-tiny,138,decoder_decode_step,3,decoder.layers.3.fc1,linear,,B,1536,384,137,decoder.layers.3.fc1.weight,"[1536,384]",config+architecture,
+models--Systran--faster-whisper-tiny,139,decoder_decode_step,3,decoder.layers.3.fc2,linear,,B,384,1536,138,decoder.layers.3.fc2.weight,"[384,1536]",config+architecture,
+models--Systran--faster-whisper-tiny,140,decoder_decode_step,output,proj_out,linear,,B,51865,384,139,proj_out.weight/tied decoder embed_tokens,"[51865,384]",config+architecture,

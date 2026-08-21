@@ -1,0 +1,362 @@
+model,op_id,phase,layer,module,op_kind,batch_dims,M,N,K,deps,weight,weight_shape,provenance,notes
+models--codellama--CodeLlama-13b-Instruct-hf,1,prefill,0,model.layers.0.self_attn.q_proj,linear,,B*S,5120,5120,,model.layers.0.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,2,prefill,0,model.layers.0.self_attn.k_proj,linear,,B*S,5120,5120,,model.layers.0.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,3,prefill,0,model.layers.0.self_attn.v_proj,linear,,B*S,5120,5120,,model.layers.0.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,4,prefill,0,model.layers.0.self_attn.qk,batched_matmul,B*QH,S,S,128,1;2,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,5,prefill,0,model.layers.0.self_attn.pv,batched_matmul,B*QH,S,128,S,4;3,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,6,prefill,0,model.layers.0.self_attn.o_proj,linear,,B*S,5120,5120,5,model.layers.0.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,7,prefill,0,model.layers.0.mlp.gate_proj,linear,,B*S,13824,5120,6,model.layers.0.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,8,prefill,0,model.layers.0.mlp.up_proj,linear,,B*S,13824,5120,6,model.layers.0.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,9,prefill,0,model.layers.0.mlp.down_proj,linear,,B*S,5120,13824,7;8,model.layers.0.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,10,prefill,1,model.layers.1.self_attn.q_proj,linear,,B*S,5120,5120,9,model.layers.1.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,11,prefill,1,model.layers.1.self_attn.k_proj,linear,,B*S,5120,5120,9,model.layers.1.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,12,prefill,1,model.layers.1.self_attn.v_proj,linear,,B*S,5120,5120,9,model.layers.1.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,13,prefill,1,model.layers.1.self_attn.qk,batched_matmul,B*QH,S,S,128,10;11,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,14,prefill,1,model.layers.1.self_attn.pv,batched_matmul,B*QH,S,128,S,13;12,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,15,prefill,1,model.layers.1.self_attn.o_proj,linear,,B*S,5120,5120,14,model.layers.1.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,16,prefill,1,model.layers.1.mlp.gate_proj,linear,,B*S,13824,5120,15,model.layers.1.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,17,prefill,1,model.layers.1.mlp.up_proj,linear,,B*S,13824,5120,15,model.layers.1.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,18,prefill,1,model.layers.1.mlp.down_proj,linear,,B*S,5120,13824,16;17,model.layers.1.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,19,prefill,2,model.layers.2.self_attn.q_proj,linear,,B*S,5120,5120,18,model.layers.2.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,20,prefill,2,model.layers.2.self_attn.k_proj,linear,,B*S,5120,5120,18,model.layers.2.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,21,prefill,2,model.layers.2.self_attn.v_proj,linear,,B*S,5120,5120,18,model.layers.2.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,22,prefill,2,model.layers.2.self_attn.qk,batched_matmul,B*QH,S,S,128,19;20,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,23,prefill,2,model.layers.2.self_attn.pv,batched_matmul,B*QH,S,128,S,22;21,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,24,prefill,2,model.layers.2.self_attn.o_proj,linear,,B*S,5120,5120,23,model.layers.2.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,25,prefill,2,model.layers.2.mlp.gate_proj,linear,,B*S,13824,5120,24,model.layers.2.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,26,prefill,2,model.layers.2.mlp.up_proj,linear,,B*S,13824,5120,24,model.layers.2.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,27,prefill,2,model.layers.2.mlp.down_proj,linear,,B*S,5120,13824,25;26,model.layers.2.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,28,prefill,3,model.layers.3.self_attn.q_proj,linear,,B*S,5120,5120,27,model.layers.3.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,29,prefill,3,model.layers.3.self_attn.k_proj,linear,,B*S,5120,5120,27,model.layers.3.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,30,prefill,3,model.layers.3.self_attn.v_proj,linear,,B*S,5120,5120,27,model.layers.3.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,31,prefill,3,model.layers.3.self_attn.qk,batched_matmul,B*QH,S,S,128,28;29,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,32,prefill,3,model.layers.3.self_attn.pv,batched_matmul,B*QH,S,128,S,31;30,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,33,prefill,3,model.layers.3.self_attn.o_proj,linear,,B*S,5120,5120,32,model.layers.3.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,34,prefill,3,model.layers.3.mlp.gate_proj,linear,,B*S,13824,5120,33,model.layers.3.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,35,prefill,3,model.layers.3.mlp.up_proj,linear,,B*S,13824,5120,33,model.layers.3.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,36,prefill,3,model.layers.3.mlp.down_proj,linear,,B*S,5120,13824,34;35,model.layers.3.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,37,prefill,4,model.layers.4.self_attn.q_proj,linear,,B*S,5120,5120,36,model.layers.4.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,38,prefill,4,model.layers.4.self_attn.k_proj,linear,,B*S,5120,5120,36,model.layers.4.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,39,prefill,4,model.layers.4.self_attn.v_proj,linear,,B*S,5120,5120,36,model.layers.4.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,40,prefill,4,model.layers.4.self_attn.qk,batched_matmul,B*QH,S,S,128,37;38,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,41,prefill,4,model.layers.4.self_attn.pv,batched_matmul,B*QH,S,128,S,40;39,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,42,prefill,4,model.layers.4.self_attn.o_proj,linear,,B*S,5120,5120,41,model.layers.4.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,43,prefill,4,model.layers.4.mlp.gate_proj,linear,,B*S,13824,5120,42,model.layers.4.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,44,prefill,4,model.layers.4.mlp.up_proj,linear,,B*S,13824,5120,42,model.layers.4.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,45,prefill,4,model.layers.4.mlp.down_proj,linear,,B*S,5120,13824,43;44,model.layers.4.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,46,prefill,5,model.layers.5.self_attn.q_proj,linear,,B*S,5120,5120,45,model.layers.5.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,47,prefill,5,model.layers.5.self_attn.k_proj,linear,,B*S,5120,5120,45,model.layers.5.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,48,prefill,5,model.layers.5.self_attn.v_proj,linear,,B*S,5120,5120,45,model.layers.5.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,49,prefill,5,model.layers.5.self_attn.qk,batched_matmul,B*QH,S,S,128,46;47,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,50,prefill,5,model.layers.5.self_attn.pv,batched_matmul,B*QH,S,128,S,49;48,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,51,prefill,5,model.layers.5.self_attn.o_proj,linear,,B*S,5120,5120,50,model.layers.5.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,52,prefill,5,model.layers.5.mlp.gate_proj,linear,,B*S,13824,5120,51,model.layers.5.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,53,prefill,5,model.layers.5.mlp.up_proj,linear,,B*S,13824,5120,51,model.layers.5.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,54,prefill,5,model.layers.5.mlp.down_proj,linear,,B*S,5120,13824,52;53,model.layers.5.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,55,prefill,6,model.layers.6.self_attn.q_proj,linear,,B*S,5120,5120,54,model.layers.6.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,56,prefill,6,model.layers.6.self_attn.k_proj,linear,,B*S,5120,5120,54,model.layers.6.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,57,prefill,6,model.layers.6.self_attn.v_proj,linear,,B*S,5120,5120,54,model.layers.6.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,58,prefill,6,model.layers.6.self_attn.qk,batched_matmul,B*QH,S,S,128,55;56,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,59,prefill,6,model.layers.6.self_attn.pv,batched_matmul,B*QH,S,128,S,58;57,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,60,prefill,6,model.layers.6.self_attn.o_proj,linear,,B*S,5120,5120,59,model.layers.6.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,61,prefill,6,model.layers.6.mlp.gate_proj,linear,,B*S,13824,5120,60,model.layers.6.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,62,prefill,6,model.layers.6.mlp.up_proj,linear,,B*S,13824,5120,60,model.layers.6.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,63,prefill,6,model.layers.6.mlp.down_proj,linear,,B*S,5120,13824,61;62,model.layers.6.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,64,prefill,7,model.layers.7.self_attn.q_proj,linear,,B*S,5120,5120,63,model.layers.7.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,65,prefill,7,model.layers.7.self_attn.k_proj,linear,,B*S,5120,5120,63,model.layers.7.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,66,prefill,7,model.layers.7.self_attn.v_proj,linear,,B*S,5120,5120,63,model.layers.7.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,67,prefill,7,model.layers.7.self_attn.qk,batched_matmul,B*QH,S,S,128,64;65,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,68,prefill,7,model.layers.7.self_attn.pv,batched_matmul,B*QH,S,128,S,67;66,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,69,prefill,7,model.layers.7.self_attn.o_proj,linear,,B*S,5120,5120,68,model.layers.7.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,70,prefill,7,model.layers.7.mlp.gate_proj,linear,,B*S,13824,5120,69,model.layers.7.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,71,prefill,7,model.layers.7.mlp.up_proj,linear,,B*S,13824,5120,69,model.layers.7.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,72,prefill,7,model.layers.7.mlp.down_proj,linear,,B*S,5120,13824,70;71,model.layers.7.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,73,prefill,8,model.layers.8.self_attn.q_proj,linear,,B*S,5120,5120,72,model.layers.8.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,74,prefill,8,model.layers.8.self_attn.k_proj,linear,,B*S,5120,5120,72,model.layers.8.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,75,prefill,8,model.layers.8.self_attn.v_proj,linear,,B*S,5120,5120,72,model.layers.8.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,76,prefill,8,model.layers.8.self_attn.qk,batched_matmul,B*QH,S,S,128,73;74,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,77,prefill,8,model.layers.8.self_attn.pv,batched_matmul,B*QH,S,128,S,76;75,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,78,prefill,8,model.layers.8.self_attn.o_proj,linear,,B*S,5120,5120,77,model.layers.8.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,79,prefill,8,model.layers.8.mlp.gate_proj,linear,,B*S,13824,5120,78,model.layers.8.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,80,prefill,8,model.layers.8.mlp.up_proj,linear,,B*S,13824,5120,78,model.layers.8.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,81,prefill,8,model.layers.8.mlp.down_proj,linear,,B*S,5120,13824,79;80,model.layers.8.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,82,prefill,9,model.layers.9.self_attn.q_proj,linear,,B*S,5120,5120,81,model.layers.9.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,83,prefill,9,model.layers.9.self_attn.k_proj,linear,,B*S,5120,5120,81,model.layers.9.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,84,prefill,9,model.layers.9.self_attn.v_proj,linear,,B*S,5120,5120,81,model.layers.9.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,85,prefill,9,model.layers.9.self_attn.qk,batched_matmul,B*QH,S,S,128,82;83,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,86,prefill,9,model.layers.9.self_attn.pv,batched_matmul,B*QH,S,128,S,85;84,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,87,prefill,9,model.layers.9.self_attn.o_proj,linear,,B*S,5120,5120,86,model.layers.9.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,88,prefill,9,model.layers.9.mlp.gate_proj,linear,,B*S,13824,5120,87,model.layers.9.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,89,prefill,9,model.layers.9.mlp.up_proj,linear,,B*S,13824,5120,87,model.layers.9.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,90,prefill,9,model.layers.9.mlp.down_proj,linear,,B*S,5120,13824,88;89,model.layers.9.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,91,prefill,10,model.layers.10.self_attn.q_proj,linear,,B*S,5120,5120,90,model.layers.10.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,92,prefill,10,model.layers.10.self_attn.k_proj,linear,,B*S,5120,5120,90,model.layers.10.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,93,prefill,10,model.layers.10.self_attn.v_proj,linear,,B*S,5120,5120,90,model.layers.10.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,94,prefill,10,model.layers.10.self_attn.qk,batched_matmul,B*QH,S,S,128,91;92,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,95,prefill,10,model.layers.10.self_attn.pv,batched_matmul,B*QH,S,128,S,94;93,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,96,prefill,10,model.layers.10.self_attn.o_proj,linear,,B*S,5120,5120,95,model.layers.10.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,97,prefill,10,model.layers.10.mlp.gate_proj,linear,,B*S,13824,5120,96,model.layers.10.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,98,prefill,10,model.layers.10.mlp.up_proj,linear,,B*S,13824,5120,96,model.layers.10.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,99,prefill,10,model.layers.10.mlp.down_proj,linear,,B*S,5120,13824,97;98,model.layers.10.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,100,prefill,11,model.layers.11.self_attn.q_proj,linear,,B*S,5120,5120,99,model.layers.11.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,101,prefill,11,model.layers.11.self_attn.k_proj,linear,,B*S,5120,5120,99,model.layers.11.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,102,prefill,11,model.layers.11.self_attn.v_proj,linear,,B*S,5120,5120,99,model.layers.11.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,103,prefill,11,model.layers.11.self_attn.qk,batched_matmul,B*QH,S,S,128,100;101,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,104,prefill,11,model.layers.11.self_attn.pv,batched_matmul,B*QH,S,128,S,103;102,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,105,prefill,11,model.layers.11.self_attn.o_proj,linear,,B*S,5120,5120,104,model.layers.11.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,106,prefill,11,model.layers.11.mlp.gate_proj,linear,,B*S,13824,5120,105,model.layers.11.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,107,prefill,11,model.layers.11.mlp.up_proj,linear,,B*S,13824,5120,105,model.layers.11.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,108,prefill,11,model.layers.11.mlp.down_proj,linear,,B*S,5120,13824,106;107,model.layers.11.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,109,prefill,12,model.layers.12.self_attn.q_proj,linear,,B*S,5120,5120,108,model.layers.12.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,110,prefill,12,model.layers.12.self_attn.k_proj,linear,,B*S,5120,5120,108,model.layers.12.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,111,prefill,12,model.layers.12.self_attn.v_proj,linear,,B*S,5120,5120,108,model.layers.12.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,112,prefill,12,model.layers.12.self_attn.qk,batched_matmul,B*QH,S,S,128,109;110,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,113,prefill,12,model.layers.12.self_attn.pv,batched_matmul,B*QH,S,128,S,112;111,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,114,prefill,12,model.layers.12.self_attn.o_proj,linear,,B*S,5120,5120,113,model.layers.12.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,115,prefill,12,model.layers.12.mlp.gate_proj,linear,,B*S,13824,5120,114,model.layers.12.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,116,prefill,12,model.layers.12.mlp.up_proj,linear,,B*S,13824,5120,114,model.layers.12.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,117,prefill,12,model.layers.12.mlp.down_proj,linear,,B*S,5120,13824,115;116,model.layers.12.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,118,prefill,13,model.layers.13.self_attn.q_proj,linear,,B*S,5120,5120,117,model.layers.13.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,119,prefill,13,model.layers.13.self_attn.k_proj,linear,,B*S,5120,5120,117,model.layers.13.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,120,prefill,13,model.layers.13.self_attn.v_proj,linear,,B*S,5120,5120,117,model.layers.13.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,121,prefill,13,model.layers.13.self_attn.qk,batched_matmul,B*QH,S,S,128,118;119,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,122,prefill,13,model.layers.13.self_attn.pv,batched_matmul,B*QH,S,128,S,121;120,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,123,prefill,13,model.layers.13.self_attn.o_proj,linear,,B*S,5120,5120,122,model.layers.13.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,124,prefill,13,model.layers.13.mlp.gate_proj,linear,,B*S,13824,5120,123,model.layers.13.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,125,prefill,13,model.layers.13.mlp.up_proj,linear,,B*S,13824,5120,123,model.layers.13.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,126,prefill,13,model.layers.13.mlp.down_proj,linear,,B*S,5120,13824,124;125,model.layers.13.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,127,prefill,14,model.layers.14.self_attn.q_proj,linear,,B*S,5120,5120,126,model.layers.14.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,128,prefill,14,model.layers.14.self_attn.k_proj,linear,,B*S,5120,5120,126,model.layers.14.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,129,prefill,14,model.layers.14.self_attn.v_proj,linear,,B*S,5120,5120,126,model.layers.14.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,130,prefill,14,model.layers.14.self_attn.qk,batched_matmul,B*QH,S,S,128,127;128,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,131,prefill,14,model.layers.14.self_attn.pv,batched_matmul,B*QH,S,128,S,130;129,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,132,prefill,14,model.layers.14.self_attn.o_proj,linear,,B*S,5120,5120,131,model.layers.14.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,133,prefill,14,model.layers.14.mlp.gate_proj,linear,,B*S,13824,5120,132,model.layers.14.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,134,prefill,14,model.layers.14.mlp.up_proj,linear,,B*S,13824,5120,132,model.layers.14.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,135,prefill,14,model.layers.14.mlp.down_proj,linear,,B*S,5120,13824,133;134,model.layers.14.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,136,prefill,15,model.layers.15.self_attn.q_proj,linear,,B*S,5120,5120,135,model.layers.15.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,137,prefill,15,model.layers.15.self_attn.k_proj,linear,,B*S,5120,5120,135,model.layers.15.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,138,prefill,15,model.layers.15.self_attn.v_proj,linear,,B*S,5120,5120,135,model.layers.15.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,139,prefill,15,model.layers.15.self_attn.qk,batched_matmul,B*QH,S,S,128,136;137,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,140,prefill,15,model.layers.15.self_attn.pv,batched_matmul,B*QH,S,128,S,139;138,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,141,prefill,15,model.layers.15.self_attn.o_proj,linear,,B*S,5120,5120,140,model.layers.15.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,142,prefill,15,model.layers.15.mlp.gate_proj,linear,,B*S,13824,5120,141,model.layers.15.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,143,prefill,15,model.layers.15.mlp.up_proj,linear,,B*S,13824,5120,141,model.layers.15.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,144,prefill,15,model.layers.15.mlp.down_proj,linear,,B*S,5120,13824,142;143,model.layers.15.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,145,prefill,16,model.layers.16.self_attn.q_proj,linear,,B*S,5120,5120,144,model.layers.16.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,146,prefill,16,model.layers.16.self_attn.k_proj,linear,,B*S,5120,5120,144,model.layers.16.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,147,prefill,16,model.layers.16.self_attn.v_proj,linear,,B*S,5120,5120,144,model.layers.16.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,148,prefill,16,model.layers.16.self_attn.qk,batched_matmul,B*QH,S,S,128,145;146,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,149,prefill,16,model.layers.16.self_attn.pv,batched_matmul,B*QH,S,128,S,148;147,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,150,prefill,16,model.layers.16.self_attn.o_proj,linear,,B*S,5120,5120,149,model.layers.16.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,151,prefill,16,model.layers.16.mlp.gate_proj,linear,,B*S,13824,5120,150,model.layers.16.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,152,prefill,16,model.layers.16.mlp.up_proj,linear,,B*S,13824,5120,150,model.layers.16.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,153,prefill,16,model.layers.16.mlp.down_proj,linear,,B*S,5120,13824,151;152,model.layers.16.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,154,prefill,17,model.layers.17.self_attn.q_proj,linear,,B*S,5120,5120,153,model.layers.17.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,155,prefill,17,model.layers.17.self_attn.k_proj,linear,,B*S,5120,5120,153,model.layers.17.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,156,prefill,17,model.layers.17.self_attn.v_proj,linear,,B*S,5120,5120,153,model.layers.17.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,157,prefill,17,model.layers.17.self_attn.qk,batched_matmul,B*QH,S,S,128,154;155,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,158,prefill,17,model.layers.17.self_attn.pv,batched_matmul,B*QH,S,128,S,157;156,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,159,prefill,17,model.layers.17.self_attn.o_proj,linear,,B*S,5120,5120,158,model.layers.17.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,160,prefill,17,model.layers.17.mlp.gate_proj,linear,,B*S,13824,5120,159,model.layers.17.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,161,prefill,17,model.layers.17.mlp.up_proj,linear,,B*S,13824,5120,159,model.layers.17.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,162,prefill,17,model.layers.17.mlp.down_proj,linear,,B*S,5120,13824,160;161,model.layers.17.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,163,prefill,18,model.layers.18.self_attn.q_proj,linear,,B*S,5120,5120,162,model.layers.18.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,164,prefill,18,model.layers.18.self_attn.k_proj,linear,,B*S,5120,5120,162,model.layers.18.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,165,prefill,18,model.layers.18.self_attn.v_proj,linear,,B*S,5120,5120,162,model.layers.18.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,166,prefill,18,model.layers.18.self_attn.qk,batched_matmul,B*QH,S,S,128,163;164,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,167,prefill,18,model.layers.18.self_attn.pv,batched_matmul,B*QH,S,128,S,166;165,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,168,prefill,18,model.layers.18.self_attn.o_proj,linear,,B*S,5120,5120,167,model.layers.18.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,169,prefill,18,model.layers.18.mlp.gate_proj,linear,,B*S,13824,5120,168,model.layers.18.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,170,prefill,18,model.layers.18.mlp.up_proj,linear,,B*S,13824,5120,168,model.layers.18.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,171,prefill,18,model.layers.18.mlp.down_proj,linear,,B*S,5120,13824,169;170,model.layers.18.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,172,prefill,19,model.layers.19.self_attn.q_proj,linear,,B*S,5120,5120,171,model.layers.19.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,173,prefill,19,model.layers.19.self_attn.k_proj,linear,,B*S,5120,5120,171,model.layers.19.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,174,prefill,19,model.layers.19.self_attn.v_proj,linear,,B*S,5120,5120,171,model.layers.19.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,175,prefill,19,model.layers.19.self_attn.qk,batched_matmul,B*QH,S,S,128,172;173,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,176,prefill,19,model.layers.19.self_attn.pv,batched_matmul,B*QH,S,128,S,175;174,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,177,prefill,19,model.layers.19.self_attn.o_proj,linear,,B*S,5120,5120,176,model.layers.19.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,178,prefill,19,model.layers.19.mlp.gate_proj,linear,,B*S,13824,5120,177,model.layers.19.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,179,prefill,19,model.layers.19.mlp.up_proj,linear,,B*S,13824,5120,177,model.layers.19.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,180,prefill,19,model.layers.19.mlp.down_proj,linear,,B*S,5120,13824,178;179,model.layers.19.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,181,prefill,20,model.layers.20.self_attn.q_proj,linear,,B*S,5120,5120,180,model.layers.20.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,182,prefill,20,model.layers.20.self_attn.k_proj,linear,,B*S,5120,5120,180,model.layers.20.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,183,prefill,20,model.layers.20.self_attn.v_proj,linear,,B*S,5120,5120,180,model.layers.20.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,184,prefill,20,model.layers.20.self_attn.qk,batched_matmul,B*QH,S,S,128,181;182,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,185,prefill,20,model.layers.20.self_attn.pv,batched_matmul,B*QH,S,128,S,184;183,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,186,prefill,20,model.layers.20.self_attn.o_proj,linear,,B*S,5120,5120,185,model.layers.20.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,187,prefill,20,model.layers.20.mlp.gate_proj,linear,,B*S,13824,5120,186,model.layers.20.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,188,prefill,20,model.layers.20.mlp.up_proj,linear,,B*S,13824,5120,186,model.layers.20.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,189,prefill,20,model.layers.20.mlp.down_proj,linear,,B*S,5120,13824,187;188,model.layers.20.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,190,prefill,21,model.layers.21.self_attn.q_proj,linear,,B*S,5120,5120,189,model.layers.21.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,191,prefill,21,model.layers.21.self_attn.k_proj,linear,,B*S,5120,5120,189,model.layers.21.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,192,prefill,21,model.layers.21.self_attn.v_proj,linear,,B*S,5120,5120,189,model.layers.21.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,193,prefill,21,model.layers.21.self_attn.qk,batched_matmul,B*QH,S,S,128,190;191,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,194,prefill,21,model.layers.21.self_attn.pv,batched_matmul,B*QH,S,128,S,193;192,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,195,prefill,21,model.layers.21.self_attn.o_proj,linear,,B*S,5120,5120,194,model.layers.21.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,196,prefill,21,model.layers.21.mlp.gate_proj,linear,,B*S,13824,5120,195,model.layers.21.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,197,prefill,21,model.layers.21.mlp.up_proj,linear,,B*S,13824,5120,195,model.layers.21.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,198,prefill,21,model.layers.21.mlp.down_proj,linear,,B*S,5120,13824,196;197,model.layers.21.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,199,prefill,22,model.layers.22.self_attn.q_proj,linear,,B*S,5120,5120,198,model.layers.22.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,200,prefill,22,model.layers.22.self_attn.k_proj,linear,,B*S,5120,5120,198,model.layers.22.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,201,prefill,22,model.layers.22.self_attn.v_proj,linear,,B*S,5120,5120,198,model.layers.22.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,202,prefill,22,model.layers.22.self_attn.qk,batched_matmul,B*QH,S,S,128,199;200,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,203,prefill,22,model.layers.22.self_attn.pv,batched_matmul,B*QH,S,128,S,202;201,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,204,prefill,22,model.layers.22.self_attn.o_proj,linear,,B*S,5120,5120,203,model.layers.22.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,205,prefill,22,model.layers.22.mlp.gate_proj,linear,,B*S,13824,5120,204,model.layers.22.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,206,prefill,22,model.layers.22.mlp.up_proj,linear,,B*S,13824,5120,204,model.layers.22.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,207,prefill,22,model.layers.22.mlp.down_proj,linear,,B*S,5120,13824,205;206,model.layers.22.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,208,prefill,23,model.layers.23.self_attn.q_proj,linear,,B*S,5120,5120,207,model.layers.23.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,209,prefill,23,model.layers.23.self_attn.k_proj,linear,,B*S,5120,5120,207,model.layers.23.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,210,prefill,23,model.layers.23.self_attn.v_proj,linear,,B*S,5120,5120,207,model.layers.23.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,211,prefill,23,model.layers.23.self_attn.qk,batched_matmul,B*QH,S,S,128,208;209,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,212,prefill,23,model.layers.23.self_attn.pv,batched_matmul,B*QH,S,128,S,211;210,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,213,prefill,23,model.layers.23.self_attn.o_proj,linear,,B*S,5120,5120,212,model.layers.23.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,214,prefill,23,model.layers.23.mlp.gate_proj,linear,,B*S,13824,5120,213,model.layers.23.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,215,prefill,23,model.layers.23.mlp.up_proj,linear,,B*S,13824,5120,213,model.layers.23.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,216,prefill,23,model.layers.23.mlp.down_proj,linear,,B*S,5120,13824,214;215,model.layers.23.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,217,prefill,24,model.layers.24.self_attn.q_proj,linear,,B*S,5120,5120,216,model.layers.24.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,218,prefill,24,model.layers.24.self_attn.k_proj,linear,,B*S,5120,5120,216,model.layers.24.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,219,prefill,24,model.layers.24.self_attn.v_proj,linear,,B*S,5120,5120,216,model.layers.24.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,220,prefill,24,model.layers.24.self_attn.qk,batched_matmul,B*QH,S,S,128,217;218,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,221,prefill,24,model.layers.24.self_attn.pv,batched_matmul,B*QH,S,128,S,220;219,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,222,prefill,24,model.layers.24.self_attn.o_proj,linear,,B*S,5120,5120,221,model.layers.24.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,223,prefill,24,model.layers.24.mlp.gate_proj,linear,,B*S,13824,5120,222,model.layers.24.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,224,prefill,24,model.layers.24.mlp.up_proj,linear,,B*S,13824,5120,222,model.layers.24.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,225,prefill,24,model.layers.24.mlp.down_proj,linear,,B*S,5120,13824,223;224,model.layers.24.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,226,prefill,25,model.layers.25.self_attn.q_proj,linear,,B*S,5120,5120,225,model.layers.25.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,227,prefill,25,model.layers.25.self_attn.k_proj,linear,,B*S,5120,5120,225,model.layers.25.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,228,prefill,25,model.layers.25.self_attn.v_proj,linear,,B*S,5120,5120,225,model.layers.25.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,229,prefill,25,model.layers.25.self_attn.qk,batched_matmul,B*QH,S,S,128,226;227,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,230,prefill,25,model.layers.25.self_attn.pv,batched_matmul,B*QH,S,128,S,229;228,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,231,prefill,25,model.layers.25.self_attn.o_proj,linear,,B*S,5120,5120,230,model.layers.25.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,232,prefill,25,model.layers.25.mlp.gate_proj,linear,,B*S,13824,5120,231,model.layers.25.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,233,prefill,25,model.layers.25.mlp.up_proj,linear,,B*S,13824,5120,231,model.layers.25.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,234,prefill,25,model.layers.25.mlp.down_proj,linear,,B*S,5120,13824,232;233,model.layers.25.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,235,prefill,26,model.layers.26.self_attn.q_proj,linear,,B*S,5120,5120,234,model.layers.26.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,236,prefill,26,model.layers.26.self_attn.k_proj,linear,,B*S,5120,5120,234,model.layers.26.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,237,prefill,26,model.layers.26.self_attn.v_proj,linear,,B*S,5120,5120,234,model.layers.26.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,238,prefill,26,model.layers.26.self_attn.qk,batched_matmul,B*QH,S,S,128,235;236,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,239,prefill,26,model.layers.26.self_attn.pv,batched_matmul,B*QH,S,128,S,238;237,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,240,prefill,26,model.layers.26.self_attn.o_proj,linear,,B*S,5120,5120,239,model.layers.26.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,241,prefill,26,model.layers.26.mlp.gate_proj,linear,,B*S,13824,5120,240,model.layers.26.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,242,prefill,26,model.layers.26.mlp.up_proj,linear,,B*S,13824,5120,240,model.layers.26.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,243,prefill,26,model.layers.26.mlp.down_proj,linear,,B*S,5120,13824,241;242,model.layers.26.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,244,prefill,27,model.layers.27.self_attn.q_proj,linear,,B*S,5120,5120,243,model.layers.27.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,245,prefill,27,model.layers.27.self_attn.k_proj,linear,,B*S,5120,5120,243,model.layers.27.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,246,prefill,27,model.layers.27.self_attn.v_proj,linear,,B*S,5120,5120,243,model.layers.27.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,247,prefill,27,model.layers.27.self_attn.qk,batched_matmul,B*QH,S,S,128,244;245,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,248,prefill,27,model.layers.27.self_attn.pv,batched_matmul,B*QH,S,128,S,247;246,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,249,prefill,27,model.layers.27.self_attn.o_proj,linear,,B*S,5120,5120,248,model.layers.27.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,250,prefill,27,model.layers.27.mlp.gate_proj,linear,,B*S,13824,5120,249,model.layers.27.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,251,prefill,27,model.layers.27.mlp.up_proj,linear,,B*S,13824,5120,249,model.layers.27.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,252,prefill,27,model.layers.27.mlp.down_proj,linear,,B*S,5120,13824,250;251,model.layers.27.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,253,prefill,28,model.layers.28.self_attn.q_proj,linear,,B*S,5120,5120,252,model.layers.28.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,254,prefill,28,model.layers.28.self_attn.k_proj,linear,,B*S,5120,5120,252,model.layers.28.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,255,prefill,28,model.layers.28.self_attn.v_proj,linear,,B*S,5120,5120,252,model.layers.28.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,256,prefill,28,model.layers.28.self_attn.qk,batched_matmul,B*QH,S,S,128,253;254,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,257,prefill,28,model.layers.28.self_attn.pv,batched_matmul,B*QH,S,128,S,256;255,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,258,prefill,28,model.layers.28.self_attn.o_proj,linear,,B*S,5120,5120,257,model.layers.28.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,259,prefill,28,model.layers.28.mlp.gate_proj,linear,,B*S,13824,5120,258,model.layers.28.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,260,prefill,28,model.layers.28.mlp.up_proj,linear,,B*S,13824,5120,258,model.layers.28.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,261,prefill,28,model.layers.28.mlp.down_proj,linear,,B*S,5120,13824,259;260,model.layers.28.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,262,prefill,29,model.layers.29.self_attn.q_proj,linear,,B*S,5120,5120,261,model.layers.29.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,263,prefill,29,model.layers.29.self_attn.k_proj,linear,,B*S,5120,5120,261,model.layers.29.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,264,prefill,29,model.layers.29.self_attn.v_proj,linear,,B*S,5120,5120,261,model.layers.29.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,265,prefill,29,model.layers.29.self_attn.qk,batched_matmul,B*QH,S,S,128,262;263,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,266,prefill,29,model.layers.29.self_attn.pv,batched_matmul,B*QH,S,128,S,265;264,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,267,prefill,29,model.layers.29.self_attn.o_proj,linear,,B*S,5120,5120,266,model.layers.29.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,268,prefill,29,model.layers.29.mlp.gate_proj,linear,,B*S,13824,5120,267,model.layers.29.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,269,prefill,29,model.layers.29.mlp.up_proj,linear,,B*S,13824,5120,267,model.layers.29.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,270,prefill,29,model.layers.29.mlp.down_proj,linear,,B*S,5120,13824,268;269,model.layers.29.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,271,prefill,30,model.layers.30.self_attn.q_proj,linear,,B*S,5120,5120,270,model.layers.30.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,272,prefill,30,model.layers.30.self_attn.k_proj,linear,,B*S,5120,5120,270,model.layers.30.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,273,prefill,30,model.layers.30.self_attn.v_proj,linear,,B*S,5120,5120,270,model.layers.30.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,274,prefill,30,model.layers.30.self_attn.qk,batched_matmul,B*QH,S,S,128,271;272,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,275,prefill,30,model.layers.30.self_attn.pv,batched_matmul,B*QH,S,128,S,274;273,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,276,prefill,30,model.layers.30.self_attn.o_proj,linear,,B*S,5120,5120,275,model.layers.30.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,277,prefill,30,model.layers.30.mlp.gate_proj,linear,,B*S,13824,5120,276,model.layers.30.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,278,prefill,30,model.layers.30.mlp.up_proj,linear,,B*S,13824,5120,276,model.layers.30.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,279,prefill,30,model.layers.30.mlp.down_proj,linear,,B*S,5120,13824,277;278,model.layers.30.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,280,prefill,31,model.layers.31.self_attn.q_proj,linear,,B*S,5120,5120,279,model.layers.31.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,281,prefill,31,model.layers.31.self_attn.k_proj,linear,,B*S,5120,5120,279,model.layers.31.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,282,prefill,31,model.layers.31.self_attn.v_proj,linear,,B*S,5120,5120,279,model.layers.31.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,283,prefill,31,model.layers.31.self_attn.qk,batched_matmul,B*QH,S,S,128,280;281,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,284,prefill,31,model.layers.31.self_attn.pv,batched_matmul,B*QH,S,128,S,283;282,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,285,prefill,31,model.layers.31.self_attn.o_proj,linear,,B*S,5120,5120,284,model.layers.31.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,286,prefill,31,model.layers.31.mlp.gate_proj,linear,,B*S,13824,5120,285,model.layers.31.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,287,prefill,31,model.layers.31.mlp.up_proj,linear,,B*S,13824,5120,285,model.layers.31.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,288,prefill,31,model.layers.31.mlp.down_proj,linear,,B*S,5120,13824,286;287,model.layers.31.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,289,prefill,32,model.layers.32.self_attn.q_proj,linear,,B*S,5120,5120,288,model.layers.32.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,290,prefill,32,model.layers.32.self_attn.k_proj,linear,,B*S,5120,5120,288,model.layers.32.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,291,prefill,32,model.layers.32.self_attn.v_proj,linear,,B*S,5120,5120,288,model.layers.32.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,292,prefill,32,model.layers.32.self_attn.qk,batched_matmul,B*QH,S,S,128,289;290,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,293,prefill,32,model.layers.32.self_attn.pv,batched_matmul,B*QH,S,128,S,292;291,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,294,prefill,32,model.layers.32.self_attn.o_proj,linear,,B*S,5120,5120,293,model.layers.32.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,295,prefill,32,model.layers.32.mlp.gate_proj,linear,,B*S,13824,5120,294,model.layers.32.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,296,prefill,32,model.layers.32.mlp.up_proj,linear,,B*S,13824,5120,294,model.layers.32.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,297,prefill,32,model.layers.32.mlp.down_proj,linear,,B*S,5120,13824,295;296,model.layers.32.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,298,prefill,33,model.layers.33.self_attn.q_proj,linear,,B*S,5120,5120,297,model.layers.33.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,299,prefill,33,model.layers.33.self_attn.k_proj,linear,,B*S,5120,5120,297,model.layers.33.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,300,prefill,33,model.layers.33.self_attn.v_proj,linear,,B*S,5120,5120,297,model.layers.33.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,301,prefill,33,model.layers.33.self_attn.qk,batched_matmul,B*QH,S,S,128,298;299,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,302,prefill,33,model.layers.33.self_attn.pv,batched_matmul,B*QH,S,128,S,301;300,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,303,prefill,33,model.layers.33.self_attn.o_proj,linear,,B*S,5120,5120,302,model.layers.33.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,304,prefill,33,model.layers.33.mlp.gate_proj,linear,,B*S,13824,5120,303,model.layers.33.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,305,prefill,33,model.layers.33.mlp.up_proj,linear,,B*S,13824,5120,303,model.layers.33.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,306,prefill,33,model.layers.33.mlp.down_proj,linear,,B*S,5120,13824,304;305,model.layers.33.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,307,prefill,34,model.layers.34.self_attn.q_proj,linear,,B*S,5120,5120,306,model.layers.34.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,308,prefill,34,model.layers.34.self_attn.k_proj,linear,,B*S,5120,5120,306,model.layers.34.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,309,prefill,34,model.layers.34.self_attn.v_proj,linear,,B*S,5120,5120,306,model.layers.34.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,310,prefill,34,model.layers.34.self_attn.qk,batched_matmul,B*QH,S,S,128,307;308,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,311,prefill,34,model.layers.34.self_attn.pv,batched_matmul,B*QH,S,128,S,310;309,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,312,prefill,34,model.layers.34.self_attn.o_proj,linear,,B*S,5120,5120,311,model.layers.34.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,313,prefill,34,model.layers.34.mlp.gate_proj,linear,,B*S,13824,5120,312,model.layers.34.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,314,prefill,34,model.layers.34.mlp.up_proj,linear,,B*S,13824,5120,312,model.layers.34.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,315,prefill,34,model.layers.34.mlp.down_proj,linear,,B*S,5120,13824,313;314,model.layers.34.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,316,prefill,35,model.layers.35.self_attn.q_proj,linear,,B*S,5120,5120,315,model.layers.35.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,317,prefill,35,model.layers.35.self_attn.k_proj,linear,,B*S,5120,5120,315,model.layers.35.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,318,prefill,35,model.layers.35.self_attn.v_proj,linear,,B*S,5120,5120,315,model.layers.35.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,319,prefill,35,model.layers.35.self_attn.qk,batched_matmul,B*QH,S,S,128,316;317,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,320,prefill,35,model.layers.35.self_attn.pv,batched_matmul,B*QH,S,128,S,319;318,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,321,prefill,35,model.layers.35.self_attn.o_proj,linear,,B*S,5120,5120,320,model.layers.35.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,322,prefill,35,model.layers.35.mlp.gate_proj,linear,,B*S,13824,5120,321,model.layers.35.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,323,prefill,35,model.layers.35.mlp.up_proj,linear,,B*S,13824,5120,321,model.layers.35.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,324,prefill,35,model.layers.35.mlp.down_proj,linear,,B*S,5120,13824,322;323,model.layers.35.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,325,prefill,36,model.layers.36.self_attn.q_proj,linear,,B*S,5120,5120,324,model.layers.36.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,326,prefill,36,model.layers.36.self_attn.k_proj,linear,,B*S,5120,5120,324,model.layers.36.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,327,prefill,36,model.layers.36.self_attn.v_proj,linear,,B*S,5120,5120,324,model.layers.36.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,328,prefill,36,model.layers.36.self_attn.qk,batched_matmul,B*QH,S,S,128,325;326,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,329,prefill,36,model.layers.36.self_attn.pv,batched_matmul,B*QH,S,128,S,328;327,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,330,prefill,36,model.layers.36.self_attn.o_proj,linear,,B*S,5120,5120,329,model.layers.36.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,331,prefill,36,model.layers.36.mlp.gate_proj,linear,,B*S,13824,5120,330,model.layers.36.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,332,prefill,36,model.layers.36.mlp.up_proj,linear,,B*S,13824,5120,330,model.layers.36.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,333,prefill,36,model.layers.36.mlp.down_proj,linear,,B*S,5120,13824,331;332,model.layers.36.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,334,prefill,37,model.layers.37.self_attn.q_proj,linear,,B*S,5120,5120,333,model.layers.37.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,335,prefill,37,model.layers.37.self_attn.k_proj,linear,,B*S,5120,5120,333,model.layers.37.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,336,prefill,37,model.layers.37.self_attn.v_proj,linear,,B*S,5120,5120,333,model.layers.37.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,337,prefill,37,model.layers.37.self_attn.qk,batched_matmul,B*QH,S,S,128,334;335,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,338,prefill,37,model.layers.37.self_attn.pv,batched_matmul,B*QH,S,128,S,337;336,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,339,prefill,37,model.layers.37.self_attn.o_proj,linear,,B*S,5120,5120,338,model.layers.37.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,340,prefill,37,model.layers.37.mlp.gate_proj,linear,,B*S,13824,5120,339,model.layers.37.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,341,prefill,37,model.layers.37.mlp.up_proj,linear,,B*S,13824,5120,339,model.layers.37.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,342,prefill,37,model.layers.37.mlp.down_proj,linear,,B*S,5120,13824,340;341,model.layers.37.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,343,prefill,38,model.layers.38.self_attn.q_proj,linear,,B*S,5120,5120,342,model.layers.38.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,344,prefill,38,model.layers.38.self_attn.k_proj,linear,,B*S,5120,5120,342,model.layers.38.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,345,prefill,38,model.layers.38.self_attn.v_proj,linear,,B*S,5120,5120,342,model.layers.38.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,346,prefill,38,model.layers.38.self_attn.qk,batched_matmul,B*QH,S,S,128,343;344,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,347,prefill,38,model.layers.38.self_attn.pv,batched_matmul,B*QH,S,128,S,346;345,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,348,prefill,38,model.layers.38.self_attn.o_proj,linear,,B*S,5120,5120,347,model.layers.38.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,349,prefill,38,model.layers.38.mlp.gate_proj,linear,,B*S,13824,5120,348,model.layers.38.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,350,prefill,38,model.layers.38.mlp.up_proj,linear,,B*S,13824,5120,348,model.layers.38.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,351,prefill,38,model.layers.38.mlp.down_proj,linear,,B*S,5120,13824,349;350,model.layers.38.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,352,prefill,39,model.layers.39.self_attn.q_proj,linear,,B*S,5120,5120,351,model.layers.39.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,353,prefill,39,model.layers.39.self_attn.k_proj,linear,,B*S,5120,5120,351,model.layers.39.self_attn.k_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,354,prefill,39,model.layers.39.self_attn.v_proj,linear,,B*S,5120,5120,351,model.layers.39.self_attn.v_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,355,prefill,39,model.layers.39.self_attn.qk,batched_matmul,B*QH,S,S,128,352;353,,,config+architecture,"GQA QH=40, KVH=40"
+models--codellama--CodeLlama-13b-Instruct-hf,356,prefill,39,model.layers.39.self_attn.pv,batched_matmul,B*QH,S,128,S,355;354,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--codellama--CodeLlama-13b-Instruct-hf,357,prefill,39,model.layers.39.self_attn.o_proj,linear,,B*S,5120,5120,356,model.layers.39.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,358,prefill,39,model.layers.39.mlp.gate_proj,linear,,B*S,13824,5120,357,model.layers.39.mlp.gate_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,359,prefill,39,model.layers.39.mlp.up_proj,linear,,B*S,13824,5120,357,model.layers.39.mlp.up_proj.weight,"[13824,5120]",config+architecture,
+models--codellama--CodeLlama-13b-Instruct-hf,360,prefill,39,model.layers.39.mlp.down_proj,linear,,B*S,5120,13824,358;359,model.layers.39.mlp.down_proj.weight,"[5120,13824]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--codellama--CodeLlama-13b-Instruct-hf,361,prefill,output,lm_head,linear,,B*S,32016,5120,360,lm_head.weight or tied embed_tokens.weight,"[32016,5120]",config+architecture,prefill shape follows full Hugging Face forward; serving runtimes may compute only selected logits

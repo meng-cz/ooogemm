@@ -1,0 +1,362 @@
+model,op_id,phase,layer,module,op_kind,batch_dims,M,N,K,deps,weight,weight_shape,provenance,notes
+models--Qwen--Qwen3-14B,362,decode,0,model.layers.0.self_attn.q_proj,linear,,B,5120,5120,,model.layers.0.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,363,decode,0,model.layers.0.self_attn.k_proj,linear,,B,1024,5120,,model.layers.0.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,364,decode,0,model.layers.0.self_attn.v_proj,linear,,B,1024,5120,,model.layers.0.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,365,decode,0,model.layers.0.self_attn.qk,batched_matmul,B*QH,1,KV,128,362;363,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,366,decode,0,model.layers.0.self_attn.pv,batched_matmul,B*QH,1,128,KV,365;364,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,367,decode,0,model.layers.0.self_attn.o_proj,linear,,B,5120,5120,366,model.layers.0.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,368,decode,0,model.layers.0.mlp.gate_proj,linear,,B,17408,5120,367,model.layers.0.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,369,decode,0,model.layers.0.mlp.up_proj,linear,,B,17408,5120,367,model.layers.0.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,370,decode,0,model.layers.0.mlp.down_proj,linear,,B,5120,17408,368;369,model.layers.0.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,371,decode,1,model.layers.1.self_attn.q_proj,linear,,B,5120,5120,370,model.layers.1.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,372,decode,1,model.layers.1.self_attn.k_proj,linear,,B,1024,5120,370,model.layers.1.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,373,decode,1,model.layers.1.self_attn.v_proj,linear,,B,1024,5120,370,model.layers.1.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,374,decode,1,model.layers.1.self_attn.qk,batched_matmul,B*QH,1,KV,128,371;372,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,375,decode,1,model.layers.1.self_attn.pv,batched_matmul,B*QH,1,128,KV,374;373,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,376,decode,1,model.layers.1.self_attn.o_proj,linear,,B,5120,5120,375,model.layers.1.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,377,decode,1,model.layers.1.mlp.gate_proj,linear,,B,17408,5120,376,model.layers.1.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,378,decode,1,model.layers.1.mlp.up_proj,linear,,B,17408,5120,376,model.layers.1.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,379,decode,1,model.layers.1.mlp.down_proj,linear,,B,5120,17408,377;378,model.layers.1.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,380,decode,2,model.layers.2.self_attn.q_proj,linear,,B,5120,5120,379,model.layers.2.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,381,decode,2,model.layers.2.self_attn.k_proj,linear,,B,1024,5120,379,model.layers.2.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,382,decode,2,model.layers.2.self_attn.v_proj,linear,,B,1024,5120,379,model.layers.2.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,383,decode,2,model.layers.2.self_attn.qk,batched_matmul,B*QH,1,KV,128,380;381,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,384,decode,2,model.layers.2.self_attn.pv,batched_matmul,B*QH,1,128,KV,383;382,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,385,decode,2,model.layers.2.self_attn.o_proj,linear,,B,5120,5120,384,model.layers.2.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,386,decode,2,model.layers.2.mlp.gate_proj,linear,,B,17408,5120,385,model.layers.2.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,387,decode,2,model.layers.2.mlp.up_proj,linear,,B,17408,5120,385,model.layers.2.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,388,decode,2,model.layers.2.mlp.down_proj,linear,,B,5120,17408,386;387,model.layers.2.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,389,decode,3,model.layers.3.self_attn.q_proj,linear,,B,5120,5120,388,model.layers.3.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,390,decode,3,model.layers.3.self_attn.k_proj,linear,,B,1024,5120,388,model.layers.3.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,391,decode,3,model.layers.3.self_attn.v_proj,linear,,B,1024,5120,388,model.layers.3.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,392,decode,3,model.layers.3.self_attn.qk,batched_matmul,B*QH,1,KV,128,389;390,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,393,decode,3,model.layers.3.self_attn.pv,batched_matmul,B*QH,1,128,KV,392;391,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,394,decode,3,model.layers.3.self_attn.o_proj,linear,,B,5120,5120,393,model.layers.3.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,395,decode,3,model.layers.3.mlp.gate_proj,linear,,B,17408,5120,394,model.layers.3.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,396,decode,3,model.layers.3.mlp.up_proj,linear,,B,17408,5120,394,model.layers.3.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,397,decode,3,model.layers.3.mlp.down_proj,linear,,B,5120,17408,395;396,model.layers.3.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,398,decode,4,model.layers.4.self_attn.q_proj,linear,,B,5120,5120,397,model.layers.4.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,399,decode,4,model.layers.4.self_attn.k_proj,linear,,B,1024,5120,397,model.layers.4.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,400,decode,4,model.layers.4.self_attn.v_proj,linear,,B,1024,5120,397,model.layers.4.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,401,decode,4,model.layers.4.self_attn.qk,batched_matmul,B*QH,1,KV,128,398;399,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,402,decode,4,model.layers.4.self_attn.pv,batched_matmul,B*QH,1,128,KV,401;400,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,403,decode,4,model.layers.4.self_attn.o_proj,linear,,B,5120,5120,402,model.layers.4.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,404,decode,4,model.layers.4.mlp.gate_proj,linear,,B,17408,5120,403,model.layers.4.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,405,decode,4,model.layers.4.mlp.up_proj,linear,,B,17408,5120,403,model.layers.4.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,406,decode,4,model.layers.4.mlp.down_proj,linear,,B,5120,17408,404;405,model.layers.4.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,407,decode,5,model.layers.5.self_attn.q_proj,linear,,B,5120,5120,406,model.layers.5.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,408,decode,5,model.layers.5.self_attn.k_proj,linear,,B,1024,5120,406,model.layers.5.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,409,decode,5,model.layers.5.self_attn.v_proj,linear,,B,1024,5120,406,model.layers.5.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,410,decode,5,model.layers.5.self_attn.qk,batched_matmul,B*QH,1,KV,128,407;408,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,411,decode,5,model.layers.5.self_attn.pv,batched_matmul,B*QH,1,128,KV,410;409,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,412,decode,5,model.layers.5.self_attn.o_proj,linear,,B,5120,5120,411,model.layers.5.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,413,decode,5,model.layers.5.mlp.gate_proj,linear,,B,17408,5120,412,model.layers.5.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,414,decode,5,model.layers.5.mlp.up_proj,linear,,B,17408,5120,412,model.layers.5.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,415,decode,5,model.layers.5.mlp.down_proj,linear,,B,5120,17408,413;414,model.layers.5.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,416,decode,6,model.layers.6.self_attn.q_proj,linear,,B,5120,5120,415,model.layers.6.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,417,decode,6,model.layers.6.self_attn.k_proj,linear,,B,1024,5120,415,model.layers.6.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,418,decode,6,model.layers.6.self_attn.v_proj,linear,,B,1024,5120,415,model.layers.6.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,419,decode,6,model.layers.6.self_attn.qk,batched_matmul,B*QH,1,KV,128,416;417,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,420,decode,6,model.layers.6.self_attn.pv,batched_matmul,B*QH,1,128,KV,419;418,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,421,decode,6,model.layers.6.self_attn.o_proj,linear,,B,5120,5120,420,model.layers.6.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,422,decode,6,model.layers.6.mlp.gate_proj,linear,,B,17408,5120,421,model.layers.6.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,423,decode,6,model.layers.6.mlp.up_proj,linear,,B,17408,5120,421,model.layers.6.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,424,decode,6,model.layers.6.mlp.down_proj,linear,,B,5120,17408,422;423,model.layers.6.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,425,decode,7,model.layers.7.self_attn.q_proj,linear,,B,5120,5120,424,model.layers.7.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,426,decode,7,model.layers.7.self_attn.k_proj,linear,,B,1024,5120,424,model.layers.7.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,427,decode,7,model.layers.7.self_attn.v_proj,linear,,B,1024,5120,424,model.layers.7.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,428,decode,7,model.layers.7.self_attn.qk,batched_matmul,B*QH,1,KV,128,425;426,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,429,decode,7,model.layers.7.self_attn.pv,batched_matmul,B*QH,1,128,KV,428;427,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,430,decode,7,model.layers.7.self_attn.o_proj,linear,,B,5120,5120,429,model.layers.7.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,431,decode,7,model.layers.7.mlp.gate_proj,linear,,B,17408,5120,430,model.layers.7.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,432,decode,7,model.layers.7.mlp.up_proj,linear,,B,17408,5120,430,model.layers.7.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,433,decode,7,model.layers.7.mlp.down_proj,linear,,B,5120,17408,431;432,model.layers.7.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,434,decode,8,model.layers.8.self_attn.q_proj,linear,,B,5120,5120,433,model.layers.8.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,435,decode,8,model.layers.8.self_attn.k_proj,linear,,B,1024,5120,433,model.layers.8.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,436,decode,8,model.layers.8.self_attn.v_proj,linear,,B,1024,5120,433,model.layers.8.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,437,decode,8,model.layers.8.self_attn.qk,batched_matmul,B*QH,1,KV,128,434;435,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,438,decode,8,model.layers.8.self_attn.pv,batched_matmul,B*QH,1,128,KV,437;436,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,439,decode,8,model.layers.8.self_attn.o_proj,linear,,B,5120,5120,438,model.layers.8.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,440,decode,8,model.layers.8.mlp.gate_proj,linear,,B,17408,5120,439,model.layers.8.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,441,decode,8,model.layers.8.mlp.up_proj,linear,,B,17408,5120,439,model.layers.8.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,442,decode,8,model.layers.8.mlp.down_proj,linear,,B,5120,17408,440;441,model.layers.8.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,443,decode,9,model.layers.9.self_attn.q_proj,linear,,B,5120,5120,442,model.layers.9.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,444,decode,9,model.layers.9.self_attn.k_proj,linear,,B,1024,5120,442,model.layers.9.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,445,decode,9,model.layers.9.self_attn.v_proj,linear,,B,1024,5120,442,model.layers.9.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,446,decode,9,model.layers.9.self_attn.qk,batched_matmul,B*QH,1,KV,128,443;444,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,447,decode,9,model.layers.9.self_attn.pv,batched_matmul,B*QH,1,128,KV,446;445,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,448,decode,9,model.layers.9.self_attn.o_proj,linear,,B,5120,5120,447,model.layers.9.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,449,decode,9,model.layers.9.mlp.gate_proj,linear,,B,17408,5120,448,model.layers.9.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,450,decode,9,model.layers.9.mlp.up_proj,linear,,B,17408,5120,448,model.layers.9.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,451,decode,9,model.layers.9.mlp.down_proj,linear,,B,5120,17408,449;450,model.layers.9.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,452,decode,10,model.layers.10.self_attn.q_proj,linear,,B,5120,5120,451,model.layers.10.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,453,decode,10,model.layers.10.self_attn.k_proj,linear,,B,1024,5120,451,model.layers.10.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,454,decode,10,model.layers.10.self_attn.v_proj,linear,,B,1024,5120,451,model.layers.10.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,455,decode,10,model.layers.10.self_attn.qk,batched_matmul,B*QH,1,KV,128,452;453,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,456,decode,10,model.layers.10.self_attn.pv,batched_matmul,B*QH,1,128,KV,455;454,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,457,decode,10,model.layers.10.self_attn.o_proj,linear,,B,5120,5120,456,model.layers.10.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,458,decode,10,model.layers.10.mlp.gate_proj,linear,,B,17408,5120,457,model.layers.10.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,459,decode,10,model.layers.10.mlp.up_proj,linear,,B,17408,5120,457,model.layers.10.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,460,decode,10,model.layers.10.mlp.down_proj,linear,,B,5120,17408,458;459,model.layers.10.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,461,decode,11,model.layers.11.self_attn.q_proj,linear,,B,5120,5120,460,model.layers.11.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,462,decode,11,model.layers.11.self_attn.k_proj,linear,,B,1024,5120,460,model.layers.11.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,463,decode,11,model.layers.11.self_attn.v_proj,linear,,B,1024,5120,460,model.layers.11.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,464,decode,11,model.layers.11.self_attn.qk,batched_matmul,B*QH,1,KV,128,461;462,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,465,decode,11,model.layers.11.self_attn.pv,batched_matmul,B*QH,1,128,KV,464;463,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,466,decode,11,model.layers.11.self_attn.o_proj,linear,,B,5120,5120,465,model.layers.11.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,467,decode,11,model.layers.11.mlp.gate_proj,linear,,B,17408,5120,466,model.layers.11.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,468,decode,11,model.layers.11.mlp.up_proj,linear,,B,17408,5120,466,model.layers.11.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,469,decode,11,model.layers.11.mlp.down_proj,linear,,B,5120,17408,467;468,model.layers.11.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,470,decode,12,model.layers.12.self_attn.q_proj,linear,,B,5120,5120,469,model.layers.12.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,471,decode,12,model.layers.12.self_attn.k_proj,linear,,B,1024,5120,469,model.layers.12.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,472,decode,12,model.layers.12.self_attn.v_proj,linear,,B,1024,5120,469,model.layers.12.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,473,decode,12,model.layers.12.self_attn.qk,batched_matmul,B*QH,1,KV,128,470;471,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,474,decode,12,model.layers.12.self_attn.pv,batched_matmul,B*QH,1,128,KV,473;472,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,475,decode,12,model.layers.12.self_attn.o_proj,linear,,B,5120,5120,474,model.layers.12.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,476,decode,12,model.layers.12.mlp.gate_proj,linear,,B,17408,5120,475,model.layers.12.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,477,decode,12,model.layers.12.mlp.up_proj,linear,,B,17408,5120,475,model.layers.12.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,478,decode,12,model.layers.12.mlp.down_proj,linear,,B,5120,17408,476;477,model.layers.12.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,479,decode,13,model.layers.13.self_attn.q_proj,linear,,B,5120,5120,478,model.layers.13.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,480,decode,13,model.layers.13.self_attn.k_proj,linear,,B,1024,5120,478,model.layers.13.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,481,decode,13,model.layers.13.self_attn.v_proj,linear,,B,1024,5120,478,model.layers.13.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,482,decode,13,model.layers.13.self_attn.qk,batched_matmul,B*QH,1,KV,128,479;480,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,483,decode,13,model.layers.13.self_attn.pv,batched_matmul,B*QH,1,128,KV,482;481,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,484,decode,13,model.layers.13.self_attn.o_proj,linear,,B,5120,5120,483,model.layers.13.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,485,decode,13,model.layers.13.mlp.gate_proj,linear,,B,17408,5120,484,model.layers.13.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,486,decode,13,model.layers.13.mlp.up_proj,linear,,B,17408,5120,484,model.layers.13.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,487,decode,13,model.layers.13.mlp.down_proj,linear,,B,5120,17408,485;486,model.layers.13.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,488,decode,14,model.layers.14.self_attn.q_proj,linear,,B,5120,5120,487,model.layers.14.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,489,decode,14,model.layers.14.self_attn.k_proj,linear,,B,1024,5120,487,model.layers.14.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,490,decode,14,model.layers.14.self_attn.v_proj,linear,,B,1024,5120,487,model.layers.14.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,491,decode,14,model.layers.14.self_attn.qk,batched_matmul,B*QH,1,KV,128,488;489,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,492,decode,14,model.layers.14.self_attn.pv,batched_matmul,B*QH,1,128,KV,491;490,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,493,decode,14,model.layers.14.self_attn.o_proj,linear,,B,5120,5120,492,model.layers.14.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,494,decode,14,model.layers.14.mlp.gate_proj,linear,,B,17408,5120,493,model.layers.14.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,495,decode,14,model.layers.14.mlp.up_proj,linear,,B,17408,5120,493,model.layers.14.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,496,decode,14,model.layers.14.mlp.down_proj,linear,,B,5120,17408,494;495,model.layers.14.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,497,decode,15,model.layers.15.self_attn.q_proj,linear,,B,5120,5120,496,model.layers.15.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,498,decode,15,model.layers.15.self_attn.k_proj,linear,,B,1024,5120,496,model.layers.15.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,499,decode,15,model.layers.15.self_attn.v_proj,linear,,B,1024,5120,496,model.layers.15.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,500,decode,15,model.layers.15.self_attn.qk,batched_matmul,B*QH,1,KV,128,497;498,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,501,decode,15,model.layers.15.self_attn.pv,batched_matmul,B*QH,1,128,KV,500;499,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,502,decode,15,model.layers.15.self_attn.o_proj,linear,,B,5120,5120,501,model.layers.15.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,503,decode,15,model.layers.15.mlp.gate_proj,linear,,B,17408,5120,502,model.layers.15.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,504,decode,15,model.layers.15.mlp.up_proj,linear,,B,17408,5120,502,model.layers.15.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,505,decode,15,model.layers.15.mlp.down_proj,linear,,B,5120,17408,503;504,model.layers.15.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,506,decode,16,model.layers.16.self_attn.q_proj,linear,,B,5120,5120,505,model.layers.16.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,507,decode,16,model.layers.16.self_attn.k_proj,linear,,B,1024,5120,505,model.layers.16.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,508,decode,16,model.layers.16.self_attn.v_proj,linear,,B,1024,5120,505,model.layers.16.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,509,decode,16,model.layers.16.self_attn.qk,batched_matmul,B*QH,1,KV,128,506;507,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,510,decode,16,model.layers.16.self_attn.pv,batched_matmul,B*QH,1,128,KV,509;508,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,511,decode,16,model.layers.16.self_attn.o_proj,linear,,B,5120,5120,510,model.layers.16.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,512,decode,16,model.layers.16.mlp.gate_proj,linear,,B,17408,5120,511,model.layers.16.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,513,decode,16,model.layers.16.mlp.up_proj,linear,,B,17408,5120,511,model.layers.16.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,514,decode,16,model.layers.16.mlp.down_proj,linear,,B,5120,17408,512;513,model.layers.16.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,515,decode,17,model.layers.17.self_attn.q_proj,linear,,B,5120,5120,514,model.layers.17.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,516,decode,17,model.layers.17.self_attn.k_proj,linear,,B,1024,5120,514,model.layers.17.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,517,decode,17,model.layers.17.self_attn.v_proj,linear,,B,1024,5120,514,model.layers.17.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,518,decode,17,model.layers.17.self_attn.qk,batched_matmul,B*QH,1,KV,128,515;516,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,519,decode,17,model.layers.17.self_attn.pv,batched_matmul,B*QH,1,128,KV,518;517,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,520,decode,17,model.layers.17.self_attn.o_proj,linear,,B,5120,5120,519,model.layers.17.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,521,decode,17,model.layers.17.mlp.gate_proj,linear,,B,17408,5120,520,model.layers.17.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,522,decode,17,model.layers.17.mlp.up_proj,linear,,B,17408,5120,520,model.layers.17.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,523,decode,17,model.layers.17.mlp.down_proj,linear,,B,5120,17408,521;522,model.layers.17.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,524,decode,18,model.layers.18.self_attn.q_proj,linear,,B,5120,5120,523,model.layers.18.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,525,decode,18,model.layers.18.self_attn.k_proj,linear,,B,1024,5120,523,model.layers.18.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,526,decode,18,model.layers.18.self_attn.v_proj,linear,,B,1024,5120,523,model.layers.18.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,527,decode,18,model.layers.18.self_attn.qk,batched_matmul,B*QH,1,KV,128,524;525,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,528,decode,18,model.layers.18.self_attn.pv,batched_matmul,B*QH,1,128,KV,527;526,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,529,decode,18,model.layers.18.self_attn.o_proj,linear,,B,5120,5120,528,model.layers.18.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,530,decode,18,model.layers.18.mlp.gate_proj,linear,,B,17408,5120,529,model.layers.18.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,531,decode,18,model.layers.18.mlp.up_proj,linear,,B,17408,5120,529,model.layers.18.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,532,decode,18,model.layers.18.mlp.down_proj,linear,,B,5120,17408,530;531,model.layers.18.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,533,decode,19,model.layers.19.self_attn.q_proj,linear,,B,5120,5120,532,model.layers.19.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,534,decode,19,model.layers.19.self_attn.k_proj,linear,,B,1024,5120,532,model.layers.19.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,535,decode,19,model.layers.19.self_attn.v_proj,linear,,B,1024,5120,532,model.layers.19.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,536,decode,19,model.layers.19.self_attn.qk,batched_matmul,B*QH,1,KV,128,533;534,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,537,decode,19,model.layers.19.self_attn.pv,batched_matmul,B*QH,1,128,KV,536;535,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,538,decode,19,model.layers.19.self_attn.o_proj,linear,,B,5120,5120,537,model.layers.19.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,539,decode,19,model.layers.19.mlp.gate_proj,linear,,B,17408,5120,538,model.layers.19.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,540,decode,19,model.layers.19.mlp.up_proj,linear,,B,17408,5120,538,model.layers.19.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,541,decode,19,model.layers.19.mlp.down_proj,linear,,B,5120,17408,539;540,model.layers.19.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,542,decode,20,model.layers.20.self_attn.q_proj,linear,,B,5120,5120,541,model.layers.20.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,543,decode,20,model.layers.20.self_attn.k_proj,linear,,B,1024,5120,541,model.layers.20.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,544,decode,20,model.layers.20.self_attn.v_proj,linear,,B,1024,5120,541,model.layers.20.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,545,decode,20,model.layers.20.self_attn.qk,batched_matmul,B*QH,1,KV,128,542;543,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,546,decode,20,model.layers.20.self_attn.pv,batched_matmul,B*QH,1,128,KV,545;544,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,547,decode,20,model.layers.20.self_attn.o_proj,linear,,B,5120,5120,546,model.layers.20.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,548,decode,20,model.layers.20.mlp.gate_proj,linear,,B,17408,5120,547,model.layers.20.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,549,decode,20,model.layers.20.mlp.up_proj,linear,,B,17408,5120,547,model.layers.20.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,550,decode,20,model.layers.20.mlp.down_proj,linear,,B,5120,17408,548;549,model.layers.20.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,551,decode,21,model.layers.21.self_attn.q_proj,linear,,B,5120,5120,550,model.layers.21.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,552,decode,21,model.layers.21.self_attn.k_proj,linear,,B,1024,5120,550,model.layers.21.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,553,decode,21,model.layers.21.self_attn.v_proj,linear,,B,1024,5120,550,model.layers.21.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,554,decode,21,model.layers.21.self_attn.qk,batched_matmul,B*QH,1,KV,128,551;552,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,555,decode,21,model.layers.21.self_attn.pv,batched_matmul,B*QH,1,128,KV,554;553,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,556,decode,21,model.layers.21.self_attn.o_proj,linear,,B,5120,5120,555,model.layers.21.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,557,decode,21,model.layers.21.mlp.gate_proj,linear,,B,17408,5120,556,model.layers.21.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,558,decode,21,model.layers.21.mlp.up_proj,linear,,B,17408,5120,556,model.layers.21.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,559,decode,21,model.layers.21.mlp.down_proj,linear,,B,5120,17408,557;558,model.layers.21.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,560,decode,22,model.layers.22.self_attn.q_proj,linear,,B,5120,5120,559,model.layers.22.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,561,decode,22,model.layers.22.self_attn.k_proj,linear,,B,1024,5120,559,model.layers.22.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,562,decode,22,model.layers.22.self_attn.v_proj,linear,,B,1024,5120,559,model.layers.22.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,563,decode,22,model.layers.22.self_attn.qk,batched_matmul,B*QH,1,KV,128,560;561,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,564,decode,22,model.layers.22.self_attn.pv,batched_matmul,B*QH,1,128,KV,563;562,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,565,decode,22,model.layers.22.self_attn.o_proj,linear,,B,5120,5120,564,model.layers.22.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,566,decode,22,model.layers.22.mlp.gate_proj,linear,,B,17408,5120,565,model.layers.22.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,567,decode,22,model.layers.22.mlp.up_proj,linear,,B,17408,5120,565,model.layers.22.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,568,decode,22,model.layers.22.mlp.down_proj,linear,,B,5120,17408,566;567,model.layers.22.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,569,decode,23,model.layers.23.self_attn.q_proj,linear,,B,5120,5120,568,model.layers.23.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,570,decode,23,model.layers.23.self_attn.k_proj,linear,,B,1024,5120,568,model.layers.23.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,571,decode,23,model.layers.23.self_attn.v_proj,linear,,B,1024,5120,568,model.layers.23.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,572,decode,23,model.layers.23.self_attn.qk,batched_matmul,B*QH,1,KV,128,569;570,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,573,decode,23,model.layers.23.self_attn.pv,batched_matmul,B*QH,1,128,KV,572;571,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,574,decode,23,model.layers.23.self_attn.o_proj,linear,,B,5120,5120,573,model.layers.23.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,575,decode,23,model.layers.23.mlp.gate_proj,linear,,B,17408,5120,574,model.layers.23.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,576,decode,23,model.layers.23.mlp.up_proj,linear,,B,17408,5120,574,model.layers.23.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,577,decode,23,model.layers.23.mlp.down_proj,linear,,B,5120,17408,575;576,model.layers.23.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,578,decode,24,model.layers.24.self_attn.q_proj,linear,,B,5120,5120,577,model.layers.24.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,579,decode,24,model.layers.24.self_attn.k_proj,linear,,B,1024,5120,577,model.layers.24.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,580,decode,24,model.layers.24.self_attn.v_proj,linear,,B,1024,5120,577,model.layers.24.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,581,decode,24,model.layers.24.self_attn.qk,batched_matmul,B*QH,1,KV,128,578;579,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,582,decode,24,model.layers.24.self_attn.pv,batched_matmul,B*QH,1,128,KV,581;580,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,583,decode,24,model.layers.24.self_attn.o_proj,linear,,B,5120,5120,582,model.layers.24.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,584,decode,24,model.layers.24.mlp.gate_proj,linear,,B,17408,5120,583,model.layers.24.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,585,decode,24,model.layers.24.mlp.up_proj,linear,,B,17408,5120,583,model.layers.24.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,586,decode,24,model.layers.24.mlp.down_proj,linear,,B,5120,17408,584;585,model.layers.24.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,587,decode,25,model.layers.25.self_attn.q_proj,linear,,B,5120,5120,586,model.layers.25.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,588,decode,25,model.layers.25.self_attn.k_proj,linear,,B,1024,5120,586,model.layers.25.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,589,decode,25,model.layers.25.self_attn.v_proj,linear,,B,1024,5120,586,model.layers.25.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,590,decode,25,model.layers.25.self_attn.qk,batched_matmul,B*QH,1,KV,128,587;588,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,591,decode,25,model.layers.25.self_attn.pv,batched_matmul,B*QH,1,128,KV,590;589,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,592,decode,25,model.layers.25.self_attn.o_proj,linear,,B,5120,5120,591,model.layers.25.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,593,decode,25,model.layers.25.mlp.gate_proj,linear,,B,17408,5120,592,model.layers.25.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,594,decode,25,model.layers.25.mlp.up_proj,linear,,B,17408,5120,592,model.layers.25.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,595,decode,25,model.layers.25.mlp.down_proj,linear,,B,5120,17408,593;594,model.layers.25.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,596,decode,26,model.layers.26.self_attn.q_proj,linear,,B,5120,5120,595,model.layers.26.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,597,decode,26,model.layers.26.self_attn.k_proj,linear,,B,1024,5120,595,model.layers.26.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,598,decode,26,model.layers.26.self_attn.v_proj,linear,,B,1024,5120,595,model.layers.26.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,599,decode,26,model.layers.26.self_attn.qk,batched_matmul,B*QH,1,KV,128,596;597,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,600,decode,26,model.layers.26.self_attn.pv,batched_matmul,B*QH,1,128,KV,599;598,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,601,decode,26,model.layers.26.self_attn.o_proj,linear,,B,5120,5120,600,model.layers.26.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,602,decode,26,model.layers.26.mlp.gate_proj,linear,,B,17408,5120,601,model.layers.26.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,603,decode,26,model.layers.26.mlp.up_proj,linear,,B,17408,5120,601,model.layers.26.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,604,decode,26,model.layers.26.mlp.down_proj,linear,,B,5120,17408,602;603,model.layers.26.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,605,decode,27,model.layers.27.self_attn.q_proj,linear,,B,5120,5120,604,model.layers.27.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,606,decode,27,model.layers.27.self_attn.k_proj,linear,,B,1024,5120,604,model.layers.27.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,607,decode,27,model.layers.27.self_attn.v_proj,linear,,B,1024,5120,604,model.layers.27.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,608,decode,27,model.layers.27.self_attn.qk,batched_matmul,B*QH,1,KV,128,605;606,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,609,decode,27,model.layers.27.self_attn.pv,batched_matmul,B*QH,1,128,KV,608;607,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,610,decode,27,model.layers.27.self_attn.o_proj,linear,,B,5120,5120,609,model.layers.27.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,611,decode,27,model.layers.27.mlp.gate_proj,linear,,B,17408,5120,610,model.layers.27.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,612,decode,27,model.layers.27.mlp.up_proj,linear,,B,17408,5120,610,model.layers.27.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,613,decode,27,model.layers.27.mlp.down_proj,linear,,B,5120,17408,611;612,model.layers.27.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,614,decode,28,model.layers.28.self_attn.q_proj,linear,,B,5120,5120,613,model.layers.28.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,615,decode,28,model.layers.28.self_attn.k_proj,linear,,B,1024,5120,613,model.layers.28.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,616,decode,28,model.layers.28.self_attn.v_proj,linear,,B,1024,5120,613,model.layers.28.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,617,decode,28,model.layers.28.self_attn.qk,batched_matmul,B*QH,1,KV,128,614;615,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,618,decode,28,model.layers.28.self_attn.pv,batched_matmul,B*QH,1,128,KV,617;616,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,619,decode,28,model.layers.28.self_attn.o_proj,linear,,B,5120,5120,618,model.layers.28.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,620,decode,28,model.layers.28.mlp.gate_proj,linear,,B,17408,5120,619,model.layers.28.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,621,decode,28,model.layers.28.mlp.up_proj,linear,,B,17408,5120,619,model.layers.28.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,622,decode,28,model.layers.28.mlp.down_proj,linear,,B,5120,17408,620;621,model.layers.28.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,623,decode,29,model.layers.29.self_attn.q_proj,linear,,B,5120,5120,622,model.layers.29.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,624,decode,29,model.layers.29.self_attn.k_proj,linear,,B,1024,5120,622,model.layers.29.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,625,decode,29,model.layers.29.self_attn.v_proj,linear,,B,1024,5120,622,model.layers.29.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,626,decode,29,model.layers.29.self_attn.qk,batched_matmul,B*QH,1,KV,128,623;624,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,627,decode,29,model.layers.29.self_attn.pv,batched_matmul,B*QH,1,128,KV,626;625,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,628,decode,29,model.layers.29.self_attn.o_proj,linear,,B,5120,5120,627,model.layers.29.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,629,decode,29,model.layers.29.mlp.gate_proj,linear,,B,17408,5120,628,model.layers.29.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,630,decode,29,model.layers.29.mlp.up_proj,linear,,B,17408,5120,628,model.layers.29.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,631,decode,29,model.layers.29.mlp.down_proj,linear,,B,5120,17408,629;630,model.layers.29.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,632,decode,30,model.layers.30.self_attn.q_proj,linear,,B,5120,5120,631,model.layers.30.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,633,decode,30,model.layers.30.self_attn.k_proj,linear,,B,1024,5120,631,model.layers.30.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,634,decode,30,model.layers.30.self_attn.v_proj,linear,,B,1024,5120,631,model.layers.30.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,635,decode,30,model.layers.30.self_attn.qk,batched_matmul,B*QH,1,KV,128,632;633,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,636,decode,30,model.layers.30.self_attn.pv,batched_matmul,B*QH,1,128,KV,635;634,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,637,decode,30,model.layers.30.self_attn.o_proj,linear,,B,5120,5120,636,model.layers.30.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,638,decode,30,model.layers.30.mlp.gate_proj,linear,,B,17408,5120,637,model.layers.30.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,639,decode,30,model.layers.30.mlp.up_proj,linear,,B,17408,5120,637,model.layers.30.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,640,decode,30,model.layers.30.mlp.down_proj,linear,,B,5120,17408,638;639,model.layers.30.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,641,decode,31,model.layers.31.self_attn.q_proj,linear,,B,5120,5120,640,model.layers.31.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,642,decode,31,model.layers.31.self_attn.k_proj,linear,,B,1024,5120,640,model.layers.31.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,643,decode,31,model.layers.31.self_attn.v_proj,linear,,B,1024,5120,640,model.layers.31.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,644,decode,31,model.layers.31.self_attn.qk,batched_matmul,B*QH,1,KV,128,641;642,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,645,decode,31,model.layers.31.self_attn.pv,batched_matmul,B*QH,1,128,KV,644;643,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,646,decode,31,model.layers.31.self_attn.o_proj,linear,,B,5120,5120,645,model.layers.31.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,647,decode,31,model.layers.31.mlp.gate_proj,linear,,B,17408,5120,646,model.layers.31.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,648,decode,31,model.layers.31.mlp.up_proj,linear,,B,17408,5120,646,model.layers.31.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,649,decode,31,model.layers.31.mlp.down_proj,linear,,B,5120,17408,647;648,model.layers.31.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,650,decode,32,model.layers.32.self_attn.q_proj,linear,,B,5120,5120,649,model.layers.32.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,651,decode,32,model.layers.32.self_attn.k_proj,linear,,B,1024,5120,649,model.layers.32.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,652,decode,32,model.layers.32.self_attn.v_proj,linear,,B,1024,5120,649,model.layers.32.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,653,decode,32,model.layers.32.self_attn.qk,batched_matmul,B*QH,1,KV,128,650;651,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,654,decode,32,model.layers.32.self_attn.pv,batched_matmul,B*QH,1,128,KV,653;652,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,655,decode,32,model.layers.32.self_attn.o_proj,linear,,B,5120,5120,654,model.layers.32.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,656,decode,32,model.layers.32.mlp.gate_proj,linear,,B,17408,5120,655,model.layers.32.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,657,decode,32,model.layers.32.mlp.up_proj,linear,,B,17408,5120,655,model.layers.32.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,658,decode,32,model.layers.32.mlp.down_proj,linear,,B,5120,17408,656;657,model.layers.32.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,659,decode,33,model.layers.33.self_attn.q_proj,linear,,B,5120,5120,658,model.layers.33.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,660,decode,33,model.layers.33.self_attn.k_proj,linear,,B,1024,5120,658,model.layers.33.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,661,decode,33,model.layers.33.self_attn.v_proj,linear,,B,1024,5120,658,model.layers.33.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,662,decode,33,model.layers.33.self_attn.qk,batched_matmul,B*QH,1,KV,128,659;660,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,663,decode,33,model.layers.33.self_attn.pv,batched_matmul,B*QH,1,128,KV,662;661,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,664,decode,33,model.layers.33.self_attn.o_proj,linear,,B,5120,5120,663,model.layers.33.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,665,decode,33,model.layers.33.mlp.gate_proj,linear,,B,17408,5120,664,model.layers.33.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,666,decode,33,model.layers.33.mlp.up_proj,linear,,B,17408,5120,664,model.layers.33.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,667,decode,33,model.layers.33.mlp.down_proj,linear,,B,5120,17408,665;666,model.layers.33.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,668,decode,34,model.layers.34.self_attn.q_proj,linear,,B,5120,5120,667,model.layers.34.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,669,decode,34,model.layers.34.self_attn.k_proj,linear,,B,1024,5120,667,model.layers.34.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,670,decode,34,model.layers.34.self_attn.v_proj,linear,,B,1024,5120,667,model.layers.34.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,671,decode,34,model.layers.34.self_attn.qk,batched_matmul,B*QH,1,KV,128,668;669,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,672,decode,34,model.layers.34.self_attn.pv,batched_matmul,B*QH,1,128,KV,671;670,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,673,decode,34,model.layers.34.self_attn.o_proj,linear,,B,5120,5120,672,model.layers.34.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,674,decode,34,model.layers.34.mlp.gate_proj,linear,,B,17408,5120,673,model.layers.34.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,675,decode,34,model.layers.34.mlp.up_proj,linear,,B,17408,5120,673,model.layers.34.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,676,decode,34,model.layers.34.mlp.down_proj,linear,,B,5120,17408,674;675,model.layers.34.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,677,decode,35,model.layers.35.self_attn.q_proj,linear,,B,5120,5120,676,model.layers.35.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,678,decode,35,model.layers.35.self_attn.k_proj,linear,,B,1024,5120,676,model.layers.35.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,679,decode,35,model.layers.35.self_attn.v_proj,linear,,B,1024,5120,676,model.layers.35.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,680,decode,35,model.layers.35.self_attn.qk,batched_matmul,B*QH,1,KV,128,677;678,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,681,decode,35,model.layers.35.self_attn.pv,batched_matmul,B*QH,1,128,KV,680;679,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,682,decode,35,model.layers.35.self_attn.o_proj,linear,,B,5120,5120,681,model.layers.35.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,683,decode,35,model.layers.35.mlp.gate_proj,linear,,B,17408,5120,682,model.layers.35.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,684,decode,35,model.layers.35.mlp.up_proj,linear,,B,17408,5120,682,model.layers.35.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,685,decode,35,model.layers.35.mlp.down_proj,linear,,B,5120,17408,683;684,model.layers.35.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,686,decode,36,model.layers.36.self_attn.q_proj,linear,,B,5120,5120,685,model.layers.36.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,687,decode,36,model.layers.36.self_attn.k_proj,linear,,B,1024,5120,685,model.layers.36.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,688,decode,36,model.layers.36.self_attn.v_proj,linear,,B,1024,5120,685,model.layers.36.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,689,decode,36,model.layers.36.self_attn.qk,batched_matmul,B*QH,1,KV,128,686;687,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,690,decode,36,model.layers.36.self_attn.pv,batched_matmul,B*QH,1,128,KV,689;688,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,691,decode,36,model.layers.36.self_attn.o_proj,linear,,B,5120,5120,690,model.layers.36.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,692,decode,36,model.layers.36.mlp.gate_proj,linear,,B,17408,5120,691,model.layers.36.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,693,decode,36,model.layers.36.mlp.up_proj,linear,,B,17408,5120,691,model.layers.36.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,694,decode,36,model.layers.36.mlp.down_proj,linear,,B,5120,17408,692;693,model.layers.36.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,695,decode,37,model.layers.37.self_attn.q_proj,linear,,B,5120,5120,694,model.layers.37.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,696,decode,37,model.layers.37.self_attn.k_proj,linear,,B,1024,5120,694,model.layers.37.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,697,decode,37,model.layers.37.self_attn.v_proj,linear,,B,1024,5120,694,model.layers.37.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,698,decode,37,model.layers.37.self_attn.qk,batched_matmul,B*QH,1,KV,128,695;696,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,699,decode,37,model.layers.37.self_attn.pv,batched_matmul,B*QH,1,128,KV,698;697,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,700,decode,37,model.layers.37.self_attn.o_proj,linear,,B,5120,5120,699,model.layers.37.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,701,decode,37,model.layers.37.mlp.gate_proj,linear,,B,17408,5120,700,model.layers.37.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,702,decode,37,model.layers.37.mlp.up_proj,linear,,B,17408,5120,700,model.layers.37.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,703,decode,37,model.layers.37.mlp.down_proj,linear,,B,5120,17408,701;702,model.layers.37.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,704,decode,38,model.layers.38.self_attn.q_proj,linear,,B,5120,5120,703,model.layers.38.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,705,decode,38,model.layers.38.self_attn.k_proj,linear,,B,1024,5120,703,model.layers.38.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,706,decode,38,model.layers.38.self_attn.v_proj,linear,,B,1024,5120,703,model.layers.38.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,707,decode,38,model.layers.38.self_attn.qk,batched_matmul,B*QH,1,KV,128,704;705,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,708,decode,38,model.layers.38.self_attn.pv,batched_matmul,B*QH,1,128,KV,707;706,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,709,decode,38,model.layers.38.self_attn.o_proj,linear,,B,5120,5120,708,model.layers.38.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,710,decode,38,model.layers.38.mlp.gate_proj,linear,,B,17408,5120,709,model.layers.38.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,711,decode,38,model.layers.38.mlp.up_proj,linear,,B,17408,5120,709,model.layers.38.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,712,decode,38,model.layers.38.mlp.down_proj,linear,,B,5120,17408,710;711,model.layers.38.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,713,decode,39,model.layers.39.self_attn.q_proj,linear,,B,5120,5120,712,model.layers.39.self_attn.q_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,714,decode,39,model.layers.39.self_attn.k_proj,linear,,B,1024,5120,712,model.layers.39.self_attn.k_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,715,decode,39,model.layers.39.self_attn.v_proj,linear,,B,1024,5120,712,model.layers.39.self_attn.v_proj.weight,"[1024,5120]",config+architecture,
+models--Qwen--Qwen3-14B,716,decode,39,model.layers.39.self_attn.qk,batched_matmul,B*QH,1,KV,128,713;714,,,config+architecture,"GQA QH=40, KVH=8"
+models--Qwen--Qwen3-14B,717,decode,39,model.layers.39.self_attn.pv,batched_matmul,B*QH,1,128,KV,716;715,,,config+architecture,softmax/mask is a non-matmul dependency bridge
+models--Qwen--Qwen3-14B,718,decode,39,model.layers.39.self_attn.o_proj,linear,,B,5120,5120,717,model.layers.39.self_attn.o_proj.weight,"[5120,5120]",config+architecture,
+models--Qwen--Qwen3-14B,719,decode,39,model.layers.39.mlp.gate_proj,linear,,B,17408,5120,718,model.layers.39.mlp.gate_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,720,decode,39,model.layers.39.mlp.up_proj,linear,,B,17408,5120,718,model.layers.39.mlp.up_proj.weight,"[17408,5120]",config+architecture,
+models--Qwen--Qwen3-14B,721,decode,39,model.layers.39.mlp.down_proj,linear,,B,5120,17408,719;720,model.layers.39.mlp.down_proj.weight,"[5120,17408]",config+architecture,SiLU(gate)*up precedes this GEMM
+models--Qwen--Qwen3-14B,722,decode,output,lm_head,linear,,B,151936,5120,721,lm_head.weight or tied embed_tokens.weight,"[151936,5120]",config+architecture,prefill shape follows full Hugging Face forward; serving runtimes may compute only selected logits

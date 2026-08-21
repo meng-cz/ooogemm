@@ -43,6 +43,7 @@ module top_static #(
     parameter int LOAD_BUS_ID_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH * 2),
     parameter int ROW8_WIDTH      = SA_WIDTH * 8,
     parameter int ROW32_WIDTH     = SA_WIDTH * 32,
+    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
     parameter int STORE_MEM_DATA_WIDTH = ROW32_WIDTH / STORE_ROW_WRITE_BEATS,
     parameter int GEMM_INSTID_WIDTH = 16,
     parameter int GEMM_TRACK_DEPTH = 256,
@@ -126,6 +127,7 @@ module top_static #(
         logic [ABUF_IDX_WIDTH-1:0] abufidx;
         logic [BBUF_IDX_WIDTH-1:0] bbufidx;
         logic [PACC_IDX_WIDTH-1:0] paccidx;
+        logic [LOAD_ROWS_WIDTH-1:0] valid_rows;
         logic accum;
     } uop_entry_t;
 
@@ -154,6 +156,7 @@ module top_static #(
     logic [ABUF_IDX_WIDTH-1:0] parser_uop_abufidx;
     logic [BBUF_IDX_WIDTH-1:0] parser_uop_bbufidx;
     logic [PACC_IDX_WIDTH-1:0] parser_uop_paccidx;
+    logic [LOAD_ROWS_WIDTH-1:0] parser_uop_valid_rows;
     logic parser_uop_accum;
 
     logic [OUTSTANDING_CNT_WIDTH-1:0] load_outstanding_q;
@@ -170,7 +173,8 @@ module top_static #(
         .DIM_WIDTH(DIM_WIDTH),
         .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH),
         .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),
-        .PACC_IDX_WIDTH(PACC_IDX_WIDTH)
+        .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
+        .LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH)
     ) u_static_uopparse (
         .clk(clk),
         .rst_n(rst_n),
@@ -189,6 +193,7 @@ module top_static #(
         .uop_abufidx_o(parser_uop_abufidx),
         .uop_bbufidx_o(parser_uop_bbufidx),
         .uop_paccidx_o(parser_uop_paccidx),
+        .uop_valid_rows_o(parser_uop_valid_rows),
         .uop_accum_o(parser_uop_accum)
     );
 
@@ -215,6 +220,7 @@ module top_static #(
     logic [ADDR_WIDTH-1:0] load_uop_addr;
     logic [ABUF_IDX_WIDTH-1:0] load_uop_abufidx;
     logic [BBUF_IDX_WIDTH-1:0] load_uop_bbufidx;
+    logic [LOAD_ROWS_WIDTH-1:0] load_uop_valid_rows;
 
     logic abuf_wr_valid;
     logic [ABUF_IDX_WIDTH-1:0] abuf_wr_idx;
@@ -237,6 +243,7 @@ module top_static #(
         .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH),
         .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),
         .BUS_ID_WIDTH(LOAD_BUS_ID_WIDTH),
+        .ROWS_LEFT_WIDTH(LOAD_ROWS_WIDTH),
         .ROW_DATA_WIDTH(ROW8_WIDTH)
     ) u_loadunit (
         .clk(clk),
@@ -247,6 +254,7 @@ module top_static #(
         .uop_addr_i(load_uop_addr),
         .uop_abufidx_i(load_uop_abufidx),
         .uop_bbufidx_i(load_uop_bbufidx),
+        .uop_valid_rows_i(load_uop_valid_rows),
         .mem_req_valid_o(load_mem_req_valid_o),
         .mem_req_ready_i(load_mem_req_ready_i),
         .mem_req_addr_o(load_mem_req_addr_o),
@@ -501,6 +509,7 @@ module top_static #(
         load_uop_addr = '0;
         load_uop_abufidx = '0;
         load_uop_bbufidx = '0;
+        load_uop_valid_rows = '0;
 
         store_uop_valid = 1'b0;
         store_uop_addr = '0;
@@ -519,6 +528,7 @@ module top_static #(
                     load_uop_addr = fifo_head.addr;
                     load_uop_abufidx = fifo_head.abufidx;
                     load_uop_bbufidx = fifo_head.bbufidx;
+                    load_uop_valid_rows = fifo_head.valid_rows;
                     fifo_pop = load_uop_ready;
                 end
 
@@ -576,6 +586,7 @@ module top_static #(
                 uop_fifo[i].abufidx <= '0;
                 uop_fifo[i].bbufidx <= '0;
                 uop_fifo[i].paccidx <= '0;
+                uop_fifo[i].valid_rows <= '0;
                 uop_fifo[i].accum <= 1'b0;
             end
             for (int i = 0; i < PACC_NUM; i++) begin
@@ -600,6 +611,7 @@ module top_static #(
                 uop_fifo[int'(fifo_wr_ptr_q)].abufidx <= parser_uop_abufidx;
                 uop_fifo[int'(fifo_wr_ptr_q)].bbufidx <= parser_uop_bbufidx;
                 uop_fifo[int'(fifo_wr_ptr_q)].paccidx <= parser_uop_paccidx;
+                uop_fifo[int'(fifo_wr_ptr_q)].valid_rows <= parser_uop_valid_rows;
                 uop_fifo[int'(fifo_wr_ptr_q)].accum <= parser_uop_accum;
                 fifo_wr_ptr_q <= fifo_ptr_inc(fifo_wr_ptr_q);
             end
