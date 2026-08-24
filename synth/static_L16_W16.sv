@@ -1,6 +1,6 @@
 `default_nettype none
 
-module L1_W128 (
+module L16_W16 (
     input  logic clk,
     input  logic rst_n,
 
@@ -16,12 +16,12 @@ module L1_W128 (
     output logic load_mem_req_valid_o,
     input  logic load_mem_req_ready_i,
     output logic [31:0] load_mem_req_addr_o,
-    output logic [7:0] load_mem_req_id_o,
+    output logic [4:0] load_mem_req_id_o,
 
     input  logic load_mem_rsp_valid_i,
     output logic load_mem_rsp_ready_o,
-    input  logic [7:0] load_mem_rsp_id_i,
-    input  logic [1023:0] load_mem_rsp_data_i,
+    input  logic [4:0] load_mem_rsp_id_i,
+    input  logic [127:0] load_mem_rsp_data_i,
 
     output logic store_mem_wr_valid_o,
     input  logic store_mem_wr_ready_i,
@@ -30,22 +30,22 @@ module L1_W128 (
 );
 
     top_static #(
-        .SA_WIDTH(128),
-        .LANE_NUM(1),
+        .SA_WIDTH(16),
+        .LANE_NUM(16),
         .ABUF_SIZE(64),
         .BBUF_SIZE(64),
         .PACC_NUM(16),
         .ADDR_WIDTH(32),
         .DIM_WIDTH(16),
         .UOP_FIFO_DEPTH(32),
-        .STORE_ROW_WRITE_BEATS(128),
-        .LANE_IDX_WIDTH(1),
+        .STORE_ROW_WRITE_BEATS(16),
+        .LANE_IDX_WIDTH(4),
         .ABUF_IDX_WIDTH(6),
         .BBUF_IDX_WIDTH(6),
         .PACC_IDX_WIDTH(4),
-        .LOAD_BUS_ID_WIDTH(8),
-        .ROW8_WIDTH(1024),
-        .ROW32_WIDTH(4096),
+        .LOAD_BUS_ID_WIDTH(5),
+        .ROW8_WIDTH(128),
+        .ROW32_WIDTH(512),
         .STORE_MEM_DATA_WIDTH(32),
         .GEMM_INSTID_WIDTH(16),
         .GEMM_TRACK_DEPTH(256),
