@@ -50,6 +50,9 @@ namespace {
 #ifndef TOP_STATIC_BIG_TEST
 #define TOP_STATIC_BIG_TEST 0
 #endif
+#ifndef LOAD_DATA_WIDTH_TEST
+#define LOAD_DATA_WIDTH_TEST (SUBTILE_K_TEST * 8)
+#endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
 constexpr int kSubtileK = SUBTILE_K_TEST;
@@ -63,9 +66,75 @@ constexpr int kRowWriteBeats = STORE_ROW_WRITE_BEATS_TEST;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 constexpr int kLoadRowBits = kSubtileK * 8;
 constexpr int kLoadRowWords = (kLoadRowBits + 31) / 32;
+constexpr int kLoadDataBits = LOAD_DATA_WIDTH_TEST;
+constexpr int kLoadBeatWords = (kLoadDataBits + 31) / 32;
+constexpr bool kLoadWide = kLoadDataBits >= kLoadRowBits;
+constexpr int kRowsPerLoadBeat = kLoadWide ? (kLoadDataBits / kLoadRowBits) : 1;
+constexpr int kLoadBeatsPerRow = kLoadWide ? 1 : (kLoadRowBits / kLoadDataBits);
+constexpr int kLoadTileBeats = kLoadWide ?
+    ((kSaWidth + kRowsPerLoadBeat - 1) / kRowsPerLoadBeat) :
+    (kSaWidth * kLoadBeatsPerRow);
 constexpr bool kBigTest = TOP_STATIC_BIG_TEST != 0;
-constexpr int kParserBlockM = 4;
-constexpr int kParserBlockN = 4;
+
+constexpr int choose_parser_block_m(int abuf_group_size, int bbuf_group_size, int pacc_num) {
+    int best_m = 1;
+    int best_n = 1;
+    int best_area = 1;
+    int best_balance = 0;
+    for (int bm = 1; bm <= abuf_group_size; ++bm) {
+        for (int bn = 1; bn <= bbuf_group_size; ++bn) {
+            const int area = bm * bn;
+            const int balance = (bm >= bn) ? (bm - bn) : (bn - bm);
+            if ((area <= pacc_num) &&
+                ((area > best_area) ||
+                 ((area == best_area) && (balance < best_balance)) ||
+                 ((area == best_area) && (balance == best_balance) && (bm > best_m)) ||
+                 ((area == best_area) && (balance == best_balance) && (bm == best_m) &&
+                  (bn > best_n)))) {
+                best_m = bm;
+                best_n = bn;
+                best_area = area;
+                best_balance = balance;
+            }
+        }
+    }
+    return best_m;
+}
+
+constexpr int choose_parser_block_n(int abuf_group_size, int bbuf_group_size, int pacc_num) {
+    int best_m = 1;
+    int best_n = 1;
+    int best_area = 1;
+    int best_balance = 0;
+    for (int bm = 1; bm <= abuf_group_size; ++bm) {
+        for (int bn = 1; bn <= bbuf_group_size; ++bn) {
+            const int area = bm * bn;
+            const int balance = (bm >= bn) ? (bm - bn) : (bn - bm);
+            if ((area <= pacc_num) &&
+                ((area > best_area) ||
+                 ((area == best_area) && (balance < best_balance)) ||
+                 ((area == best_area) && (balance == best_balance) && (bm > best_m)) ||
+                 ((area == best_area) && (balance == best_balance) && (bm == best_m) &&
+                  (bn > best_n)))) {
+                best_m = bm;
+                best_n = bn;
+                best_area = area;
+                best_balance = balance;
+            }
+        }
+    }
+    return best_n;
+}
+
+constexpr int kParserBlockM =
+    choose_parser_block_m(kABufSize / 2, kBBufSize / 2, kPaccNum);
+constexpr int kParserBlockN =
+    choose_parser_block_n(kABufSize / 2, kBBufSize / 2, kPaccNum);
+constexpr int kParserBlockArea = kParserBlockM * kParserBlockN;
+constexpr int kParserMergeBlockTiles = std::min(
+    kParserBlockArea,
+    std::min(kPaccNum, std::min(kABufSize / 2, kBBufSize / 2))
+);
 
 static_assert(kLaneNum >= 1, "top_static testbench expects at least one lane");
 static_assert(kABufSize >= 4 && kBBufSize >= 4, "operand buffers must have ping-pong halves");
@@ -73,6 +142,14 @@ static_assert(kPaccNum >= 4, "top_static testbench expects at least four PACC re
 static_assert(kRowWriteBeats == kSaWidth,
               "top_static testbench expects one FP32 word per store beat");
 static_assert(kLoadRowWords >= 1, "load row must have at least one word");
+static_assert((kSubtileK & (kSubtileK - 1)) == 0,
+              "SUBTILE_K_TEST must be a power of two");
+static_assert((kLoadDataBits & (kLoadDataBits - 1)) == 0,
+              "LOAD_DATA_WIDTH_TEST must be a power of two");
+static_assert((kLoadDataBits % 8) == 0, "LOAD_DATA_WIDTH_TEST must be byte-aligned");
+static_assert((kLoadDataBits >= kLoadRowBits && (kLoadDataBits % kLoadRowBits) == 0) ||
+              (kLoadRowBits >= kLoadDataBits && (kLoadRowBits % kLoadDataBits) == 0),
+              "load bus and operand row widths must divide each other");
 
 struct DecodedFp8 {
     bool sign = false;
@@ -104,10 +181,14 @@ struct RowData {
     std::array<uint32_t, kLoadRowWords> words{};
 };
 
+struct LoadBeatData {
+    std::array<uint32_t, kLoadBeatWords> words{};
+};
+
 struct Rsp {
     uint64_t due = 0;
     uint32_t id = 0;
-    RowData data;
+    LoadBeatData data;
 };
 
 [[noreturn]] void fail(const std::string& msg) {
@@ -298,6 +379,26 @@ RowData pack_row(const uint8_t row[kSubtileK]) {
     return data;
 }
 
+uint32_t get_row_bit(const RowData& data, int bit) {
+    return (data.words[static_cast<size_t>(bit / 32)] >> (bit % 32)) & 1u;
+}
+
+void set_load_beat_bit(LoadBeatData& data, int bit, uint32_t value) {
+    if (value != 0) {
+        data.words[static_cast<size_t>(bit / 32)] |= uint32_t{1} << (bit % 32);
+    }
+}
+
+void copy_row_bits_to_beat(const RowData& src,
+                           int src_bit,
+                           LoadBeatData& dst,
+                           int dst_bit,
+                           int width) {
+    for (int bit = 0; bit < width; ++bit) {
+        set_load_beat_bit(dst, dst_bit + bit, get_row_bit(src, src_bit + bit));
+    }
+}
+
 int ceil_tiles(int dim) {
     return (dim + kSaWidth - 1) / kSaWidth;
 }
@@ -347,7 +448,7 @@ private:
     uint32_t seed_;
     std::mt19937 rng_;
     std::vector<Cmd> commands_;
-    std::unordered_map<uint32_t, RowData> load_rows_;
+    std::unordered_map<uint32_t, LoadBeatData> load_beats_;
     std::unordered_map<uint32_t, uint32_t> expected_writes_;
     std::unordered_set<uint32_t> seen_writes_;
     std::deque<Rsp> pending_rsp_;
@@ -375,15 +476,15 @@ private:
         dut_.load_mem_req_ready_i = 0;
         dut_.load_mem_rsp_valid_i = 0;
         dut_.load_mem_rsp_id_i = 0;
-        drive_load_rsp_data(RowData{});
+        drive_load_rsp_data(LoadBeatData{});
         dut_.store_mem_wr_ready_i = 0;
     }
 
-    void drive_load_rsp_data(const RowData& data) {
-#if (SUBTILE_K_TEST * 8) <= 32
+    void drive_load_rsp_data(const LoadBeatData& data) {
+#if LOAD_DATA_WIDTH_TEST <= 32
         dut_.load_mem_rsp_data_i = data.words[0];
 #else
-        for (int i = 0; i < kLoadRowWords; ++i) {
+        for (int i = 0; i < kLoadBeatWords; ++i) {
             dut_.load_mem_rsp_data_i[i] = data.words[static_cast<size_t>(i)];
         }
 #endif
@@ -585,6 +686,7 @@ private:
             for (int tile_k = 0; tile_k < tk; ++tile_k) {
                 const uint32_t tile_addr =
                     cmd.a_base + static_cast<uint32_t>(tile_m * tk + tile_k);
+                std::array<RowData, kSaWidth> rows{};
                 for (int row = 0; row < kSaWidth; ++row) {
                     uint8_t packed_row[kSubtileK] = {};
                     for (int kk = 0; kk < kSubtileK; ++kk) {
@@ -594,9 +696,9 @@ private:
                             tile_k * kSubtileK + kk
                         );
                     }
-                    load_rows_[tile_addr * kSaWidth + static_cast<uint32_t>(row)] =
-                        pack_row(packed_row);
+                    rows[static_cast<size_t>(row)] = pack_row(packed_row);
                 }
+                add_tile_load_beats(tile_addr, rows, valid_tile_rows(cmd.m, tile_m));
             }
         }
 
@@ -604,6 +706,7 @@ private:
             for (int tile_n = 0; tile_n < tn; ++tile_n) {
                 const uint32_t tile_addr =
                     cmd.b_base + static_cast<uint32_t>(tile_k * tn + tile_n);
+                std::array<RowData, kSaWidth> rows{};
                 for (int col = 0; col < kSaWidth; ++col) {
                     uint8_t packed_col[kSubtileK] = {};
                     for (int kk = 0; kk < kSubtileK; ++kk) {
@@ -616,10 +719,45 @@ private:
                     // The test builds the external-memory image for B as the
                     // software-provided transposed view. Hardware loads this
                     // row directly into BBuf bank col without another reorder.
-                    load_rows_[tile_addr * kSaWidth + static_cast<uint32_t>(col)] =
-                        pack_row(packed_col);
+                    rows[static_cast<size_t>(col)] = pack_row(packed_col);
                 }
+                add_tile_load_beats(tile_addr, rows, valid_tile_rows(cmd.n, tile_n));
             }
+        }
+    }
+
+    void add_tile_load_beats(uint32_t tile_addr,
+                             const std::array<RowData, kSaWidth>& rows,
+                             int valid_rows) {
+        const int req_count = load_req_count_for_rows(valid_rows);
+        for (int req = 0; req < req_count; ++req) {
+            LoadBeatData beat;
+            if (kLoadWide) {
+                const int row_start = req * kRowsPerLoadBeat;
+                const int rows_this_beat =
+                    std::min(kRowsPerLoadBeat, valid_rows - row_start);
+                for (int off = 0; off < rows_this_beat; ++off) {
+                    copy_row_bits_to_beat(
+                        rows[static_cast<size_t>(row_start + off)],
+                        0,
+                        beat,
+                        off * kLoadRowBits,
+                        kLoadRowBits
+                    );
+                }
+            } else {
+                const int row = req / kLoadBeatsPerRow;
+                const int beat_idx = req % kLoadBeatsPerRow;
+                copy_row_bits_to_beat(
+                    rows[static_cast<size_t>(row)],
+                    beat_idx * kLoadDataBits,
+                    beat,
+                    0,
+                    kLoadDataBits
+                );
+            }
+            load_beats_[tile_addr * static_cast<uint32_t>(kLoadTileBeats) +
+                        static_cast<uint32_t>(req)] = beat;
         }
     }
 
@@ -635,28 +773,72 @@ private:
         const int tm = ceil_tiles(cmd.m);
         const int tn = ceil_tiles(cmd.n);
         const int tk = ceil_k_tiles(cmd.k);
+        const int batch = cmd.batch == 0 ? 0 : cmd.batch;
         uint64_t count = 0;
 
-        for (int block_m_base = 0; block_m_base < tm; block_m_base += kParserBlockM) {
-            const int block_m = std::min(kParserBlockM, tm - block_m_base);
-            for (int block_n_base = 0; block_n_base < tn; block_n_base += kParserBlockN) {
-                const int block_n = std::min(kParserBlockN, tn - block_n_base);
+        if (batch == 0 || tm == 0 || tn == 0 || tk == 0) {
+            return 0;
+        }
+
+        const int output_tiles_per_batch = tm * tn;
+        if (output_tiles_per_batch < kParserBlockArea) {
+            const int total_output_tiles = batch * output_tiles_per_batch;
+            for (int base = 0; base < total_output_tiles; base += kParserMergeBlockTiles) {
+                const int block_tiles =
+                    std::min(kParserMergeBlockTiles, total_output_tiles - base);
                 for (int kt = 0; kt < tk; ++kt) {
                     (void)kt;
-                    for (int local_m = 0; local_m < block_m; ++local_m) {
+                    for (int local = 0; local < block_tiles; ++local) {
+                        const int flat = base + local;
+                        const int in_batch = flat % output_tiles_per_batch;
+                        const int tile_m = in_batch / tn;
+                        const int tile_n = in_batch % tn;
                         count += static_cast<uint64_t>(
-                            valid_tile_rows(cmd.m, block_m_base + local_m)
+                            load_req_count_for_rows(valid_tile_rows(cmd.m, tile_m))
+                        );
+                        count += static_cast<uint64_t>(
+                            load_req_count_for_rows(valid_tile_rows(cmd.n, tile_n))
                         );
                     }
-                    for (int local_n = 0; local_n < block_n; ++local_n) {
-                        count += static_cast<uint64_t>(
-                            valid_tile_rows(cmd.n, block_n_base + local_n)
-                        );
+                }
+            }
+            return count;
+        }
+
+        for (int b = 0; b < batch; ++b) {
+            (void)b;
+            for (int block_m_base = 0; block_m_base < tm; block_m_base += kParserBlockM) {
+                const int block_m = std::min(kParserBlockM, tm - block_m_base);
+                for (int block_n_base = 0; block_n_base < tn; block_n_base += kParserBlockN) {
+                    const int block_n = std::min(kParserBlockN, tn - block_n_base);
+                    for (int kt = 0; kt < tk; ++kt) {
+                        (void)kt;
+                        for (int local_m = 0; local_m < block_m; ++local_m) {
+                            count += static_cast<uint64_t>(
+                                load_req_count_for_rows(
+                                    valid_tile_rows(cmd.m, block_m_base + local_m)
+                                )
+                            );
+                        }
+                        for (int local_n = 0; local_n < block_n; ++local_n) {
+                            count += static_cast<uint64_t>(
+                                load_req_count_for_rows(
+                                    valid_tile_rows(cmd.n, block_n_base + local_n)
+                                )
+                            );
+                        }
                     }
                 }
             }
         }
         return count;
+    }
+
+    int load_req_count_for_rows(int valid_rows) const {
+        if (kLoadWide) {
+            return (valid_rows + kRowsPerLoadBeat - 1) / kRowsPerLoadBeat;
+        }
+        return valid_rows * kLoadBeatsPerRow;
     }
 
     void add_expected_writes(const Cmd& cmd) {
@@ -800,10 +982,10 @@ private:
         if (req_fire) {
             ++load_req_count_;
             const uint32_t addr = req_addr_fire;
-            auto it = load_rows_.find(addr);
-            if (it == load_rows_.end()) {
+            auto it = load_beats_.find(addr);
+            if (it == load_beats_.end()) {
                 std::ostringstream os;
-                os << "load request for unknown row address " << hex32(addr)
+                os << "load request for unknown beat address " << hex32(addr)
                    << " at cycle " << cycle_;
                 fail(os.str());
             }

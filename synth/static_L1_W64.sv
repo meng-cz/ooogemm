@@ -47,6 +47,7 @@ module L1_W64 (
         .PACC_IDX_WIDTH(4),
         .LOAD_BUS_ID_WIDTH(7),
         .ROW8_WIDTH(256),
+        .LOAD_DATA_WIDTH(256),
         .ROW32_WIDTH(2048),
         .STORE_MEM_DATA_WIDTH(32),
         .GEMM_INSTID_WIDTH(16),

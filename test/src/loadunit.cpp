@@ -1,6 +1,8 @@
 #include "Vloadunit.h"
 #include "verilated.h"
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <iomanip>
@@ -29,6 +31,9 @@ namespace {
 #ifndef BUS_ID_WIDTH_TEST
 #define BUS_ID_WIDTH_TEST 3
 #endif
+#ifndef LOAD_DATA_WIDTH_TEST
+#define LOAD_DATA_WIDTH_TEST (SUBTILE_K_TEST * 8)
+#endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
 constexpr int kSubtileK = SUBTILE_K_TEST;
@@ -36,10 +41,27 @@ constexpr int kABufSize = ABUF_SIZE_TEST;
 constexpr int kBBufSize = BBUF_SIZE_TEST;
 constexpr int kBusIdWidth = BUS_ID_WIDTH_TEST;
 constexpr int kOutstandingNum = 1 << kBusIdWidth;
+constexpr int kRowBits = kSubtileK * 8;
+constexpr int kLoadDataBits = LOAD_DATA_WIDTH_TEST;
+constexpr int kLoadBeatWords = (kLoadDataBits + 31) / 32;
+constexpr bool kLoadWide = kLoadDataBits >= kRowBits;
+constexpr int kRowsPerBeat = kLoadWide ? (kLoadDataBits / kRowBits) : 1;
+constexpr int kBeatsPerRow = kLoadWide ? 1 : (kRowBits / kLoadDataBits);
+constexpr int kTileReqs = kLoadWide ?
+    ((kSaWidth + kRowsPerBeat - 1) / kRowsPerBeat) :
+    (kSaWidth * kBeatsPerRow);
 
 static_assert(kSaWidth > 0, "SA_WIDTH_TEST must be positive");
 static_assert(kSubtileK <= 4, "this testbench expects ROW_DATA_WIDTH <= 32");
-static_assert(kOutstandingNum >= kSaWidth, "ID space must fit one full tile");
+static_assert((kSubtileK & (kSubtileK - 1)) == 0,
+              "SUBTILE_K_TEST must be a power of two");
+static_assert((kLoadDataBits & (kLoadDataBits - 1)) == 0,
+              "LOAD_DATA_WIDTH_TEST must be a power of two");
+static_assert((kLoadDataBits % 8) == 0, "LOAD_DATA_WIDTH_TEST must be byte-aligned");
+static_assert((kLoadDataBits >= kRowBits && (kLoadDataBits % kRowBits) == 0) ||
+              (kRowBits >= kLoadDataBits && (kRowBits % kLoadDataBits) == 0),
+              "load bus and row widths must divide each other");
+static_assert(kOutstandingNum >= kTileReqs, "ID space must fit one full tile");
 
 struct Load {
     bool is_b = false;
@@ -50,15 +72,29 @@ struct Load {
     std::string name;
 };
 
+struct BeatData {
+    std::array<uint32_t, kLoadBeatWords> words{};
+};
+
 struct ReqInfo {
     bool is_b = false;
     uint32_t addr = 0;
     uint32_t id = 0;
     uint32_t bufidx = 0;
     uint32_t row = 0;
-    uint32_t data = 0;
-    bool last = false;
+    uint32_t rows_in_beat = 1;
+    uint32_t beat = 0;
+    BeatData data;
     int age = 0;
+    std::string name;
+};
+
+struct PendingOut {
+    bool is_b = false;
+    uint32_t bufidx = 0;
+    uint32_t mask = 0;
+    uint32_t row_data[kSaWidth] = {};
+    bool last = false;
     std::string name;
 };
 
@@ -76,8 +112,79 @@ uint32_t row_addr(uint32_t tile_addr, int row) {
     return tile_addr * static_cast<uint32_t>(kSaWidth) + static_cast<uint32_t>(row);
 }
 
-uint32_t data_for(uint32_t addr, uint32_t id) {
-    return 0xa5000000u ^ (addr * 0x45d9f3bu) ^ (id * 0x10203u);
+uint32_t beat_addr(uint32_t tile_addr, int req) {
+    return tile_addr * static_cast<uint32_t>(kTileReqs) + static_cast<uint32_t>(req);
+}
+
+uint32_t low_mask32(int width) {
+    return width >= 32 ? ~uint32_t{0} : ((uint32_t{1} << width) - 1u);
+}
+
+uint32_t row_payload(uint32_t tile_addr, uint32_t row, bool is_b) {
+    const uint32_t addr = row_addr(tile_addr, static_cast<int>(row));
+    uint32_t value = 0xa5000000u ^ (addr * 0x45d9f3bu);
+    value ^= is_b ? 0x3c6ef372u : 0x9e3779b9u;
+    return value & low_mask32(kRowBits);
+}
+
+void set_beat_bits(BeatData& data, int start, int width, uint32_t value) {
+    for (int bit = 0; bit < width; ++bit) {
+        if (((value >> bit) & 1u) != 0) {
+            const int dst_bit = start + bit;
+            data.words[static_cast<size_t>(dst_bit / 32)] |=
+                uint32_t{1} << (dst_bit % 32);
+        }
+    }
+}
+
+uint32_t get_beat_bits_u32(const BeatData& data, int start, int width) {
+    uint32_t value = 0;
+    for (int bit = 0; bit < width; ++bit) {
+        const int src_bit = start + bit;
+        const uint32_t bit_value =
+            (data.words[static_cast<size_t>(src_bit / 32)] >> (src_bit % 32)) & 1u;
+        value |= bit_value << bit;
+    }
+    return value;
+}
+
+uint64_t beat_data_u64(const BeatData& data) {
+    uint64_t value = 0;
+    for (int word = 0; word < kLoadBeatWords && word < 2; ++word) {
+        value |= uint64_t{data.words[static_cast<size_t>(word)]} << (32 * word);
+    }
+    return value;
+}
+
+BeatData pack_wide_beat(uint32_t tile_addr,
+                        uint32_t row_start,
+                        uint32_t rows_in_beat,
+                        bool is_b) {
+    BeatData beat;
+    for (uint32_t off = 0; off < rows_in_beat; ++off) {
+        set_beat_bits(
+            beat,
+            static_cast<int>(off * kRowBits),
+            kRowBits,
+            row_payload(tile_addr, row_start + off, is_b)
+        );
+    }
+    return beat;
+}
+
+BeatData narrow_beat_data(uint32_t tile_addr,
+                          uint32_t row,
+                          uint32_t beat,
+                          bool is_b) {
+    BeatData data;
+    const uint32_t payload = row_payload(tile_addr, row, is_b);
+    set_beat_bits(
+        data,
+        0,
+        kLoadDataBits,
+        (payload >> (beat * kLoadDataBits)) & low_mask32(kLoadDataBits)
+    );
+    return data;
 }
 
 uint32_t parse_seed(int argc, char** argv) {
@@ -116,12 +223,16 @@ private:
     std::mt19937 rng_;
 
     std::deque<ReqInfo> expected_reqs_;
-    std::deque<ReqInfo> pending_outputs_;
+    std::deque<PendingOut> pending_outputs_;
     std::map<uint32_t, ReqInfo> inflight_;
     int a_rows_left_[kABufSize] = {};
     int b_rows_left_[kBBufSize] = {};
     uint32_t a_model_[kABufSize][kSaWidth] = {};
     uint32_t b_model_[kBBufSize][kSaWidth] = {};
+    uint32_t a_partial_[kABufSize][kSaWidth] = {};
+    uint32_t b_partial_[kBBufSize][kSaWidth] = {};
+    uint32_t a_mask_[kABufSize][kSaWidth] = {};
+    uint32_t b_mask_[kBBufSize][kSaWidth] = {};
 
     bool hold_active_ = false;
     uint32_t hold_id_ = 0;
@@ -137,7 +248,13 @@ private:
         dut_.mem_req_ready_i = 0;
         dut_.mem_rsp_valid_i = 0;
         dut_.mem_rsp_id_i = 0;
+#if LOAD_DATA_WIDTH_TEST <= 64
         dut_.mem_rsp_data_i = 0;
+#else
+        for (int word = 0; word < kLoadBeatWords; ++word) {
+            dut_.mem_rsp_data_i[word] = 0;
+        }
+#endif
     }
 
     void reset() {
@@ -208,11 +325,36 @@ private:
         }
 
         for (int row = 0; row < rows; ++row) {
+            if (load.is_b) {
+                b_partial_[bufidx][row] = 0;
+                b_mask_[bufidx][row] = 0;
+            } else {
+                a_partial_[bufidx][row] = 0;
+                a_mask_[bufidx][row] = 0;
+            }
+        }
+
+        const int req_count = kLoadWide ?
+            ((rows + kRowsPerBeat - 1) / kRowsPerBeat) :
+            (rows * kBeatsPerRow);
+        for (int req_idx = 0; req_idx < req_count; ++req_idx) {
             ReqInfo req;
             req.is_b = load.is_b;
-            req.addr = row_addr(load.addr, row);
+            req.addr = beat_addr(load.addr, req_idx);
             req.bufidx = bufidx;
-            req.row = static_cast<uint32_t>(row);
+            if (kLoadWide) {
+                req.row = static_cast<uint32_t>(req_idx * kRowsPerBeat);
+                req.rows_in_beat = static_cast<uint32_t>(
+                    std::min(kRowsPerBeat, rows - req_idx * kRowsPerBeat)
+                );
+                req.beat = 0;
+                req.data = pack_wide_beat(load.addr, req.row, req.rows_in_beat, load.is_b);
+            } else {
+                req.row = static_cast<uint32_t>(req_idx / kBeatsPerRow);
+                req.rows_in_beat = 1;
+                req.beat = static_cast<uint32_t>(req_idx % kBeatsPerRow);
+                req.data = narrow_beat_data(load.addr, req.row, req.beat, load.is_b);
+            }
             req.name = load.name;
             expected_reqs_.push_back(req);
         }
@@ -293,11 +435,23 @@ private:
         if (rsp == nullptr) {
             dut_.mem_rsp_valid_i = 0;
             dut_.mem_rsp_id_i = 0;
+#if LOAD_DATA_WIDTH_TEST <= 64
             dut_.mem_rsp_data_i = 0;
+#else
+            for (int word = 0; word < kLoadBeatWords; ++word) {
+                dut_.mem_rsp_data_i[word] = 0;
+            }
+#endif
         } else {
             dut_.mem_rsp_valid_i = 1;
             dut_.mem_rsp_id_i = rsp->id;
-            dut_.mem_rsp_data_i = rsp->data;
+#if LOAD_DATA_WIDTH_TEST <= 64
+            dut_.mem_rsp_data_i = beat_data_u64(rsp->data);
+#else
+            for (int word = 0; word < kLoadBeatWords; ++word) {
+                dut_.mem_rsp_data_i[word] = rsp->data.words[static_cast<size_t>(word)];
+            }
+#endif
         }
     }
 
@@ -310,27 +464,29 @@ private:
         }
     }
 
-    void check_response_outputs(const ReqInfo& rsp) {
-        const uint32_t onehot = uint32_t{1} << rsp.row;
-
-        if (rsp.is_b) {
+    void check_response_outputs(const PendingOut& out) {
+        if (out.is_b) {
             if (dut_.abuf_wr_valid_o || dut_.abuf_ready_valid_o) {
                 fail("A output asserted for B response");
             }
             if (!dut_.bbuf_wr_valid_o ||
-                dut_.bbuf_wr_idx_o != rsp.bufidx ||
-                dut_.bbuf_wr_bank_en_o != onehot ||
-                dut_.bbuf_wr_data_o[rsp.row] != rsp.data) {
+                dut_.bbuf_wr_idx_o != out.bufidx ||
+                dut_.bbuf_wr_bank_en_o != out.mask) {
                 std::ostringstream os;
                 os << "B write mismatch at cycle " << cycle_
-                   << " for " << rsp.name
-                   << ": buf=" << rsp.bufidx
-                   << " row=" << rsp.row
-                   << " data=" << hex32(rsp.data);
+                   << " for " << out.name
+                   << ": buf=" << out.bufidx
+                   << " mask=" << hex32(out.mask);
                 fail(os.str());
             }
-            if ((dut_.bbuf_ready_valid_o != (rsp.last ? 1 : 0)) ||
-                (rsp.last && dut_.bbuf_ready_idx_o != rsp.bufidx)) {
+            for (int row = 0; row < kSaWidth; ++row) {
+                if (((out.mask >> row) & 1u) != 0 &&
+                    dut_.bbuf_wr_data_o[row] != out.row_data[row]) {
+                    fail("B write data mismatch");
+                }
+            }
+            if ((dut_.bbuf_ready_valid_o != (out.last ? 1 : 0)) ||
+                (out.last && dut_.bbuf_ready_idx_o != out.bufidx)) {
                 fail("B ready pulse mismatch");
             }
         } else {
@@ -338,19 +494,23 @@ private:
                 fail("B output asserted for A response");
             }
             if (!dut_.abuf_wr_valid_o ||
-                dut_.abuf_wr_idx_o != rsp.bufidx ||
-                dut_.abuf_wr_bank_en_o != onehot ||
-                dut_.abuf_wr_data_o[rsp.row] != rsp.data) {
+                dut_.abuf_wr_idx_o != out.bufidx ||
+                dut_.abuf_wr_bank_en_o != out.mask) {
                 std::ostringstream os;
                 os << "A write mismatch at cycle " << cycle_
-                   << " for " << rsp.name
-                   << ": buf=" << rsp.bufidx
-                   << " row=" << rsp.row
-                   << " data=" << hex32(rsp.data);
+                   << " for " << out.name
+                   << ": buf=" << out.bufidx
+                   << " mask=" << hex32(out.mask);
                 fail(os.str());
             }
-            if ((dut_.abuf_ready_valid_o != (rsp.last ? 1 : 0)) ||
-                (rsp.last && dut_.abuf_ready_idx_o != rsp.bufidx)) {
+            for (int row = 0; row < kSaWidth; ++row) {
+                if (((out.mask >> row) & 1u) != 0 &&
+                    dut_.abuf_wr_data_o[row] != out.row_data[row]) {
+                    fail("A write data mismatch");
+                }
+            }
+            if ((dut_.abuf_ready_valid_o != (out.last ? 1 : 0)) ||
+                (out.last && dut_.abuf_ready_idx_o != out.bufidx)) {
                 fail("A ready pulse mismatch");
             }
         }
@@ -362,20 +522,64 @@ private:
             return;
         }
 
-        const ReqInfo rsp = pending_outputs_.front();
+        const PendingOut rsp = pending_outputs_.front();
         pending_outputs_.pop_front();
         check_response_outputs(rsp);
     }
 
-    void update_model_for_response(const ReqInfo& rsp) {
-        if (rsp.is_b) {
-            b_model_[rsp.bufidx][rsp.row] = rsp.data;
-            --b_rows_left_[rsp.bufidx];
+    bool update_model_for_response(const ReqInfo& rsp, PendingOut& out) {
+        out.is_b = rsp.is_b;
+        out.bufidx = rsp.bufidx;
+        out.mask = 0;
+        out.last = false;
+        out.name = rsp.name;
+        for (int row = 0; row < kSaWidth; ++row) {
+            out.row_data[row] = 0;
+        }
+
+        if (kLoadWide) {
+            int& rows_left = rsp.is_b ? b_rows_left_[rsp.bufidx] : a_rows_left_[rsp.bufidx];
+            out.last = rows_left == static_cast<int>(rsp.rows_in_beat);
+            for (uint32_t off = 0; off < rsp.rows_in_beat; ++off) {
+                const uint32_t row = rsp.row + off;
+                const uint32_t data =
+                    get_beat_bits_u32(rsp.data, static_cast<int>(off * kRowBits), kRowBits);
+                out.mask |= uint32_t{1} << row;
+                out.row_data[row] = data;
+                if (rsp.is_b) {
+                    b_model_[rsp.bufidx][row] = data;
+                } else {
+                    a_model_[rsp.bufidx][row] = data;
+                }
+            }
+            rows_left -= static_cast<int>(rsp.rows_in_beat);
         } else {
-            a_model_[rsp.bufidx][rsp.row] = rsp.data;
-            --a_rows_left_[rsp.bufidx];
+            uint32_t& partial =
+                rsp.is_b ? b_partial_[rsp.bufidx][rsp.row] : a_partial_[rsp.bufidx][rsp.row];
+            uint32_t& mask =
+                rsp.is_b ? b_mask_[rsp.bufidx][rsp.row] : a_mask_[rsp.bufidx][rsp.row];
+            int& rows_left = rsp.is_b ? b_rows_left_[rsp.bufidx] : a_rows_left_[rsp.bufidx];
+            partial |= get_beat_bits_u32(rsp.data, 0, kLoadDataBits) <<
+                       (rsp.beat * kLoadDataBits);
+            mask |= uint32_t{1} << rsp.beat;
+            if (mask != ((uint32_t{1} << kBeatsPerRow) - 1u)) {
+                inflight_.erase(rsp.id);
+                return false;
+            }
+            out.last = rows_left == 1;
+            out.mask = uint32_t{1} << rsp.row;
+            out.row_data[rsp.row] = partial;
+            if (rsp.is_b) {
+                b_model_[rsp.bufidx][rsp.row] = partial;
+            } else {
+                a_model_[rsp.bufidx][rsp.row] = partial;
+            }
+            partial = 0;
+            mask = 0;
+            --rows_left;
         }
         inflight_.erase(rsp.id);
+        return true;
     }
 
     void check_request_stability(bool req_fire) {
@@ -407,7 +611,6 @@ private:
         ReqInfo req = expected_reqs_.front();
         expected_reqs_.pop_front();
         req.id = static_cast<uint32_t>(dut_.mem_req_id_o);
-        req.data = data_for(req.addr, req.id);
 
         if (dut_.mem_req_addr_o != req.addr) {
             std::ostringstream os;
@@ -459,11 +662,6 @@ private:
                 enqueue_expected_reqs(loads[load_idx]);
             }
 
-            if (have_rsp) {
-                int* rows_left_arr = rsp.is_b ? b_rows_left_ : a_rows_left_;
-                rsp.last = rows_left_arr[rsp.bufidx] == 1;
-            }
-
             check_request_stability(req_fire);
             ReqInfo fired_req;
             bool have_fired_req = false;
@@ -475,8 +673,10 @@ private:
             tick_raw();
 
             if (have_rsp) {
-                update_model_for_response(rsp);
-                pending_outputs_.push_back(rsp);
+                PendingOut out;
+                if (update_model_for_response(rsp, out)) {
+                    pending_outputs_.push_back(out);
+                }
             }
             if (have_fired_req) {
                 inflight_[fired_req.id] = fired_req;

@@ -41,8 +41,13 @@ module top_static #(
     parameter int ABUF_IDX_WIDTH  = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
     parameter int BBUF_IDX_WIDTH  = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH  = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
-    parameter int LOAD_BUS_ID_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH * 2),
     parameter int ROW8_WIDTH      = SUBTILE_K * 8,
+    parameter int LOAD_DATA_WIDTH = 256,
+    parameter int LOAD_BUS_ID_WIDTH =
+        ((SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+          (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)) <= 1) ? 1 :
+        $clog2(SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+          (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)),
     parameter int ROW32_WIDTH     = SA_WIDTH * 32,
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
     parameter int STORE_MEM_DATA_WIDTH = ROW32_WIDTH / STORE_ROW_WRITE_BEATS,
@@ -77,7 +82,7 @@ module top_static #(
     input  logic load_mem_rsp_valid_i,
     output logic load_mem_rsp_ready_o,
     input  logic [LOAD_BUS_ID_WIDTH-1:0] load_mem_rsp_id_i,
-    input  logic [ROW8_WIDTH-1:0] load_mem_rsp_data_i,
+    input  logic [LOAD_DATA_WIDTH-1:0] load_mem_rsp_data_i,
 
     output logic store_mem_wr_valid_o,
     input  logic store_mem_wr_ready_i,
@@ -93,6 +98,27 @@ module top_static #(
         end
         if (SUBTILE_K <= 0) begin
             $error("SUBTILE_K must be positive");
+        end
+        if ((SUBTILE_K & (SUBTILE_K - 1)) != 0) begin
+            $error("SUBTILE_K must be a power of two");
+        end
+        if (ROW8_WIDTH != SUBTILE_K * 8) begin
+            $error("ROW8_WIDTH must equal SUBTILE_K * 8");
+        end
+        if (LOAD_DATA_WIDTH <= 0) begin
+            $error("LOAD_DATA_WIDTH must be positive");
+        end
+        if ((LOAD_DATA_WIDTH & (LOAD_DATA_WIDTH - 1)) != 0) begin
+            $error("LOAD_DATA_WIDTH must be a power of two");
+        end
+        if ((LOAD_DATA_WIDTH % 8) != 0) begin
+            $error("LOAD_DATA_WIDTH must be byte-aligned");
+        end
+        if (!((LOAD_DATA_WIDTH >= ROW8_WIDTH &&
+               (LOAD_DATA_WIDTH % ROW8_WIDTH) == 0) ||
+              (ROW8_WIDTH >= LOAD_DATA_WIDTH &&
+               (ROW8_WIDTH % LOAD_DATA_WIDTH) == 0))) begin
+            $error("LOAD_DATA_WIDTH and ROW8_WIDTH must divide each other");
         end
         if (LANE_NUM <= 0) begin
             $error("LANE_NUM must be positive");
@@ -252,7 +278,8 @@ module top_static #(
         .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),
         .BUS_ID_WIDTH(LOAD_BUS_ID_WIDTH),
         .ROWS_LEFT_WIDTH(LOAD_ROWS_WIDTH),
-        .ROW_DATA_WIDTH(ROW8_WIDTH)
+        .ROW_DATA_WIDTH(ROW8_WIDTH),
+        .LOAD_DATA_WIDTH(LOAD_DATA_WIDTH)
     ) u_loadunit (
         .clk(clk),
         .rst_n(rst_n),
