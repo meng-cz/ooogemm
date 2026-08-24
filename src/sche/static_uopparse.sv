@@ -33,6 +33,7 @@
 
 module static_uopparse #(
     parameter int SA_WIDTH       = 4,
+    parameter int SUBTILE_K      = 32,
     parameter int ABUF_SIZE      = 8,
     parameter int BBUF_SIZE      = 8,
     parameter int PACC_NUM       = 16,
@@ -160,6 +161,9 @@ module static_uopparse #(
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
         end
+        if (SUBTILE_K <= 0) begin
+            $error("SUBTILE_K must be positive");
+        end
         if (ABUF_SIZE < 2) begin
             $error("ABUF_SIZE must be at least two for ping-pong buffering");
         end
@@ -194,15 +198,26 @@ module static_uopparse #(
         ST_OUTPUT
     } state_t;
 
-    function automatic tile_count_t ceil_tiles(input logic [DIM_WIDTH-1:0] dim);
+    function automatic tile_count_t ceil_tiles_by(
+        input logic [DIM_WIDTH-1:0] dim,
+        input int                   tile_size
+    );
         logic [TILE_COUNT_WIDTH:0] extended;
         logic [TILE_COUNT_WIDTH:0] divisor;
         begin
             extended = {{(TILE_COUNT_WIDTH + 1 - DIM_WIDTH){1'b0}}, dim} +
-                       tile_count_t'(SA_WIDTH - 1);
-            divisor = (TILE_COUNT_WIDTH + 1)'(SA_WIDTH);
+                       tile_count_t'(tile_size - 1);
+            divisor = (TILE_COUNT_WIDTH + 1)'(tile_size);
             return tile_count_t'(extended / divisor);
         end
+    endfunction
+
+    function automatic tile_count_t ceil_tiles(input logic [DIM_WIDTH-1:0] dim);
+        return ceil_tiles_by(dim, SA_WIDTH);
+    endfunction
+
+    function automatic tile_count_t ceil_k_tiles(input logic [DIM_WIDTH-1:0] dim);
+        return ceil_tiles_by(dim, SUBTILE_K);
     endfunction
 
     function automatic tile_count_t min_int_tile(
@@ -345,7 +360,7 @@ module static_uopparse #(
     always_comb begin
         cmd_tm_comb = ceil_tiles(cmd_m_i);
         cmd_tn_comb = ceil_tiles(cmd_n_i);
-        cmd_tk_comb = ceil_tiles(cmd_k_i);
+        cmd_tk_comb = ceil_k_tiles(cmd_k_i);
         cmd_output_tiles_per_batch_comb = cmd_tm_comb * cmd_tn_comb;
         command_has_tiles_comb =
             (cmd_batch_i != '0) &&

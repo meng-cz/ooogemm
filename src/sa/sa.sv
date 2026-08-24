@@ -20,7 +20,8 @@
 //      allocated lane with ain_laneidx/bin_laneidx. A valid A write fills all
 //      left-row lane buffers for that lane; a valid B write fills all top-column
 //      lane buffers for that lane. The B matrix is expected in transposed form:
-//      bin_data[col][k] is B[k][col].
+//      bin_data[col][k] is B[k][col]. Each row/column payload carries
+//      SUBTILE_K FP8 values.
 //   3. Every cycle the scheduler scans lanes in increasing lane order and
 //      chooses the first lane whose current write-side slot has both A and B
 //      ready, whose physical lane is inactive or in its last active cycle, and
@@ -30,10 +31,10 @@
 //      dependent GEMM that starts after one bubble can use paccreg's s3->s1
 //      bypass, while a back-to-back same-PACC start would still read stale data.
 //   4. The selected lane flips all of its A/B lane buffers on that clock edge.
-//      On the following cycles, the lane is active for exactly SA_WIDTH cycles
-//      and reads rdidx=0..SA_WIDTH-1 from the just-flipped read-side buffers.
+//      On the following cycles, the lane is active for exactly SUBTILE_K cycles
+//      and reads rdidx=0..SUBTILE_K-1 from the just-flipped read-side buffers.
 //   5. During those active cycles, the left-edge stream asserts first on rdidx=0
-//      and last on rdidx=SA_WIDTH-1. The saved paccidx/accum travel with the
+//      and last on rdidx=SUBTILE_K-1. The saved paccidx/accum travel with the
 //      left-edge stream and are consumed by each PE when its fdot sees last.
 //      Row and column skew buffers delay the boundary streams so A[row][k] and
 //      B[k][col] meet at PE[row][col]; PE forwarding then moves A right and B
@@ -77,6 +78,7 @@ endpackage
 
 module sa #(
     parameter int SA_WIDTH        = 4,
+    parameter int SUBTILE_K       = 32,
     parameter int LANE_NUM        = 4,
     parameter int LANE_IDX_WIDTH  = (LANE_NUM <= 1) ? 1 : $clog2(LANE_NUM),
     parameter int PACC_NUM        = 16,
@@ -86,17 +88,18 @@ module sa #(
     parameter int FDOT_ACC_WIDTH  = 96,
     parameter int FDOT_ACC_FRAC_BITS = 18,
     parameter int GEMM_INSTID_WIDTH = 16,
-    parameter int SA_IDX_WIDTH    = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH)
+    parameter int SA_IDX_WIDTH    = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH),
+    parameter int K_IDX_WIDTH     = (SUBTILE_K <= 1) ? 1 : $clog2(SUBTILE_K)
 ) (
     input  logic clk,
     input  logic rst_n,
 
     input  logic ain_valid,
-    input  logic [SA_WIDTH*8-1:0] ain_data [SA_WIDTH],
+    input  logic [SUBTILE_K*8-1:0] ain_data [SA_WIDTH],
     input  logic [LANE_IDX_WIDTH-1:0] ain_laneidx,
 
     input  logic bin_valid,
-    input  logic [SA_WIDTH*8-1:0] bin_data [SA_WIDTH],
+    input  logic [SUBTILE_K*8-1:0] bin_data [SA_WIDTH],
     input  logic [LANE_IDX_WIDTH-1:0] bin_laneidx,
 
     input  logic gemm_valid,
@@ -124,6 +127,9 @@ module sa #(
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
         end
+        if (SUBTILE_K <= 0) begin
+            $error("SUBTILE_K must be positive");
+        end
         if (LANE_NUM <= 0) begin
             $error("LANE_NUM must be positive");
         end
@@ -139,7 +145,7 @@ module sa #(
     end
 
     localparam int GEMM_FINISH_LATENCY =
-        (3 * SA_WIDTH) + fdot8e4m3_pkg::LAST_TO_OUT_LATENCY +
+        (2 * SA_WIDTH) + SUBTILE_K + fdot8e4m3_pkg::LAST_TO_OUT_LATENCY +
         paccreg_pkg::ACCUM_PIPE_STAGES + 3;
 
     logic slot_in_use [LANE_NUM][2];
@@ -151,7 +157,7 @@ module sa #(
 
     logic lane_rd_sel [LANE_NUM];
     logic lane_active [LANE_NUM];
-    logic [SA_IDX_WIDTH-1:0] lane_count [LANE_NUM];
+    logic [K_IDX_WIDTH-1:0] lane_count [LANE_NUM];
     logic [PACC_IDX_WIDTH-1:0] lane_paccidx [LANE_NUM];
     logic lane_accum [LANE_NUM];
     logic last_start_valid_q;
@@ -166,7 +172,7 @@ module sa #(
             lane_rd_slot[lane] = {1'b0, lane_rd_sel[lane]};
             lane_wr_slot[lane] = {1'b0, ~lane_rd_sel[lane]};
             lane_last_cycle[lane] = lane_active[lane] &&
-                (int'(lane_count[lane]) == (SA_WIDTH - 1));
+                (int'(lane_count[lane]) == (SUBTILE_K - 1));
         end
     end
 
@@ -180,7 +186,7 @@ module sa #(
     always_comb begin
         alloc_found = 1'b0;
         alloc_lane_comb = '0;
-        alloc_best_wait_comb = SA_WIDTH;
+        alloc_best_wait_comb = SUBTILE_K;
         for (int lane = 0; lane < LANE_NUM; lane++) begin
             lane_alloc_pending_comb[lane] =
                 slot_in_use[lane][lane_wr_slot[lane][0]];
@@ -188,9 +194,9 @@ module sa #(
                 !lane_alloc_pending_comb[lane];
 
             if (lane_active[lane]) begin
-                alloc_wait_comb[lane] = (SA_WIDTH - 1) - int'(lane_count[lane]);
+                alloc_wait_comb[lane] = (SUBTILE_K - 1) - int'(lane_count[lane]);
             end else if (lane_alloc_pending_comb[lane]) begin
-                alloc_wait_comb[lane] = SA_WIDTH;
+                alloc_wait_comb[lane] = SUBTILE_K;
             end else begin
                 alloc_wait_comb[lane] = 0;
             end
@@ -275,7 +281,8 @@ module sa #(
             for (buf_lane = 0; buf_lane < LANE_NUM; buf_lane++) begin : gen_a_lanebuf_lane
                 lanebuf #(
                     .SA_WIDTH(SA_WIDTH),
-                    .SA_IDX_WIDTH(SA_IDX_WIDTH)
+                    .SUBTILE_K(SUBTILE_K),
+                    .K_IDX_WIDTH(K_IDX_WIDTH)
                 ) u_a_lanebuf (
                     .clk(clk),
                     .rst_n(rst_n),
@@ -292,7 +299,8 @@ module sa #(
             for (buf_lane = 0; buf_lane < LANE_NUM; buf_lane++) begin : gen_b_lanebuf_lane
                 lanebuf #(
                     .SA_WIDTH(SA_WIDTH),
-                    .SA_IDX_WIDTH(SA_IDX_WIDTH)
+                    .SUBTILE_K(SUBTILE_K),
+                    .K_IDX_WIDTH(K_IDX_WIDTH)
                 ) u_b_lanebuf (
                     .clk(clk),
                     .rst_n(rst_n),
@@ -669,7 +677,7 @@ module sa #(
                         lane_count[lane] <= '0;
                     end else begin
                         lane_count[lane] <= lane_count[lane] +
-                            {{(SA_IDX_WIDTH-1){1'b0}}, 1'b1};
+                            {{(K_IDX_WIDTH-1){1'b0}}, 1'b1};
                     end
                 end
             end

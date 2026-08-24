@@ -27,6 +27,7 @@
 
 module top_static #(
     parameter int SA_WIDTH        = 32,
+    parameter int SUBTILE_K       = 32,
     parameter int LANE_NUM        = 4,
     parameter int ABUF_SIZE       = 64,
     parameter int BBUF_SIZE       = 64,
@@ -41,7 +42,7 @@ module top_static #(
     parameter int BBUF_IDX_WIDTH  = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH  = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
     parameter int LOAD_BUS_ID_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH * 2),
-    parameter int ROW8_WIDTH      = SA_WIDTH * 8,
+    parameter int ROW8_WIDTH      = SUBTILE_K * 8,
     parameter int ROW32_WIDTH     = SA_WIDTH * 32,
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
     parameter int STORE_MEM_DATA_WIDTH = ROW32_WIDTH / STORE_ROW_WRITE_BEATS,
@@ -89,6 +90,9 @@ module top_static #(
     initial begin
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
+        end
+        if (SUBTILE_K <= 0) begin
+            $error("SUBTILE_K must be positive");
         end
         if (LANE_NUM <= 0) begin
             $error("LANE_NUM must be positive");
@@ -167,6 +171,7 @@ module top_static #(
 
     static_uopparse #(
         .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_K(SUBTILE_K),
         .ABUF_SIZE(ABUF_SIZE),
         .BBUF_SIZE(BBUF_SIZE),
         .PACC_NUM(PACC_NUM),
@@ -239,6 +244,7 @@ module top_static #(
 
     loadunit #(
         .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_K(SUBTILE_K),
         .ABUF_SIZE(ABUF_SIZE),
         .BBUF_SIZE(BBUF_SIZE),
         .ADDR_WIDTH(ADDR_WIDTH),
@@ -291,6 +297,7 @@ module top_static #(
     oprandbuf #(
         .BUF_SIZE(ABUF_SIZE),
         .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_K(SUBTILE_K),
         .BUF_IDX_WIDTH(ABUF_IDX_WIDTH),
         .BANK_DATA_WIDTH(ROW8_WIDTH)
     ) u_abuf (
@@ -309,6 +316,7 @@ module top_static #(
     oprandbuf #(
         .BUF_SIZE(BBUF_SIZE),
         .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_K(SUBTILE_K),
         .BUF_IDX_WIDTH(BBUF_IDX_WIDTH),
         .BANK_DATA_WIDTH(ROW8_WIDTH)
     ) u_bbuf (
@@ -381,6 +389,7 @@ module top_static #(
 
     sa #(
         .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_K(SUBTILE_K),
         .LANE_NUM(LANE_NUM),
         .LANE_IDX_WIDTH(LANE_IDX_WIDTH),
         .PACC_NUM(PACC_NUM),
@@ -499,6 +508,8 @@ module top_static #(
     always_comb begin
         for (int i = 0; i < SA_WIDTH; i++) begin
             sa_ain_data[i] = abuf_rd_data[i];
+            // BBuf is already laid out as the transposed B view: bank/row i is
+            // the data for SA column i. Forward it unchanged into the array.
             sa_bin_data[i] = bbuf_rd_data[i];
         end
     end

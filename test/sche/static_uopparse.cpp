@@ -15,6 +15,9 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 32
 #endif
+#ifndef SUBTILE_K_TEST
+#define SUBTILE_K_TEST 32
+#endif
 #ifndef ABUF_SIZE_TEST
 #define ABUF_SIZE_TEST 4
 #endif
@@ -26,6 +29,7 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kABufGroupSize = ABUF_SIZE_TEST / 2;
 constexpr int kBBufGroupSize = BBUF_SIZE_TEST / 2;
 
@@ -491,28 +495,28 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     try {
         run_case("two_by_two_two_k", 0x1000, 0x2000, 0x3000,
-                 2 * kSaWidth, 2 * kSaWidth, 2 * kSaWidth,
+                 2 * kSaWidth, 2 * kSaWidth, 2 * kSubtileK,
                  1,
                  two_by_two_two_k(0x1000, 0x2000, 0x3000));
         run_case("two_blocks", 0x4000, 0x5000, 0x6000,
-                 2 * kSaWidth, 3 * kSaWidth, 2 * kSaWidth,
+                 2 * kSaWidth, 3 * kSaWidth, 2 * kSubtileK,
                  1,
                  two_blocks(0x4000, 0x5000, 0x6000));
         run_command_stream(
             "two_command_group_flip",
             {
-                Cmd{0x7000, 0x8000, 0x9000, kSaWidth, kSaWidth, kSaWidth},
-                Cmd{0x7100, 0x8100, 0x9100, kSaWidth, kSaWidth, kSaWidth},
+                Cmd{0x7000, 0x8000, 0x9000, kSaWidth, kSaWidth, kSubtileK},
+                Cmd{0x7100, 0x8100, 0x9100, kSaWidth, kSaWidth, kSubtileK},
             },
             two_single_tile_commands(0x7000, 0x8000, 0x9000,
                                      0x7100, 0x8100, 0x9100)
         );
         run_case("tail_rows", 0xa000, 0xb000, 0xc000,
-                 kSaWidth + 3, kSaWidth + (kSaWidth > 5 ? kSaWidth - 5 : 1), kSaWidth,
+                 kSaWidth + 3, kSaWidth + (kSaWidth > 5 ? kSaWidth - 5 : 1), kSubtileK,
                  1,
                  tail_rows(0xa000, 0xb000, 0xc000));
         run_case("two_batch_single_tile_merge", 0xd000, 0xe000, 0xf000,
-                 kSaWidth, kSaWidth, kSaWidth,
+                 kSaWidth, kSaWidth, kSubtileK,
                  2,
                  two_batch_single_tile(0xd000, 0xe000, 0xf000));
         std::cout << "static_uopparse tests passed\n";

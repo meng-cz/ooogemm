@@ -19,6 +19,9 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 2
 #endif
+#ifndef SUBTILE_K_TEST
+#define SUBTILE_K_TEST 3
+#endif
 #ifndef LANE_NUM_TEST
 #define LANE_NUM_TEST 2
 #endif
@@ -36,6 +39,7 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kLaneNum = LANE_NUM_TEST;
 constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
@@ -44,6 +48,8 @@ constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 
 static_assert(kSaWidth >= 2, "this testbench expects SA_WIDTH_TEST>=2");
 static_assert(kSaWidth <= 4, "this testbench supports SA_WIDTH_TEST<=4");
+static_assert(kSubtileK >= 2, "this testbench expects SUBTILE_K_TEST>=2");
+static_assert(kSubtileK <= 4, "this testbench supports SUBTILE_K_TEST<=4");
 static_assert(kLaneNum >= 2, "this testbench expects at least two lanes");
 
 struct DecodedFp8 {
@@ -60,8 +66,8 @@ struct Pseudo {
 };
 
 struct Matrix {
-    uint8_t a[kSaWidth][kSaWidth] = {};
-    uint8_t b[kSaWidth][kSaWidth] = {};
+    uint8_t a[kSaWidth][kSubtileK] = {};
+    uint8_t b[kSubtileK][kSaWidth] = {};
 };
 
 struct ExpectedRow {
@@ -246,15 +252,15 @@ uint32_t pseudo_to_fp32_bits(const Pseudo& value) {
 Pseudo reference_cell(const Matrix& m, int row, int col) {
     bool saw_nan = false;
     long double sum = 0.0L;
-    for (int k = 0; k < kSaWidth; ++k) {
+    for (int k = 0; k < kSubtileK; ++k) {
         sum += fp8_product(m.a[row][k], m.b[k][col], saw_nan);
     }
     return pseudo_from_long_double(sum, saw_nan);
 }
 
-uint32_t pack_row(const uint8_t row[kSaWidth]) {
+uint32_t pack_row(const uint8_t row[kSubtileK]) {
     uint32_t bits = 0;
-    for (int i = 0; i < kSaWidth; ++i) {
+    for (int i = 0; i < kSubtileK; ++i) {
         bits |= static_cast<uint32_t>(row[i]) << (8 * i);
     }
     return bits;
@@ -471,10 +477,12 @@ private:
             dut_.ain_data[row] = pack_row(m.a[row]);
         }
         for (int col = 0; col < kSaWidth; ++col) {
-            uint8_t transposed_col[kSaWidth] = {};
-            for (int k = 0; k < kSaWidth; ++k) {
+            uint8_t transposed_col[kSubtileK] = {};
+            for (int k = 0; k < kSubtileK; ++k) {
                 transposed_col[k] = m.b[k][col];
             }
+            // SA bin_data expects the already-transposed B view from memory:
+            // one row per output column, ordered by K inside the row.
             dut_.bin_data[col] = pack_row(transposed_col);
         }
         tick();
@@ -495,10 +503,12 @@ private:
         dut_.bin_valid = 1;
         dut_.bin_laneidx = static_cast<uint32_t>(lane);
         for (int col = 0; col < kSaWidth; ++col) {
-            uint8_t transposed_col[kSaWidth] = {};
-            for (int k = 0; k < kSaWidth; ++k) {
+            uint8_t transposed_col[kSubtileK] = {};
+            for (int k = 0; k < kSubtileK; ++k) {
                 transposed_col[k] = m.b[k][col];
             }
+            // SA bin_data expects the already-transposed B view from memory:
+            // one row per output column, ordered by K inside the row.
             dut_.bin_data[col] = pack_row(transposed_col);
         }
         tick();
@@ -523,10 +533,12 @@ private:
             dut_.ain_data[row] = pack_row(m.a[row]);
         }
         for (int col = 0; col < kSaWidth; ++col) {
-            uint8_t transposed_col[kSaWidth] = {};
-            for (int k = 0; k < kSaWidth; ++k) {
+            uint8_t transposed_col[kSubtileK] = {};
+            for (int k = 0; k < kSubtileK; ++k) {
                 transposed_col[k] = m.b[k][col];
             }
+            // SA bin_data expects the already-transposed B view from memory:
+            // one row per output column, ordered by K inside the row.
             dut_.bin_data[col] = pack_row(transposed_col);
         }
 
@@ -549,9 +561,13 @@ private:
     Matrix deterministic_matrix(uint8_t base) {
         Matrix m{};
         for (int row = 0; row < kSaWidth; ++row) {
+            for (int k = 0; k < kSubtileK; ++k) {
+                m.a[row][k] = static_cast<uint8_t>(base + ((row + k) & 0x3));
+            }
+        }
+        for (int k = 0; k < kSubtileK; ++k) {
             for (int col = 0; col < kSaWidth; ++col) {
-                m.a[row][col] = static_cast<uint8_t>(base + ((row + col) & 0x3));
-                m.b[row][col] = static_cast<uint8_t>(0x30 + (((row * 2) + col) & 0x7));
+                m.b[k][col] = static_cast<uint8_t>(0x30 + (((k * 2) + col) & 0x7));
             }
         }
         return m;
@@ -604,7 +620,7 @@ private:
     }
 
     void continuous_allocator_order_test() {
-        if (kSaWidth != 4 || kLaneNum != 4) {
+        if (kSaWidth != 4 || kSubtileK != 4 || kLaneNum != 4) {
             return;
         }
 
@@ -705,12 +721,16 @@ private:
         std::uniform_int_distribution<int> zero_dist(0, 9);
         std::uniform_int_distribution<int> nan_dist(0, 79);
         for (int row = 0; row < kSaWidth; ++row) {
-            for (int col = 0; col < kSaWidth; ++col) {
-                m.a[row][col] = (zero_dist(rng_) == 0) ? 0 : random_finite_e4m3(rng_);
-                m.b[row][col] = (zero_dist(rng_) == 0) ? 0 : random_finite_e4m3(rng_);
+            for (int k = 0; k < kSubtileK; ++k) {
+                m.a[row][k] = (zero_dist(rng_) == 0) ? 0 : random_finite_e4m3(rng_);
                 if (nan_dist(rng_) == 0) {
-                    m.a[row][col] = 0x7f;
+                    m.a[row][k] = 0x7f;
                 }
+            }
+        }
+        for (int k = 0; k < kSubtileK; ++k) {
+            for (int col = 0; col < kSaWidth; ++col) {
+                m.b[k][col] = (zero_dist(rng_) == 0) ? 0 : random_finite_e4m3(rng_);
             }
         }
         return m;

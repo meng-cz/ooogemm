@@ -1,10 +1,13 @@
 // Load uop pipeline.
 //
-// A LOAD uop names one SA_WIDTH x SA_WIDTH operand tile in external memory and
-// one destination slot in ABuf or BBuf.  The uop also carries the number of
-// valid rows in the tile.  The load unit only issues memory requests for those
-// rows and writes zero to invalid destination row banks locally.  This preserves
-// padded GEMM semantics while saving tail-tile memory bandwidth.
+// A LOAD uop names one SA_WIDTH x SUBTILE_K A tile or a B tile stored in
+// transposed-view form in external memory: SA_WIDTH rows, one per output
+// column, each row containing SUBTILE_K K-direction FP8 values.  The load unit
+// does not transpose or reorder row payloads; memory row N is written directly
+// to operand-buffer bank N.  The uop also carries the number of valid rows in
+// the tile.  The load unit only issues memory requests for those rows and
+// writes zero to invalid destination row banks locally.  This preserves padded
+// GEMM semantics while saving tail-tile memory bandwidth.
 //
 // The external memory interface is a simplified read-only, AXI-lite-like
 // protocol with explicit transaction IDs:
@@ -31,6 +34,7 @@
 
 module loadunit #(
     parameter int SA_WIDTH       = 4,
+    parameter int SUBTILE_K      = 32,
     parameter int ABUF_SIZE      = 8,
     parameter int BBUF_SIZE      = 8,
     parameter int ADDR_WIDTH     = 32,
@@ -39,7 +43,7 @@ module loadunit #(
     parameter int BUS_ID_WIDTH   = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH * 2),
     parameter int OUTSTANDING_NUM = (1 << BUS_ID_WIDTH),
     parameter int ROW_IDX_WIDTH  = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH),
-    parameter int ROW_DATA_WIDTH = SA_WIDTH * 8,
+    parameter int ROW_DATA_WIDTH = SUBTILE_K * 8,
     parameter int ROWS_LEFT_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1)
 ) (
     input  logic clk,
@@ -83,6 +87,9 @@ module loadunit #(
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
         end
+        if (SUBTILE_K <= 0) begin
+            $error("SUBTILE_K must be positive");
+        end
         if (ABUF_SIZE <= 0) begin
             $error("ABUF_SIZE must be positive");
         end
@@ -101,8 +108,8 @@ module loadunit #(
         if (OUTSTANDING_NUM != (1 << BUS_ID_WIDTH)) begin
             $error("OUTSTANDING_NUM must equal 1 << BUS_ID_WIDTH");
         end
-        if (ROW_DATA_WIDTH != SA_WIDTH * 8) begin
-            $error("ROW_DATA_WIDTH must equal SA_WIDTH * 8");
+        if (ROW_DATA_WIDTH != SUBTILE_K * 8) begin
+            $error("ROW_DATA_WIDTH must equal SUBTILE_K * 8");
         end
     end
 

@@ -23,6 +23,9 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 2
 #endif
+#ifndef SUBTILE_K_TEST
+#define SUBTILE_K_TEST 2
+#endif
 #ifndef LANE_NUM_TEST
 #define LANE_NUM_TEST 2
 #endif
@@ -49,6 +52,7 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kLaneNum = LANE_NUM_TEST;
 constexpr int kABufSize = ABUF_SIZE_TEST;
 constexpr int kBBufSize = BBUF_SIZE_TEST;
@@ -57,7 +61,7 @@ constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
 constexpr int kRowWriteBeats = STORE_ROW_WRITE_BEATS_TEST;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
-constexpr int kLoadRowBits = kSaWidth * 8;
+constexpr int kLoadRowBits = kSubtileK * 8;
 constexpr int kLoadRowWords = (kLoadRowBits + 31) / 32;
 constexpr bool kBigTest = TOP_STATIC_BIG_TEST != 0;
 constexpr int kParserBlockM = 4;
@@ -283,9 +287,9 @@ uint8_t get_elem(const std::vector<uint8_t>& matrix, int rows, int cols, int row
     return matrix[static_cast<size_t>(row * cols + col)];
 }
 
-RowData pack_row(const uint8_t row[kSaWidth]) {
+RowData pack_row(const uint8_t row[kSubtileK]) {
     RowData data;
-    for (int i = 0; i < kSaWidth; ++i) {
+    for (int i = 0; i < kSubtileK; ++i) {
         const int word = i / 4;
         const int byte = i % 4;
         data.words[static_cast<size_t>(word)] |=
@@ -298,14 +302,18 @@ int ceil_tiles(int dim) {
     return (dim + kSaWidth - 1) / kSaWidth;
 }
 
+int ceil_k_tiles(int dim) {
+    return (dim + kSubtileK - 1) / kSubtileK;
+}
+
 Pseudo reference_tile_cell(const Cmd& cmd, int tile_m, int tile_n, int tile_k,
                            int local_m, int local_n) {
     bool saw_nan = false;
     long double sum = 0.0L;
-    for (int kk = 0; kk < kSaWidth; ++kk) {
+    for (int kk = 0; kk < kSubtileK; ++kk) {
         const int global_m = tile_m * kSaWidth + local_m;
         const int global_n = tile_n * kSaWidth + local_n;
-        const int global_k = tile_k * kSaWidth + kk;
+        const int global_k = tile_k * kSubtileK + kk;
         const uint8_t a = get_elem(cmd.a, cmd.m, cmd.k, global_m, global_k);
         const uint8_t b = get_elem(cmd.b, cmd.k, cmd.n, global_k, global_n);
         sum += fp8_product(a, b, saw_nan);
@@ -372,7 +380,7 @@ private:
     }
 
     void drive_load_rsp_data(const RowData& data) {
-#if (SA_WIDTH_TEST * 8) <= 32
+#if (SUBTILE_K_TEST * 8) <= 32
         dut_.load_mem_rsp_data_i = data.words[0];
 #else
         for (int i = 0; i < kLoadRowWords; ++i) {
@@ -521,11 +529,11 @@ private:
         push_pattern_cmd("det_zero_m", 0, 17, 9, 0x1001u);
         push_pattern_cmd("det_tiny_1x1x1", 1, 1, 1, 0x1002u);
         push_pattern_cmd("det_subtile_31x17x5", 31, 17, 5, 0x1003u);
-        push_pattern_cmd("det_exact_32x32x32", 32, 32, 32, 0x1004u);
-        push_pattern_cmd("det_cross_33x33x33", 33, 33, 33, 0x1005u);
-        push_pattern_cmd("det_rect_65x7x64", 65, 7, 64, 0x1006u);
-        push_pattern_cmd("det_multi_block_square_161x161x97", 161, 161, 97, 0x1007u);
-        push_pattern_cmd("det_multi_block_rect_257x193x129", 257, 193, 129, 0x1008u);
+        push_pattern_cmd("det_exact_32x32x32", 32, 32, kSubtileK, 0x1004u);
+        push_pattern_cmd("det_cross_33x33x33", 33, 33, kSubtileK + 1, 0x1005u);
+        push_pattern_cmd("det_rect_65x7x64", 65, 7, 2 * kSubtileK, 0x1006u);
+        push_pattern_cmd("det_multi_block_square_161x161x97", 161, 161, 3 * kSubtileK + 1, 0x1007u);
+        push_pattern_cmd("det_multi_block_rect_257x193x129", 257, 193, 4 * kSubtileK + 1, 0x1008u);
 
         const int dim_choices[] = {
             1, 2, 7, 15, 31, 32, 33, 47, 63, 64, 65,
@@ -571,19 +579,19 @@ private:
     void add_load_rows(const Cmd& cmd) {
         const int tm = ceil_tiles(cmd.m);
         const int tn = ceil_tiles(cmd.n);
-        const int tk = ceil_tiles(cmd.k);
+        const int tk = ceil_k_tiles(cmd.k);
 
         for (int tile_m = 0; tile_m < tm; ++tile_m) {
             for (int tile_k = 0; tile_k < tk; ++tile_k) {
                 const uint32_t tile_addr =
                     cmd.a_base + static_cast<uint32_t>(tile_m * tk + tile_k);
                 for (int row = 0; row < kSaWidth; ++row) {
-                    uint8_t packed_row[kSaWidth] = {};
-                    for (int kk = 0; kk < kSaWidth; ++kk) {
+                    uint8_t packed_row[kSubtileK] = {};
+                    for (int kk = 0; kk < kSubtileK; ++kk) {
                         packed_row[kk] = get_elem(
                             cmd.a, cmd.m, cmd.k,
                             tile_m * kSaWidth + row,
-                            tile_k * kSaWidth + kk
+                            tile_k * kSubtileK + kk
                         );
                     }
                     load_rows_[tile_addr * kSaWidth + static_cast<uint32_t>(row)] =
@@ -597,14 +605,17 @@ private:
                 const uint32_t tile_addr =
                     cmd.b_base + static_cast<uint32_t>(tile_k * tn + tile_n);
                 for (int col = 0; col < kSaWidth; ++col) {
-                    uint8_t packed_col[kSaWidth] = {};
-                    for (int kk = 0; kk < kSaWidth; ++kk) {
+                    uint8_t packed_col[kSubtileK] = {};
+                    for (int kk = 0; kk < kSubtileK; ++kk) {
                         packed_col[kk] = get_elem(
                             cmd.b, cmd.k, cmd.n,
-                            tile_k * kSaWidth + kk,
+                            tile_k * kSubtileK + kk,
                             tile_n * kSaWidth + col
                         );
                     }
+                    // The test builds the external-memory image for B as the
+                    // software-provided transposed view. Hardware loads this
+                    // row directly into BBuf bank col without another reorder.
                     load_rows_[tile_addr * kSaWidth + static_cast<uint32_t>(col)] =
                         pack_row(packed_col);
                 }
@@ -623,7 +634,7 @@ private:
     uint64_t expected_load_requests(const Cmd& cmd) const {
         const int tm = ceil_tiles(cmd.m);
         const int tn = ceil_tiles(cmd.n);
-        const int tk = ceil_tiles(cmd.k);
+        const int tk = ceil_k_tiles(cmd.k);
         uint64_t count = 0;
 
         for (int block_m_base = 0; block_m_base < tm; block_m_base += kParserBlockM) {
@@ -651,7 +662,7 @@ private:
     void add_expected_writes(const Cmd& cmd) {
         const int tm = ceil_tiles(cmd.m);
         const int tn = ceil_tiles(cmd.n);
-        const int tk = ceil_tiles(cmd.k);
+        const int tk = ceil_k_tiles(cmd.k);
 
         for (int tile_m = 0; tile_m < tm; ++tile_m) {
             for (int tile_n = 0; tile_n < tn; ++tile_n) {

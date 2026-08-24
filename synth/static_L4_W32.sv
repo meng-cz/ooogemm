@@ -32,6 +32,7 @@ module L4_W32 (
 
     top_static #(
         .SA_WIDTH(32),
+        .SUBTILE_K(32),
         .LANE_NUM(4),
         .ABUF_SIZE(64),
         .BBUF_SIZE(64),

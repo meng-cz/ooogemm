@@ -1,6 +1,6 @@
 // Ping-pong lane buffer for one systolic-array row.
 //
-// The module stores two SA_WIDTH-byte rows. One buffer is the write side and
+// The module stores two SUBTILE_K-byte rows. One buffer is the write side and
 // the other is the read side. A valid input writes the current write buffer on
 // the next clock edge. A flip swaps the read/write roles on the same edge.
 // rddata is a combinational byte selected from the current read buffer.
@@ -9,15 +9,16 @@
 
 module lanebuf #(
     parameter int SA_WIDTH     = 16,
-    parameter int SA_IDX_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH)
+    parameter int SUBTILE_K    = 32,
+    parameter int K_IDX_WIDTH  = (SUBTILE_K <= 1) ? 1 : $clog2(SUBTILE_K)
 ) (
     input  logic clk,
     input  logic rst_n,
 
     input  logic valid,
-    input  logic [SA_WIDTH*8-1:0] linedata,
+    input  logic [SUBTILE_K*8-1:0] linedata,
     input  logic flip,
-    input  logic [SA_IDX_WIDTH-1:0] rdidx,
+    input  logic [K_IDX_WIDTH-1:0] rdidx,
 
     output logic [7:0] rddata
 );
@@ -26,12 +27,15 @@ module lanebuf #(
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
         end
-        if (SA_IDX_WIDTH <= 0) begin
-            $error("SA_IDX_WIDTH must be positive");
+        if (SUBTILE_K <= 0) begin
+            $error("SUBTILE_K must be positive");
+        end
+        if (K_IDX_WIDTH <= 0) begin
+            $error("K_IDX_WIDTH must be positive");
         end
     end
 
-    logic [SA_WIDTH*8-1:0] row_buf [2];
+    logic [SUBTILE_K*8-1:0] row_buf [2];
     logic rd_sel;
 
     wire wr_sel = ~rd_sel;
@@ -53,7 +57,7 @@ module lanebuf #(
 
     always_comb begin
         rddata = 8'd0;
-        if (int'(rdidx) < SA_WIDTH) begin
+        if (int'(rdidx) < SUBTILE_K) begin
             rddata = row_buf[rd_sel][int'(rdidx) * 8 +: 8];
         end
     end

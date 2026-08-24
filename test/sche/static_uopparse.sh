@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 SA_WIDTH="${SA_WIDTH:-32}"
+SUBTILE_K="${SUBTILE_K:-32}"
 ABUF_SIZE="${ABUF_SIZE:-4}"
 BBUF_SIZE="${BBUF_SIZE:-4}"
 PACC_NUM="${PACC_NUM:-4}"
@@ -48,6 +49,7 @@ verilator \
   --Mdir "${BUILD_DIR}" \
   --top-module static_uopparse \
   "-GSA_WIDTH=${SA_WIDTH}" \
+  "-GSUBTILE_K=${SUBTILE_K}" \
   "-GABUF_SIZE=${ABUF_SIZE}" \
   "-GBBUF_SIZE=${BBUF_SIZE}" \
   "-GPACC_NUM=${PACC_NUM}" \
@@ -56,7 +58,7 @@ verilator \
   "-GABUF_IDX_WIDTH=${ABUF_IDX_WIDTH}" \
   "-GBBUF_IDX_WIDTH=${BBUF_IDX_WIDTH}" \
   "-GPACC_IDX_WIDTH=${PACC_IDX_WIDTH}" \
-  -CFLAGS "-DSA_WIDTH_TEST=${SA_WIDTH} -DABUF_SIZE_TEST=${ABUF_SIZE} -DBBUF_SIZE_TEST=${BBUF_SIZE} -DPACC_NUM_TEST=${PACC_NUM}" \
+  -CFLAGS "-DSA_WIDTH_TEST=${SA_WIDTH} -DSUBTILE_K_TEST=${SUBTILE_K} -DABUF_SIZE_TEST=${ABUF_SIZE} -DBBUF_SIZE_TEST=${BBUF_SIZE} -DPACC_NUM_TEST=${PACC_NUM}" \
   "${ROOT_DIR}/src/sche/uop.sv" \
   "${ROOT_DIR}/src/sche/static_uopparse.sv" \
   "${SCRIPT_DIR}/static_uopparse.cpp"

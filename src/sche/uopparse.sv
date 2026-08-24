@@ -4,12 +4,13 @@
 // treats the batch dimension as B independent MxNxK GEMMs in batch order; it
 // does not merge tiles from different batches into one output block.  The
 // parser splits each batch instance into
-// tile-level uops for an SA_WIDTH x SA_WIDTH systolic array.  Matrix layout and
+// tile-level uops for an SA_WIDTH x SA_WIDTH systolic array with a fixed
+// SUBTILE_K reduction depth per GEMM uop.  Matrix layout and
 // padding are assumed to be handled by software; addresses are tile-linear:
 //   A tile(batch, m, k) address = a_base + batch * T_M * T_K + m * T_K + k
 //   B tile(batch, k, n) address = b_base + batch * T_K * T_N + k * T_N + n
 //   C tile(batch, m, n) address = c_base + batch * T_M * T_N + m * T_N + n
-// where T_M/T_N/T_K are ceil(M/N/K / SA_WIDTH).
+// where T_M/T_N use ceil(M/N / SA_WIDTH), while T_K uses ceil(K / SUBTILE_K).
 //
 // For each output block, the parser reserves a compact PACC rectangle:
 //   paccidx = local_m * block_n + local_n
@@ -25,6 +26,7 @@
 
 module uopparse #(
     parameter int SA_WIDTH       = 4,
+    parameter int SUBTILE_K      = 32,
     parameter int ABUF_SIZE      = 4,
     parameter int BBUF_SIZE      = 4,
     parameter int PACC_NUM       = 16,
@@ -142,6 +144,9 @@ module uopparse #(
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
         end
+        if (SUBTILE_K <= 0) begin
+            $error("SUBTILE_K must be positive");
+        end
         if (ABUF_SIZE <= 0) begin
             $error("ABUF_SIZE must be positive");
         end
@@ -177,15 +182,26 @@ module uopparse #(
         ST_OUTPUT
     } state_t;
 
-    function automatic tile_count_t ceil_tiles(input logic [DIM_WIDTH-1:0] dim);
+    function automatic tile_count_t ceil_tiles_by(
+        input logic [DIM_WIDTH-1:0] dim,
+        input int                   tile_size
+    );
         logic [TILE_COUNT_WIDTH:0] extended;
         logic [TILE_COUNT_WIDTH:0] divisor;
         begin
             extended = {{(TILE_COUNT_WIDTH + 1 - DIM_WIDTH){1'b0}}, dim} +
-                       tile_count_t'(SA_WIDTH - 1);
-            divisor = (TILE_COUNT_WIDTH + 1)'(SA_WIDTH);
+                       tile_count_t'(tile_size - 1);
+            divisor = (TILE_COUNT_WIDTH + 1)'(tile_size);
             return tile_count_t'(extended / divisor);
         end
+    endfunction
+
+    function automatic tile_count_t ceil_tiles(input logic [DIM_WIDTH-1:0] dim);
+        return ceil_tiles_by(dim, SA_WIDTH);
+    endfunction
+
+    function automatic tile_count_t ceil_k_tiles(input logic [DIM_WIDTH-1:0] dim);
+        return ceil_tiles_by(dim, SUBTILE_K);
     endfunction
 
     function automatic tile_count_t min_int_tile(
@@ -283,7 +299,7 @@ module uopparse #(
     always_comb begin
         cmd_tm_comb = ceil_tiles(cmd_m_i);
         cmd_tn_comb = ceil_tiles(cmd_n_i);
-        cmd_tk_comb = ceil_tiles(cmd_k_i);
+        cmd_tk_comb = ceil_k_tiles(cmd_k_i);
         command_has_tiles_comb =
             (cmd_batch_i != '0) &&
             (cmd_tm_comb != '0) && (cmd_tn_comb != '0) && (cmd_tk_comb != '0);

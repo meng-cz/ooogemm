@@ -17,6 +17,9 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 4
 #endif
+#ifndef SUBTILE_K_TEST
+#define SUBTILE_K_TEST 4
+#endif
 #ifndef ABUF_SIZE_TEST
 #define ABUF_SIZE_TEST 8
 #endif
@@ -28,13 +31,14 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kABufSize = ABUF_SIZE_TEST;
 constexpr int kBBufSize = BBUF_SIZE_TEST;
 constexpr int kBusIdWidth = BUS_ID_WIDTH_TEST;
 constexpr int kOutstandingNum = 1 << kBusIdWidth;
 
 static_assert(kSaWidth > 0, "SA_WIDTH_TEST must be positive");
-static_assert(kSaWidth <= 4, "this testbench expects ROW_DATA_WIDTH <= 32");
+static_assert(kSubtileK <= 4, "this testbench expects ROW_DATA_WIDTH <= 32");
 static_assert(kOutstandingNum >= kSaWidth, "ID space must fit one full tile");
 
 struct Load {

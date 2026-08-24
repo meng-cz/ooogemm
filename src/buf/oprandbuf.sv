@@ -1,7 +1,7 @@
 // Matrix operand buffer backed by row-banked 1R1W SRAMs.
 //
 // The logical storage contains BUF_SIZE matrices.  Each matrix is split across
-// SA_WIDTH independent banks, and each bank stores one SA_WIDTH-byte row.  A
+// SA_WIDTH independent banks, and each bank stores one SUBTILE_K-byte row.  A
 // read or write address selects one full matrix entry; all banks are read in
 // parallel and each bank can be written independently through wr_bank_en_i.
 //
@@ -21,8 +21,9 @@
 module oprandbuf #(
     parameter int BUF_SIZE        = 16,
     parameter int SA_WIDTH        = 4,
+    parameter int SUBTILE_K       = 32,
     parameter int BUF_IDX_WIDTH   = (BUF_SIZE <= 1) ? 1 : $clog2(BUF_SIZE),
-    parameter int BANK_DATA_WIDTH = SA_WIDTH * 8
+    parameter int BANK_DATA_WIDTH = SUBTILE_K * 8
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -45,11 +46,14 @@ module oprandbuf #(
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
         end
+        if (SUBTILE_K <= 0) begin
+            $error("SUBTILE_K must be positive");
+        end
         if (BUF_IDX_WIDTH <= 0) begin
             $error("BUF_IDX_WIDTH must be positive");
         end
-        if (BANK_DATA_WIDTH != SA_WIDTH * 8) begin
-            $error("BANK_DATA_WIDTH must equal SA_WIDTH * 8");
+        if (BANK_DATA_WIDTH != SUBTILE_K * 8) begin
+            $error("BANK_DATA_WIDTH must equal SUBTILE_K * 8");
         end
     end
 

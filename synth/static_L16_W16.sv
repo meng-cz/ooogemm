@@ -22,7 +22,7 @@ module L16_W16 (
     input  logic load_mem_rsp_valid_i,
     output logic load_mem_rsp_ready_o,
     input  logic [4:0] load_mem_rsp_id_i,
-    input  logic [127:0] load_mem_rsp_data_i,
+    input  logic [255:0] load_mem_rsp_data_i,
 
     output logic store_mem_wr_valid_o,
     input  logic store_mem_wr_ready_i,
@@ -32,6 +32,7 @@ module L16_W16 (
 
     top_static #(
         .SA_WIDTH(16),
+        .SUBTILE_K(32),
         .LANE_NUM(16),
         .ABUF_SIZE(64),
         .BBUF_SIZE(64),
@@ -45,7 +46,7 @@ module L16_W16 (
         .BBUF_IDX_WIDTH(6),
         .PACC_IDX_WIDTH(4),
         .LOAD_BUS_ID_WIDTH(5),
-        .ROW8_WIDTH(128),
+        .ROW8_WIDTH(256),
         .ROW32_WIDTH(512),
         .STORE_MEM_DATA_WIDTH(32),
         .GEMM_INSTID_WIDTH(16),
