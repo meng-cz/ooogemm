@@ -32,8 +32,8 @@ constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccIdxWidth = PACC_IDX_WIDTH_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
-constexpr int kAccumLatency = 2;
-constexpr int kGetaccLatency = 3;
+constexpr int kAccumLatency = 3;
+constexpr int kGetaccLatency = 4;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 
 uint32_t float_to_bits(float value) {
@@ -329,11 +329,14 @@ private:
         get_all("independent_regs");
 
         send_acc(3, pseudo_from_long_double(1.0L), false);
+        idle(1);
         send_acc(3, pseudo_from_long_double(2.0L), true);
+        idle(1);
         send_acc(3, pseudo_from_long_double(3.0L), true);
         get_all("back_to_back_same_idx");
 
         send_acc(4, pseudo_nan(), false);
+        idle(1);
         send_acc(4, pseudo_from_long_double(1.0L), true);
         get_all("nan_sticky");
 
@@ -350,13 +353,18 @@ private:
 
         for (int batch = 0; batch < 250; ++batch) {
             const int count = batch_dist(rng_);
+            int last_idx = -1;
             for (int i = 0; i < count; ++i) {
                 const int idx = idx_dist(rng_);
+                if (idx == last_idx) {
+                    idle(1);
+                }
                 Pseudo value = nan_dist(rng_)
                     ? pseudo_nan()
                     : pseudo_from_long_double(static_cast<long double>(value_dist(rng_)) / 16.0L);
                 const bool accum = accum_dist(rng_);
                 send_acc(idx, value, accum);
+                last_idx = idx;
             }
             get_all("random_batch_" + std::to_string(batch));
         }

@@ -23,8 +23,12 @@
 //      bin_data[col][k] is B[k][col].
 //   3. Every cycle the scheduler scans lanes in increasing lane order and
 //      chooses the first lane whose current write-side slot has both A and B
-//      ready and whose physical lane is inactive or in its last active cycle.
-//      Only one lane can start in a cycle.
+//      ready, whose physical lane is inactive or in its last active cycle, and
+//      whose PACC index differs from the lane started in the immediately
+//      previous cycle.  Only one lane can start in a cycle.  The one-cycle
+//      same-PACC interlock matches paccreg's three-stage add pipeline: a
+//      dependent GEMM that starts after one bubble can use paccreg's s3->s1
+//      bypass, while a back-to-back same-PACC start would still read stale data.
 //   4. The selected lane flips all of its A/B lane buffers on that clock edge.
 //      On the following cycles, the lane is active for exactly SA_WIDTH cycles
 //      and reads rdidx=0..SA_WIDTH-1 from the just-flipped read-side buffers.
@@ -150,6 +154,8 @@ module sa #(
     logic [SA_IDX_WIDTH-1:0] lane_count [LANE_NUM];
     logic [PACC_IDX_WIDTH-1:0] lane_paccidx [LANE_NUM];
     logic lane_accum [LANE_NUM];
+    logic last_start_valid_q;
+    logic [PACC_IDX_WIDTH-1:0] last_start_paccidx_q;
 
     logic [1:0] lane_wr_slot [LANE_NUM];
     logic [1:0] lane_rd_slot [LANE_NUM];
@@ -217,7 +223,9 @@ module sa #(
                 slot_in_use[lane][lane_wr_slot[lane][0]] &&
                 slot_a_ready[lane][lane_wr_slot[lane][0]] &&
                 slot_b_ready[lane][lane_wr_slot[lane][0]] &&
-                (!lane_active[lane] || lane_last_cycle[lane])) begin
+                (!lane_active[lane] || lane_last_cycle[lane]) &&
+                !(last_start_valid_q &&
+                  (slot_paccidx[lane][lane_wr_slot[lane][0]] == last_start_paccidx_q))) begin
                 start_found = 1'b1;
                 start_lane_comb = lane[LANE_IDX_WIDTH-1:0];
                 start_instid_comb = slot_instid[lane][lane_wr_slot[lane][0]];
@@ -602,6 +610,8 @@ module sa #(
             end
             gemm_finish <= 1'b0;
             gemm_finish_instid <= '0;
+            last_start_valid_q <= 1'b0;
+            last_start_paccidx_q <= '0;
 
             getacc_active <= 1'b0;
             getacc_count <= '0;
@@ -662,6 +672,12 @@ module sa #(
                             {{(SA_IDX_WIDTH-1){1'b0}}, 1'b1};
                     end
                 end
+            end
+
+            last_start_valid_q <= start_found;
+            if (start_found) begin
+                last_start_paccidx_q <=
+                    slot_paccidx[start_lane_comb][lane_wr_slot[start_lane_comb][0]];
             end
 
             finish_pipe_valid[0] <= start_found;

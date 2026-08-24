@@ -37,8 +37,8 @@ constexpr int kPaccIdxWidth = PACC_IDX_WIDTH_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
 constexpr int kFdotLatency = 3;
-constexpr int kPaccregAccumLatency = 2;
-constexpr int kGetaccLatency = 3;
+constexpr int kPaccregAccumLatency = 3;
+constexpr int kGetaccLatency = 4;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 
 struct LaneIn {
@@ -527,11 +527,15 @@ private:
 
         int dots_started = 0;
         int dots_finished = 0;
+        bool prev_last_valid = false;
+        int prev_last_paccidx = -1;
         constexpr int kTargetDots = 320;
 
         while (dots_finished < kTargetDots) {
             std::vector<LaneIn> lanes(kLaneNum);
             bool used_last = false;
+            bool this_last_valid = false;
+            int this_last_paccidx = -1;
 
             for (int lane = 0; lane < kLaneNum; ++lane) {
                 if (!active[lane].active && dots_started < kTargetDots && start_dist(rng_) < 45) {
@@ -549,6 +553,10 @@ private:
                 const bool is_first = lane_dots_[lane].empty();
                 bool is_last = active[lane].remaining == 1;
                 if (is_last && used_last) {
+                    continue;
+                }
+                if (is_last && prev_last_valid &&
+                    active[lane].paccidx == prev_last_paccidx) {
                     continue;
                 }
 
@@ -569,12 +577,16 @@ private:
                 --active[lane].remaining;
                 if (is_last) {
                     used_last = true;
+                    this_last_valid = true;
+                    this_last_paccidx = active[lane].paccidx;
                     active[lane].active = false;
                     ++dots_finished;
                 }
             }
 
             drive_cycle(lanes);
+            prev_last_valid = this_last_valid;
+            prev_last_paccidx = this_last_paccidx;
         }
 
         for (;;) {

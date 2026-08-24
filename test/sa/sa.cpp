@@ -70,6 +70,11 @@ struct ExpectedRow {
     std::string name;
 };
 
+struct FinishEvent {
+    uint32_t id = 0;
+    uint64_t cycle = 0;
+};
+
 uint64_t low_mask(int width) {
     return width >= 64 ? ~uint64_t{0} : ((uint64_t{1} << width) - 1u);
 }
@@ -358,6 +363,7 @@ public:
         getacc_and_expect(1, "overlap_idx1");
         getacc_and_expect(2, "overlap_idx2");
 
+        same_pacc_interlock_test();
         random_pressure();
 
         idle(20);
@@ -381,6 +387,7 @@ private:
     std::mt19937 rng_;
     std::vector<std::vector<std::vector<Pseudo>>> pacc_model_;
     std::deque<ExpectedRow> expected_rows_;
+    std::deque<FinishEvent> finished_events_;
     std::multiset<uint32_t> pending_finish_;
 
     void clear_inputs() {
@@ -659,6 +666,30 @@ private:
         }
     }
 
+    void same_pacc_interlock_test() {
+        const int paccidx = kPaccNum > 6 ? 6 : kPaccNum - 1;
+        const Matrix m0 = deterministic_matrix(0x34);
+        const Matrix m1 = deterministic_matrix(0x38);
+
+        const int lane0 = allocate(0x510, paccidx, false);
+        const int lane1 = allocate_while_writing_matrices(lane0, m0, 0x511, paccidx, true);
+        update_model(m0, paccidx, false);
+
+        write_matrices(lane1, m1);
+        update_model(m1, paccidx, true);
+
+        const uint64_t finish0 = wait_finish_cycle(0x510);
+        const uint64_t finish1 = wait_finish_cycle(0x511);
+        if (finish1 < finish0 + 2) {
+            std::ostringstream os;
+            os << "same-PACC interlock allowed dependent GEMMs to finish too close: "
+               << "finish0=" << finish0 << " finish1=" << finish1;
+            fail(os.str());
+        }
+
+        getacc_and_expect(paccidx, "same_pacc_interlock");
+    }
+
     void update_model(const Matrix& m, int paccidx, bool accum) {
         for (int row = 0; row < kSaWidth; ++row) {
             for (int col = 0; col < kSaWidth; ++col) {
@@ -746,16 +777,32 @@ private:
         }
     }
 
-    void wait_finish(uint32_t instid) {
+    bool take_finish_event(uint32_t instid, uint64_t& cycle) {
+        for (auto it = finished_events_.begin(); it != finished_events_.end(); ++it) {
+            if (it->id == instid) {
+                cycle = it->cycle;
+                finished_events_.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    uint64_t wait_finish_cycle(uint32_t instid) {
         for (int i = 0; i < 400; ++i) {
-            if (pending_finish_.find(instid) == pending_finish_.end()) {
-                return;
+            uint64_t finish_cycle = 0;
+            if (take_finish_event(instid, finish_cycle)) {
+                return finish_cycle;
             }
             idle(1);
         }
         std::ostringstream os;
         os << "timed out waiting for finish id 0x" << std::hex << instid;
         fail(os.str());
+    }
+
+    void wait_finish(uint32_t instid) {
+        (void)wait_finish_cycle(instid);
     }
 
     void getacc_and_expect(int paccidx, const std::string& name) {
@@ -796,6 +843,7 @@ private:
             fail(os.str());
         }
         pending_finish_.erase(it);
+        finished_events_.push_back(FinishEvent{id, cycle_});
     }
 
     void check_getacc() {

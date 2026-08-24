@@ -15,8 +15,8 @@
 
 package paccreg_pkg;
 
-    localparam int ACCUM_PIPE_STAGES  = 2;
-    localparam int GETACC_PIPE_STAGES = 3;
+    localparam int ACCUM_PIPE_STAGES  = 3;
+    localparam int GETACC_PIPE_STAGES = 4;
 
 endpackage
 
@@ -181,6 +181,25 @@ module paccreg #(
         end
     endfunction
 
+    function automatic logic signed [PACC_SIG_WIDTH:0] align_abs_to_exp(
+        input logic [PACC_SIG_WIDTH-1:0]   abs_value,
+        input logic                        is_negative,
+        input logic [PACC_EXP_WIDTH:0]     right_shift
+    );
+        logic [PACC_SIG_WIDTH-1:0] shifted_abs;
+        logic signed [PACC_SIG_WIDTH:0] positive;
+        begin
+            if (int'(right_shift) >= PACC_SIG_WIDTH) begin
+                shifted_abs = '0;
+            end else begin
+                shifted_abs = abs_value >> int'(right_shift);
+            end
+
+            positive = $signed({1'b0, shifted_abs});
+            return is_negative ? -positive : positive;
+        end
+    endfunction
+
     function automatic pseudo_t pseudo_nan();
         pseudo_t value;
         begin
@@ -266,24 +285,43 @@ module paccreg #(
     logic s1_accum;
 
     logic s2_valid;
+    logic [PACC_IDX_WIDTH-1:0] s2_idx;
+    logic s2_direct;
     logic signed [PACC_EXP_WIDTH-1:0] s2_exp;
     logic signed [PACC_SIG_WIDTH-1:0] s2_sig;
-    logic [PACC_IDX_WIDTH-1:0] s2_idx;
-    logic s2_accum;
+    logic [PACC_SIG_WIDTH-1:0] s2_cur_abs;
+    logic [PACC_SIG_WIDTH-1:0] s2_in_abs;
+    logic s2_cur_neg;
+    logic s2_in_neg;
+    logic [PACC_EXP_WIDTH:0] s2_cur_shift;
+    logic [PACC_EXP_WIDTH:0] s2_in_shift;
 
-    pseudo_t write_value;
+    logic s3_valid;
+    logic [PACC_IDX_WIDTH-1:0] s3_idx;
+    logic s3_direct;
+    logic signed [PACC_EXP_WIDTH-1:0] s3_exp;
+    logic signed [PACC_SIG_WIDTH-1:0] s3_sig;
+    logic signed [PACC_SIG_WIDTH:0] s3_sum;
+
+    pseudo_t accum_s3_value;
 
     always_comb begin
-        if (int'(s2_idx) < PACC_NUM) begin
-            write_value = add_pseudo(
-                acc_reg[s2_idx].exp,
-                acc_reg[s2_idx].sig,
-                s2_exp,
-                s2_sig,
-                s2_accum
-            );
+        logic signed [PACC_SIG_WIDTH:0] shifted_sum;
+
+        shifted_sum = '0;
+        accum_s3_value = pseudo_zero();
+        if (s3_direct) begin
+            accum_s3_value.exp = s3_exp;
+            accum_s3_value.sig = s3_sig;
+        end else if (s3_sum == '0) begin
+            accum_s3_value = pseudo_zero();
+        end else if (s3_sum[PACC_SIG_WIDTH] != s3_sum[PACC_SIG_WIDTH-1]) begin
+            shifted_sum = s3_sum >>> 1;
+            accum_s3_value.exp = pseudo_exp_from_int(int'(s3_exp) + 1);
+            accum_s3_value.sig = shifted_sum[PACC_SIG_WIDTH-1:0];
         end else begin
-            write_value = pseudo_zero();
+            accum_s3_value.exp = s3_exp;
+            accum_s3_value.sig = s3_sum[PACC_SIG_WIDTH-1:0];
         end
     end
 
@@ -299,11 +337,24 @@ module paccreg #(
             s1_idx   <= '0;
             s1_accum <= 1'b0;
 
-            s2_valid <= 1'b0;
-            s2_exp   <= '0;
-            s2_sig   <= '0;
-            s2_idx   <= '0;
-            s2_accum <= 1'b0;
+            s2_valid  <= 1'b0;
+            s2_idx    <= '0;
+            s2_direct <= 1'b1;
+            s2_exp    <= '0;
+            s2_sig    <= '0;
+            s2_cur_abs <= '0;
+            s2_in_abs <= '0;
+            s2_cur_neg <= 1'b0;
+            s2_in_neg <= 1'b0;
+            s2_cur_shift <= '0;
+            s2_in_shift <= '0;
+
+            s3_valid <= 1'b0;
+            s3_idx   <= '0;
+            s3_direct <= 1'b1;
+            s3_exp   <= '0;
+            s3_sig   <= '0;
+            s3_sum   <= '0;
         end else begin
             s1_valid <= valid_i;
             s1_exp   <= psum_exp_i;
@@ -312,13 +363,74 @@ module paccreg #(
             s1_accum <= accum_i;
 
             s2_valid <= s1_valid;
-            s2_exp   <= s1_exp;
-            s2_sig   <= s1_sig;
-            s2_idx   <= s1_idx;
-            s2_accum <= s1_accum;
+            s2_idx <= s1_idx;
+            s2_direct <= 1'b1;
+            s2_exp <= '0;
+            s2_sig <= '0;
+            s2_cur_abs <= '0;
+            s2_in_abs <= '0;
+            s2_cur_neg <= 1'b0;
+            s2_in_neg <= 1'b0;
+            s2_cur_shift <= '0;
+            s2_in_shift <= '0;
 
-            if (s2_valid && (int'(s2_idx) < PACC_NUM)) begin
-                acc_reg[s2_idx] <= write_value;
+            if (s1_valid && (int'(s1_idx) < PACC_NUM)) begin
+                logic signed [PACC_EXP_WIDTH-1:0] cur_exp;
+                logic signed [PACC_SIG_WIDTH-1:0] cur_sig;
+                int target_exp;
+                int cur_shift;
+                int in_shift;
+
+                cur_exp = acc_reg[s1_idx].exp;
+                cur_sig = acc_reg[s1_idx].sig;
+                if (s3_valid && (s3_idx == s1_idx)) begin
+                    cur_exp = accum_s3_value.exp;
+                    cur_sig = accum_s3_value.sig;
+                end
+
+                if (pseudo_is_nan(s1_exp, s1_sig) ||
+                    (s1_accum && pseudo_is_nan(cur_exp, cur_sig))) begin
+                    s2_exp <= PSEUDO_NAN_EXP;
+                    s2_sig <= {{(PACC_SIG_WIDTH-1){1'b0}}, 1'b1};
+                end else if (!s1_accum || (cur_sig == '0)) begin
+                    s2_exp <= s1_exp;
+                    s2_sig <= s1_sig;
+                end else if (s1_sig == '0) begin
+                    s2_exp <= cur_exp;
+                    s2_sig <= cur_sig;
+                end else begin
+                    target_exp = (cur_exp >= s1_exp) ? int'(cur_exp) : int'(s1_exp);
+                    cur_shift = target_exp - int'(cur_exp);
+                    in_shift = target_exp - int'(s1_exp);
+                    s2_direct <= 1'b0;
+                    s2_exp <= pseudo_exp_from_int(target_exp);
+                    s2_cur_abs <= sig_abs(cur_sig);
+                    s2_in_abs <= sig_abs(s1_sig);
+                    s2_cur_neg <= cur_sig[PACC_SIG_WIDTH-1];
+                    s2_in_neg <= s1_sig[PACC_SIG_WIDTH-1];
+                    s2_cur_shift <= cur_shift[PACC_EXP_WIDTH:0];
+                    s2_in_shift <= in_shift[PACC_EXP_WIDTH:0];
+                end
+            end
+
+            s3_valid <= s2_valid;
+            s3_idx <= s2_idx;
+            s3_direct <= s2_direct;
+            s3_exp <= s2_exp;
+            s3_sig <= s2_sig;
+            s3_sum <= '0;
+            if (!s2_direct) begin
+                logic signed [PACC_SIG_WIDTH:0] cur_aligned;
+                logic signed [PACC_SIG_WIDTH:0] in_aligned;
+
+                cur_aligned = align_abs_to_exp(s2_cur_abs, s2_cur_neg, s2_cur_shift);
+                in_aligned = align_abs_to_exp(s2_in_abs, s2_in_neg, s2_in_shift);
+                s3_sum <= cur_aligned + in_aligned;
+            end
+
+            if (s3_valid && (int'(s3_idx) < PACC_NUM)) begin
+                acc_reg[s3_idx].exp <= accum_s3_value.exp;
+                acc_reg[s3_idx].sig <= accum_s3_value.sig;
             end
         end
     end
@@ -358,10 +470,32 @@ module paccreg #(
 
     logic round_increment;
     logic [24:0] rounded_sig25;
+    logic [31:0] g4_data_comb;
+
+    logic g4_valid;
+    logic [31:0] g4_data;
 
     always_comb begin
         round_increment = g3_guard && (g3_round || g3_sticky || g3_sig24[0]);
         rounded_sig25   = {1'b0, g3_sig24} + {{24{1'b0}}, round_increment};
+
+        if (g3_nan) begin
+            g4_data_comb = 32'h7fc0_0000;
+        end else if (g3_zero) begin
+            g4_data_comb = 32'd0;
+        end else if (g3_exp_field >= 13'sd255) begin
+            g4_data_comb = {g3_sign, 8'hff, 23'd0};
+        end else if (g3_exp_field <= 13'sd0) begin
+            g4_data_comb = {g3_sign, 31'd0};
+        end else if (rounded_sig25[24]) begin
+            if ((g3_exp_field + 13'sd1) >= 13'sd255) begin
+                g4_data_comb = {g3_sign, 8'hff, 23'd0};
+            end else begin
+                g4_data_comb = {g3_sign, (g3_exp_field[7:0] + 8'd1), rounded_sig25[23:1]};
+            end
+        end else begin
+            g4_data_comb = {g3_sign, g3_exp_field[7:0], rounded_sig25[22:0]};
+        end
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -390,6 +524,9 @@ module paccreg #(
             g3_guard     <= 1'b0;
             g3_round     <= 1'b0;
             g3_sticky    <= 1'b0;
+
+            g4_valid <= 1'b0;
+            g4_data  <= 32'd0;
 
             getacc_o      <= 1'b0;
             getacc_data_o <= 32'd0;
@@ -425,24 +562,11 @@ module paccreg #(
             g3_round     <= g2_round;
             g3_sticky    <= g2_sticky;
 
-            getacc_o <= g3_valid;
-            if (g3_nan) begin
-                getacc_data_o <= 32'h7fc0_0000;
-            end else if (g3_zero) begin
-                getacc_data_o <= 32'd0;
-            end else if (g3_exp_field >= 13'sd255) begin
-                getacc_data_o <= {g3_sign, 8'hff, 23'd0};
-            end else if (g3_exp_field <= 13'sd0) begin
-                getacc_data_o <= {g3_sign, 31'd0};
-            end else if (rounded_sig25[24]) begin
-                if ((g3_exp_field + 13'sd1) >= 13'sd255) begin
-                    getacc_data_o <= {g3_sign, 8'hff, 23'd0};
-                end else begin
-                    getacc_data_o <= {g3_sign, (g3_exp_field[7:0] + 8'd1), rounded_sig25[23:1]};
-                end
-            end else begin
-                getacc_data_o <= {g3_sign, g3_exp_field[7:0], rounded_sig25[22:0]};
-            end
+            g4_valid <= g3_valid;
+            g4_data <= g4_data_comb;
+
+            getacc_o <= g4_valid;
+            getacc_data_o <= g4_data;
         end
     end
 
