@@ -1,7 +1,14 @@
 // Static GEMM uop parser with explicit double-buffer and PACC fence uops.
 //
-// Interface-compatible with uopparse.  It emits the same LOAD_A/LOAD_B/GEMM/
-// OUTPUT uops, plus:
+// Interface-compatible with uopparse.  A command describes one BxMxNxK batched
+// GEMM.  For normal-size per-batch GEMMs, batches are expanded as independent
+// MxNxK GEMMs in batch order.  If one batch instance has fewer output tiles
+// than a full BLOCK_M x BLOCK_N PACC block, this parser can pack output tiles
+// from subsequent batches into the same static block.  Batch identity remains
+// parser-internal and is reflected only through generated addresses and PACC
+// slot assignment; it is not exposed as uop payload to backend execution units.
+//
+// It emits the same LOAD_A/LOAD_B/GEMM/OUTPUT uops, plus:
 //   - UOP_BUF_SWAP: wait for write-side A/B loads and read-side GEMM consumers,
 //     then swap ABuf/BBuf ping-pong read/write sides.
 //   - UOP_ACC_FENCE: wait for all previously submitted asynchronous OUTPUT
@@ -52,6 +59,7 @@ module static_uopparse #(
     input  logic [DIM_WIDTH-1:0] cmd_m_i,
     input  logic [DIM_WIDTH-1:0] cmd_n_i,
     input  logic [DIM_WIDTH-1:0] cmd_k_i,
+    input  logic [DIM_WIDTH-1:0] cmd_batch_i,
 
     output logic uop_valid_o,
     input  logic uop_ready_i,
@@ -65,6 +73,14 @@ module static_uopparse #(
 );
 
     import uopparse_pkg::*;
+
+    localparam int BLOCK_AREA = BLOCK_M * BLOCK_N;
+    localparam int MERGE_BLOCK_TILES_ABUF =
+        (BLOCK_AREA < ABUF_GROUP_SIZE) ? BLOCK_AREA : ABUF_GROUP_SIZE;
+    localparam int MERGE_BLOCK_TILES_BBUF =
+        (MERGE_BLOCK_TILES_ABUF < BBUF_GROUP_SIZE) ? MERGE_BLOCK_TILES_ABUF : BBUF_GROUP_SIZE;
+    localparam int MERGE_BLOCK_TILES =
+        (MERGE_BLOCK_TILES_BBUF < PACC_NUM) ? MERGE_BLOCK_TILES_BBUF : PACC_NUM;
 
     function automatic int choose_block_m(
         input int abuf_group_size,
@@ -266,6 +282,15 @@ module static_uopparse #(
         end
     endfunction
 
+    function automatic tile_count_t min_merge_tiles(input tile_count_t value);
+        begin
+            if (value > tile_count_t'(MERGE_BLOCK_TILES)) begin
+                return tile_count_t'(MERGE_BLOCK_TILES);
+            end
+            return value;
+        end
+    endfunction
+
     state_t state_q;
 
     logic [ADDR_WIDTH-1:0] a_base_q;
@@ -276,6 +301,15 @@ module static_uopparse #(
     tile_count_t tm_q;
     tile_count_t tn_q;
     tile_count_t tk_q;
+    tile_count_t batch_count_q;
+    tile_count_t batch_q;
+    tile_count_t output_tiles_per_batch_q;
+    logic merge_mode_q;
+    tile_count_t merge_block_base_q;
+    tile_count_t merge_block_count_q;
+    tile_count_t merge_tile_batch_q [PACC_NUM];
+    tile_count_t merge_tile_m_q [PACC_NUM];
+    tile_count_t merge_tile_n_q [PACC_NUM];
     tile_count_t block_m_base_q;
     tile_count_t block_n_base_q;
     tile_count_t block_m_q;
@@ -299,24 +333,51 @@ module static_uopparse #(
     tile_count_t next_block_n_base_comb;
     tile_count_t next_block_m_comb;
     tile_count_t next_block_n_comb;
+    tile_count_t next_batch_comb;
+    tile_count_t cmd_output_tiles_per_batch_comb;
+    tile_count_t merge_total_tiles_comb;
+    tile_count_t merge_next_base_comb;
+    tile_count_t merge_next_count_comb;
     logic command_has_tiles_comb;
+    logic command_merge_mode_comb;
     logic has_next_block_comb;
 
     always_comb begin
         cmd_tm_comb = ceil_tiles(cmd_m_i);
         cmd_tn_comb = ceil_tiles(cmd_n_i);
         cmd_tk_comb = ceil_tiles(cmd_k_i);
+        cmd_output_tiles_per_batch_comb = cmd_tm_comb * cmd_tn_comb;
         command_has_tiles_comb =
+            (cmd_batch_i != '0) &&
             (cmd_tm_comb != '0) && (cmd_tn_comb != '0) && (cmd_tk_comb != '0);
+        command_merge_mode_comb =
+            command_has_tiles_comb &&
+            (cmd_output_tiles_per_batch_comb < tile_count_t'(BLOCK_AREA));
     end
 
     always_comb begin
-        if ((block_n_base_q + tile_count_t'(BLOCK_N)) < tn_q) begin
+        next_batch_comb = batch_q;
+        merge_total_tiles_comb = batch_count_q * output_tiles_per_batch_q;
+        merge_next_base_comb = merge_block_base_q + merge_block_count_q;
+        merge_next_count_comb = min_merge_tiles(merge_total_tiles_comb - merge_next_base_comb);
+
+        if (merge_mode_q) begin
+            next_block_m_base_comb = '0;
+            next_block_n_base_comb = '0;
+            next_block_m_comb = '0;
+            next_block_n_comb = '0;
+            has_next_block_comb = merge_next_base_comb < merge_total_tiles_comb;
+        end else if ((block_n_base_q + tile_count_t'(BLOCK_N)) < tn_q) begin
             next_block_m_base_comb = block_m_base_q;
             next_block_n_base_comb = block_n_base_q + tile_count_t'(BLOCK_N);
             has_next_block_comb = 1'b1;
         end else if ((block_m_base_q + tile_count_t'(BLOCK_M)) < tm_q) begin
             next_block_m_base_comb = block_m_base_q + tile_count_t'(BLOCK_M);
+            next_block_n_base_comb = '0;
+            has_next_block_comb = 1'b1;
+        end else if ((batch_q + 1'b1) < batch_count_q) begin
+            next_batch_comb = batch_q + 1'b1;
+            next_block_m_base_comb = '0;
             next_block_n_base_comb = '0;
             has_next_block_comb = 1'b1;
         end else begin
@@ -344,24 +405,54 @@ module static_uopparse #(
         unique case (state_q)
             ST_LOAD_A, ST_PREFETCH_A: begin
                 uop_type_o = UOP_LOAD_A;
-                uop_addr_o = addr_add_tile(
-                    a_base_q,
-                    ((block_m_base_q + load_idx_q) * tk_q) +
-                    (state_q == ST_PREFETCH_A ? (k_tile_q + 1'b1) : k_tile_q)
-                );
-                uop_abufidx_o = abuf_slot(load_group_q, load_idx_q);
-                uop_valid_rows_o = tile_valid_rows(m_dim_q, block_m_base_q + load_idx_q);
+                if (merge_mode_q) begin
+                    uop_addr_o = addr_add_tile(
+                        a_base_q,
+                        (merge_tile_batch_q[int'(load_idx_q)] * tm_q * tk_q) +
+                        (merge_tile_m_q[int'(load_idx_q)] * tk_q) +
+                        (state_q == ST_PREFETCH_A ? (k_tile_q + 1'b1) : k_tile_q)
+                    );
+                    uop_abufidx_o = abuf_slot(load_group_q, load_idx_q);
+                    uop_valid_rows_o = tile_valid_rows(
+                        m_dim_q,
+                        merge_tile_m_q[int'(load_idx_q)]
+                    );
+                end else begin
+                    uop_addr_o = addr_add_tile(
+                        a_base_q,
+                        (batch_q * tm_q * tk_q) +
+                        ((block_m_base_q + load_idx_q) * tk_q) +
+                        (state_q == ST_PREFETCH_A ? (k_tile_q + 1'b1) : k_tile_q)
+                    );
+                    uop_abufidx_o = abuf_slot(load_group_q, load_idx_q);
+                    uop_valid_rows_o = tile_valid_rows(m_dim_q, block_m_base_q + load_idx_q);
+                end
             end
 
             ST_LOAD_B, ST_PREFETCH_B: begin
                 uop_type_o = UOP_LOAD_B;
-                uop_addr_o = addr_add_tile(
-                    b_base_q,
-                    ((state_q == ST_PREFETCH_B ? (k_tile_q + 1'b1) : k_tile_q) * tn_q) +
-                    block_n_base_q + load_idx_q
-                );
-                uop_bbufidx_o = bbuf_slot(load_group_q, load_idx_q);
-                uop_valid_rows_o = tile_valid_rows(n_dim_q, block_n_base_q + load_idx_q);
+                if (merge_mode_q) begin
+                    uop_addr_o = addr_add_tile(
+                        b_base_q,
+                        (merge_tile_batch_q[int'(load_idx_q)] * tk_q * tn_q) +
+                        ((state_q == ST_PREFETCH_B ? (k_tile_q + 1'b1) : k_tile_q) * tn_q) +
+                        merge_tile_n_q[int'(load_idx_q)]
+                    );
+                    uop_bbufidx_o = bbuf_slot(load_group_q, load_idx_q);
+                    uop_valid_rows_o = tile_valid_rows(
+                        n_dim_q,
+                        merge_tile_n_q[int'(load_idx_q)]
+                    );
+                end else begin
+                    uop_addr_o = addr_add_tile(
+                        b_base_q,
+                        (batch_q * tk_q * tn_q) +
+                        ((state_q == ST_PREFETCH_B ? (k_tile_q + 1'b1) : k_tile_q) * tn_q) +
+                        block_n_base_q + load_idx_q
+                    );
+                    uop_bbufidx_o = bbuf_slot(load_group_q, load_idx_q);
+                    uop_valid_rows_o = tile_valid_rows(n_dim_q, block_n_base_q + load_idx_q);
+                end
             end
 
             ST_ACC_FENCE, ST_CMD_ACC_FENCE: begin
@@ -374,20 +465,37 @@ module static_uopparse #(
 
             ST_GEMM: begin
                 uop_type_o    = UOP_GEMM;
-                uop_abufidx_o = abuf_slot(read_group_q, gemm_m_idx_q);
-                uop_bbufidx_o = bbuf_slot(read_group_q, gemm_n_idx_q);
-                uop_paccidx_o = pacc_of(gemm_m_idx_q, gemm_n_idx_q, block_n_q);
+                if (merge_mode_q) begin
+                    uop_abufidx_o = abuf_slot(read_group_q, gemm_m_idx_q);
+                    uop_bbufidx_o = bbuf_slot(read_group_q, gemm_m_idx_q);
+                    uop_paccidx_o = gemm_m_idx_q[PACC_IDX_WIDTH-1:0];
+                end else begin
+                    uop_abufidx_o = abuf_slot(read_group_q, gemm_m_idx_q);
+                    uop_bbufidx_o = bbuf_slot(read_group_q, gemm_n_idx_q);
+                    uop_paccidx_o = pacc_of(gemm_m_idx_q, gemm_n_idx_q, block_n_q);
+                end
                 uop_accum_o   = (k_tile_q != '0);
             end
 
             ST_OUTPUT: begin
                 uop_type_o = UOP_OUTPUT;
-                uop_addr_o = addr_add_tile(
-                    c_base_q,
-                    ((block_m_base_q + out_m_idx_q) * tn_q) +
-                    block_n_base_q + out_n_idx_q
-                );
-                uop_paccidx_o = pacc_of(out_m_idx_q, out_n_idx_q, block_n_q);
+                if (merge_mode_q) begin
+                    uop_addr_o = addr_add_tile(
+                        c_base_q,
+                        (merge_tile_batch_q[int'(out_m_idx_q)] * tm_q * tn_q) +
+                        (merge_tile_m_q[int'(out_m_idx_q)] * tn_q) +
+                        merge_tile_n_q[int'(out_m_idx_q)]
+                    );
+                    uop_paccidx_o = out_m_idx_q[PACC_IDX_WIDTH-1:0];
+                end else begin
+                    uop_addr_o = addr_add_tile(
+                        c_base_q,
+                        (batch_q * tm_q * tn_q) +
+                        ((block_m_base_q + out_m_idx_q) * tn_q) +
+                        block_n_base_q + out_n_idx_q
+                    );
+                    uop_paccidx_o = pacc_of(out_m_idx_q, out_n_idx_q, block_n_q);
+                end
             end
 
             default: begin
@@ -409,6 +517,17 @@ module static_uopparse #(
             tm_q <= '0;
             tn_q <= '0;
             tk_q <= '0;
+            batch_count_q <= '0;
+            batch_q <= '0;
+            output_tiles_per_batch_q <= '0;
+            merge_mode_q <= 1'b0;
+            merge_block_base_q <= '0;
+            merge_block_count_q <= '0;
+            for (int i = 0; i < PACC_NUM; i++) begin
+                merge_tile_batch_q[i] <= '0;
+                merge_tile_m_q[i] <= '0;
+                merge_tile_n_q[i] <= '0;
+            end
             block_m_base_q <= '0;
             block_n_base_q <= '0;
             block_m_q <= '0;
@@ -436,6 +555,37 @@ module static_uopparse #(
                     tm_q <= cmd_tm_comb;
                     tn_q <= cmd_tn_comb;
                     tk_q <= cmd_tk_comb;
+                    batch_count_q <= tile_count_t'(cmd_batch_i);
+                    batch_q <= '0;
+                    output_tiles_per_batch_q <= cmd_output_tiles_per_batch_comb;
+                    merge_mode_q <= command_merge_mode_comb;
+                    merge_block_base_q <= '0;
+                    merge_block_count_q <= command_merge_mode_comb ?
+                        min_merge_tiles(tile_count_t'(cmd_batch_i) *
+                                        cmd_output_tiles_per_batch_comb) :
+                        '0;
+                    for (int i = 0; i < PACC_NUM; i++) begin
+                        if (command_merge_mode_comb &&
+                            (i < int'(min_merge_tiles(tile_count_t'(cmd_batch_i) *
+                                                      cmd_output_tiles_per_batch_comb)))) begin
+                            automatic tile_count_t flat;
+                            automatic tile_count_t batch;
+                            automatic tile_count_t in_batch;
+                            automatic tile_count_t tile_m;
+
+                            flat = tile_count_t'(i);
+                            batch = flat / cmd_output_tiles_per_batch_comb;
+                            in_batch = flat - (batch * cmd_output_tiles_per_batch_comb);
+                            tile_m = in_batch / cmd_tn_comb;
+                            merge_tile_batch_q[i] <= batch;
+                            merge_tile_m_q[i] <= tile_m;
+                            merge_tile_n_q[i] <= in_batch - (tile_m * cmd_tn_comb);
+                        end else begin
+                            merge_tile_batch_q[i] <= '0;
+                            merge_tile_m_q[i] <= '0;
+                            merge_tile_n_q[i] <= '0;
+                        end
+                    end
                     block_m_base_q <= '0;
                     block_n_base_q <= '0;
                     block_m_q <= min_int_tile(cmd_tm_comb, BLOCK_M);
@@ -454,7 +604,8 @@ module static_uopparse #(
             end else if (uop_fire) begin
                 unique case (state_q)
                     ST_LOAD_A, ST_PREFETCH_A: begin
-                        if ((load_idx_q + 1'b1) < block_m_q) begin
+                        if ((load_idx_q + 1'b1) <
+                            (merge_mode_q ? merge_block_count_q : block_m_q)) begin
                             load_idx_q <= load_idx_q + 1'b1;
                         end else begin
                             state_q <= (state_q == ST_LOAD_A) ? ST_LOAD_B : ST_PREFETCH_B;
@@ -463,7 +614,8 @@ module static_uopparse #(
                     end
 
                     ST_LOAD_B: begin
-                        if ((load_idx_q + 1'b1) < block_n_q) begin
+                        if ((load_idx_q + 1'b1) <
+                            (merge_mode_q ? merge_block_count_q : block_n_q)) begin
                             load_idx_q <= load_idx_q + 1'b1;
                         end else begin
                             state_q <= fence_before_swap_q ? ST_ACC_FENCE : ST_BUF_SWAP;
@@ -472,7 +624,8 @@ module static_uopparse #(
                     end
 
                     ST_PREFETCH_B: begin
-                        if ((load_idx_q + 1'b1) < block_n_q) begin
+                        if ((load_idx_q + 1'b1) <
+                            (merge_mode_q ? merge_block_count_q : block_n_q)) begin
                             load_idx_q <= load_idx_q + 1'b1;
                         end else begin
                             state_q <= command_fence_pending_q ? ST_CMD_ACC_FENCE : ST_GEMM;
@@ -506,9 +659,11 @@ module static_uopparse #(
                     end
 
                     ST_GEMM: begin
-                        if ((gemm_n_idx_q + 1'b1) < block_n_q) begin
+                        if (merge_mode_q && ((gemm_m_idx_q + 1'b1) < merge_block_count_q)) begin
+                            gemm_m_idx_q <= gemm_m_idx_q + 1'b1;
+                        end else if (!merge_mode_q && ((gemm_n_idx_q + 1'b1) < block_n_q)) begin
                             gemm_n_idx_q <= gemm_n_idx_q + 1'b1;
-                        end else if ((gemm_m_idx_q + 1'b1) < block_m_q) begin
+                        end else if (!merge_mode_q && ((gemm_m_idx_q + 1'b1) < block_m_q)) begin
                             gemm_n_idx_q <= '0;
                             gemm_m_idx_q <= gemm_m_idx_q + 1'b1;
                         end else if ((k_tile_q + 1'b1) < tk_q) begin
@@ -524,17 +679,45 @@ module static_uopparse #(
                     end
 
                     ST_OUTPUT: begin
-                        if ((out_n_idx_q + 1'b1) < block_n_q) begin
+                        if (merge_mode_q && ((out_m_idx_q + 1'b1) < merge_block_count_q)) begin
+                            out_m_idx_q <= out_m_idx_q + 1'b1;
+                        end else if (!merge_mode_q && ((out_n_idx_q + 1'b1) < block_n_q)) begin
                             out_n_idx_q <= out_n_idx_q + 1'b1;
-                        end else if ((out_m_idx_q + 1'b1) < block_m_q) begin
+                        end else if (!merge_mode_q && ((out_m_idx_q + 1'b1) < block_m_q)) begin
                             out_n_idx_q <= '0;
                             out_m_idx_q <= out_m_idx_q + 1'b1;
                         end else if (has_next_block_comb) begin
                             state_q <= ST_LOAD_A;
-                            block_m_base_q <= next_block_m_base_comb;
-                            block_n_base_q <= next_block_n_base_comb;
-                            block_m_q <= next_block_m_comb;
-                            block_n_q <= next_block_n_comb;
+                            if (merge_mode_q) begin
+                                merge_block_base_q <= merge_next_base_comb;
+                                merge_block_count_q <= merge_next_count_comb;
+                                for (int i = 0; i < PACC_NUM; i++) begin
+                                    if (i < int'(merge_next_count_comb)) begin
+                                        automatic tile_count_t flat;
+                                        automatic tile_count_t batch;
+                                        automatic tile_count_t in_batch;
+                                        automatic tile_count_t tile_m;
+
+                                        flat = merge_next_base_comb + tile_count_t'(i);
+                                        batch = flat / output_tiles_per_batch_q;
+                                        in_batch = flat - (batch * output_tiles_per_batch_q);
+                                        tile_m = in_batch / tn_q;
+                                        merge_tile_batch_q[i] <= batch;
+                                        merge_tile_m_q[i] <= tile_m;
+                                        merge_tile_n_q[i] <= in_batch - (tile_m * tn_q);
+                                    end else begin
+                                        merge_tile_batch_q[i] <= '0;
+                                        merge_tile_m_q[i] <= '0;
+                                        merge_tile_n_q[i] <= '0;
+                                    end
+                                end
+                            end else begin
+                                batch_q <= next_batch_comb;
+                                block_m_base_q <= next_block_m_base_comb;
+                                block_n_base_q <= next_block_n_base_comb;
+                                block_m_q <= next_block_m_comb;
+                                block_n_q <= next_block_n_comb;
+                            end
                             k_tile_q <= '0;
                             load_idx_q <= '0;
                             gemm_m_idx_q <= '0;

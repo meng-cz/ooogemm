@@ -66,6 +66,7 @@ module top_static #(
     input  logic [DIM_WIDTH-1:0] cmd_m_i,
     input  logic [DIM_WIDTH-1:0] cmd_n_i,
     input  logic [DIM_WIDTH-1:0] cmd_k_i,
+    input  logic [DIM_WIDTH-1:0] cmd_batch_i,
 
     output logic load_mem_req_valid_o,
     input  logic load_mem_req_ready_i,
@@ -186,6 +187,7 @@ module top_static #(
         .cmd_m_i(cmd_m_i),
         .cmd_n_i(cmd_n_i),
         .cmd_k_i(cmd_k_i),
+        .cmd_batch_i(cmd_batch_i),
         .uop_valid_o(parser_uop_valid),
         .uop_ready_i(parser_uop_ready),
         .uop_type_o(parser_uop_type),

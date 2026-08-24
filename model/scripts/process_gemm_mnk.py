@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert static GEMM trace CSV rows into concrete MNK sequences."""
+"""Convert static GEMM trace CSV rows into concrete batched GEMM sequences."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ class ExprError(ValueError):
 class Gemm:
     module: str
     op_kind: str
+    b: int
     m: int
     n: int
     k: int
@@ -104,6 +105,32 @@ def eval_node(node: ast.AST, bindings: dict[str, int], expr: str, row_desc: str)
     raise ExprError(f"{row_desc}: unsupported expression syntax {expr!r}")
 
 
+def expr_references_name(expr: str, name: str, *, row_desc: str) -> bool:
+    expr = expr.strip()
+    if not expr:
+        return False
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as exc:
+        raise ExprError(f"{row_desc}: invalid expression {expr!r}") from exc
+    return any(isinstance(node, ast.Name) and node.id == name for node in ast.walk(tree))
+
+
+def split_m_batch(expr: str, m: int, batch_count: int, bindings: dict[str, int], *, row_desc: str) -> tuple[int, int]:
+    if batch_count != 1 or "B" not in bindings or not expr_references_name(expr, "B", row_desc=row_desc):
+        return batch_count, m
+
+    batch_size = bindings["B"]
+    if batch_size <= 0:
+        return batch_count, m
+    no_batch_bindings = dict(bindings)
+    no_batch_bindings["B"] = 1
+    m_without_batch = eval_expr(expr, no_batch_bindings, row_desc=row_desc)
+    if m == batch_size * m_without_batch:
+        return batch_size, m_without_batch
+    return batch_count, m
+
+
 def projection_name(module: str) -> str:
     return module.rsplit(".", 1)[-1]
 
@@ -112,11 +139,12 @@ def merge_group(rows: list[Gemm]) -> Gemm | None:
     first = rows[0]
     if any(row.op_kind != "linear" for row in rows):
         return None
-    if any(row.n != first.n or row.k != first.k for row in rows):
+    if any(row.b != first.b or row.n != first.n or row.k != first.k for row in rows):
         return None
     return Gemm(
         module="+".join(projection_name(row.module) for row in rows),
         op_kind=first.op_kind,
+        b=first.b,
         m=sum(row.m for row in rows),
         n=first.n,
         k=first.k,
@@ -166,8 +194,8 @@ def read_gemms(path: Path, bindings: dict[str, int]) -> list[Gemm]:
                 raise ExprError(f"{row_desc}: M/N/K must be positive, got {m} {n} {k}")
             if batch_count <= 0:
                 raise ExprError(f"{row_desc}: batch_dims must be positive, got {batch_count}")
-            gemm = Gemm(row["module"], row["op_kind"], m, n, k)
-            gemms.extend(gemm for _ in range(batch_count))
+            b, m = split_m_batch(row["M"], m, batch_count, bindings, row_desc=row_desc)
+            gemms.append(Gemm(row["module"], row["op_kind"], b, m, n, k))
     return gemms
 
 
@@ -175,7 +203,7 @@ def write_mnk(path: Path, gemms: list[Gemm]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as fp:
         for gemm in gemms:
-            fp.write(f"{gemm.m} {gemm.n} {gemm.k}\n")
+            fp.write(f"{gemm.b} {gemm.m} {gemm.n} {gemm.k}\n")
 
 
 def main(argv: list[str]) -> int:

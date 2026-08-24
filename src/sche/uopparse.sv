@@ -1,11 +1,14 @@
 // GEMM uop parser.
 //
-// A command describes one complete MxNxK GEMM.  The parser splits it into
+// A command describes one complete BxMxNxK batched GEMM.  This dynamic parser
+// treats the batch dimension as B independent MxNxK GEMMs in batch order; it
+// does not merge tiles from different batches into one output block.  The
+// parser splits each batch instance into
 // tile-level uops for an SA_WIDTH x SA_WIDTH systolic array.  Matrix layout and
 // padding are assumed to be handled by software; addresses are tile-linear:
-//   A tile(m, k) address = a_base + m * T_K + k
-//   B tile(k, n) address = b_base + k * T_N + n
-//   C tile(m, n) address = c_base + m * T_N + n
+//   A tile(batch, m, k) address = a_base + batch * T_M * T_K + m * T_K + k
+//   B tile(batch, k, n) address = b_base + batch * T_K * T_N + k * T_N + n
+//   C tile(batch, m, n) address = c_base + batch * T_M * T_N + m * T_N + n
 // where T_M/T_N/T_K are ceil(M/N/K / SA_WIDTH).
 //
 // For each output block, the parser reserves a compact PACC rectangle:
@@ -46,6 +49,7 @@ module uopparse #(
     input  logic [DIM_WIDTH-1:0] cmd_m_i,
     input  logic [DIM_WIDTH-1:0] cmd_n_i,
     input  logic [DIM_WIDTH-1:0] cmd_k_i,
+    input  logic [DIM_WIDTH-1:0] cmd_batch_i,
 
     output logic uop_valid_o,
     input  logic uop_ready_i,
@@ -252,6 +256,8 @@ module uopparse #(
     tile_count_t tm_q;
     tile_count_t tn_q;
     tile_count_t tk_q;
+    tile_count_t batch_count_q;
+    tile_count_t batch_q;
     tile_count_t block_m_base_q;
     tile_count_t block_n_base_q;
     tile_count_t block_m_q;
@@ -270,6 +276,7 @@ module uopparse #(
     tile_count_t next_block_n_base_comb;
     tile_count_t next_block_m_comb;
     tile_count_t next_block_n_comb;
+    tile_count_t next_batch_comb;
     logic command_has_tiles_comb;
     logic has_next_block_comb;
 
@@ -278,16 +285,23 @@ module uopparse #(
         cmd_tn_comb = ceil_tiles(cmd_n_i);
         cmd_tk_comb = ceil_tiles(cmd_k_i);
         command_has_tiles_comb =
+            (cmd_batch_i != '0) &&
             (cmd_tm_comb != '0) && (cmd_tn_comb != '0) && (cmd_tk_comb != '0);
     end
 
     always_comb begin
+        next_batch_comb = batch_q;
         if ((block_n_base_q + tile_count_t'(BLOCK_N)) < tn_q) begin
             next_block_m_base_comb = block_m_base_q;
             next_block_n_base_comb = block_n_base_q + tile_count_t'(BLOCK_N);
             has_next_block_comb = 1'b1;
         end else if ((block_m_base_q + tile_count_t'(BLOCK_M)) < tm_q) begin
             next_block_m_base_comb = block_m_base_q + tile_count_t'(BLOCK_M);
+            next_block_n_base_comb = '0;
+            has_next_block_comb = 1'b1;
+        end else if ((batch_q + 1'b1) < batch_count_q) begin
+            next_batch_comb = batch_q + 1'b1;
+            next_block_m_base_comb = '0;
             next_block_n_base_comb = '0;
             has_next_block_comb = 1'b1;
         end else begin
@@ -317,6 +331,7 @@ module uopparse #(
                 uop_type_o    = UOP_LOAD_A;
                 uop_addr_o    = addr_add_tile(
                     a_base_q,
+                    (batch_q * tm_q * tk_q) +
                     ((block_m_base_q + load_idx_q) * tk_q) + k_tile_q
                 );
                 uop_abufidx_o = load_idx_q[ABUF_IDX_WIDTH-1:0];
@@ -327,6 +342,7 @@ module uopparse #(
                 uop_type_o    = UOP_LOAD_B;
                 uop_addr_o    = addr_add_tile(
                     b_base_q,
+                    (batch_q * tk_q * tn_q) +
                     (k_tile_q * tn_q) + block_n_base_q + load_idx_q
                 );
                 uop_bbufidx_o = load_idx_q[BBUF_IDX_WIDTH-1:0];
@@ -345,6 +361,7 @@ module uopparse #(
                 uop_type_o    = UOP_OUTPUT;
                 uop_addr_o    = addr_add_tile(
                     c_base_q,
+                    (batch_q * tm_q * tn_q) +
                     ((block_m_base_q + out_m_idx_q) * tn_q) +
                     block_n_base_q + out_n_idx_q
                 );
@@ -370,6 +387,8 @@ module uopparse #(
             tm_q <= '0;
             tn_q <= '0;
             tk_q <= '0;
+            batch_count_q <= '0;
+            batch_q <= '0;
             block_m_base_q <= '0;
             block_n_base_q <= '0;
             block_m_q <= '0;
@@ -392,6 +411,8 @@ module uopparse #(
                     tm_q <= cmd_tm_comb;
                     tn_q <= cmd_tn_comb;
                     tk_q <= cmd_tk_comb;
+                    batch_count_q <= tile_count_t'(cmd_batch_i);
+                    batch_q <= '0;
                     block_m_base_q <= '0;
                     block_n_base_q <= '0;
                     block_m_q <= min_int_tile(cmd_tm_comb, BLOCK_M);
@@ -452,6 +473,7 @@ module uopparse #(
                             out_m_idx_q <= out_m_idx_q + 1'b1;
                         end else if (has_next_block_comb) begin
                             state_q <= ST_LOAD_A;
+                            batch_q <= next_batch_comb;
                             block_m_base_q <= next_block_m_base_comb;
                             block_n_base_q <= next_block_n_base_comb;
                             block_m_q <= next_block_m_comb;

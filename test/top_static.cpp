@@ -90,6 +90,7 @@ struct Cmd {
     int m = 0;
     int n = 0;
     int k = 0;
+    int batch = 1;
     std::vector<uint8_t> a;
     std::vector<uint8_t> b;
     std::string name;
@@ -362,6 +363,7 @@ private:
         dut_.cmd_m_i = 0;
         dut_.cmd_n_i = 0;
         dut_.cmd_k_i = 0;
+        dut_.cmd_batch_i = 0;
         dut_.load_mem_req_ready_i = 0;
         dut_.load_mem_rsp_valid_i = 0;
         dut_.load_mem_rsp_id_i = 0;
@@ -730,6 +732,7 @@ private:
             dut_.cmd_m_i = static_cast<uint32_t>(cmd.m);
             dut_.cmd_n_i = static_cast<uint32_t>(cmd.n);
             dut_.cmd_k_i = static_cast<uint32_t>(cmd.k);
+            dut_.cmd_batch_i = static_cast<uint32_t>(cmd.batch);
         }
 
         dut_.load_mem_req_ready_i = req_ready_dist(rng_) ? 1 : 0;

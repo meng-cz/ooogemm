@@ -55,6 +55,7 @@ struct Cmd {
     uint32_t m = 0;
     uint32_t n = 0;
     uint32_t k = 0;
+    uint32_t batch = 1;
 };
 
 std::string type_name(uint8_t type) {
@@ -173,6 +174,7 @@ public:
         dut.cmd_m_i = 0;
         dut.cmd_n_i = 0;
         dut.cmd_k_i = 0;
+        dut.cmd_batch_i = 0;
     }
 
     void tick() {
@@ -205,6 +207,7 @@ void run_case(const std::string& name,
               uint32_t m,
               uint32_t n,
               uint32_t k,
+              uint32_t batch,
               const std::vector<Uop>& expected) {
     Tb tb;
     tb.reset();
@@ -221,6 +224,7 @@ void run_case(const std::string& name,
         tb.dut.cmd_m_i = m;
         tb.dut.cmd_n_i = n;
         tb.dut.cmd_k_i = k;
+        tb.dut.cmd_batch_i = batch;
         tb.dut.uop_ready_i = ((tb.cycle % 7) != 2) ? 1 : 0;
         tb.dut.eval();
 
@@ -283,6 +287,7 @@ void run_command_stream(const std::string& name,
         tb.dut.cmd_m_i = cmd.m;
         tb.dut.cmd_n_i = cmd.n;
         tb.dut.cmd_k_i = cmd.k;
+        tb.dut.cmd_batch_i = cmd.batch;
         tb.dut.uop_ready_i = ((tb.cycle % 5) != 1) ? 1 : 0;
         tb.dut.eval();
 
@@ -452,6 +457,34 @@ std::vector<Uop> tail_rows(uint32_t a, uint32_t b, uint32_t c) {
     return e;
 }
 
+std::vector<Uop> two_batch_single_tile(uint32_t a, uint32_t b, uint32_t c) {
+    std::vector<Uop> e;
+    for (int batch = 0; batch < 2; ++batch) {
+        e.push_back(la(a + static_cast<uint32_t>(batch), batch, 0));
+    }
+    for (int batch = 0; batch < 2; ++batch) {
+        e.push_back(lb(b + static_cast<uint32_t>(batch), batch, 0));
+    }
+    e.push_back(special(UOP_BUF_SWAP));
+    e.push_back(special(UOP_ACC_FENCE));
+    for (int batch = 0; batch < 2; ++batch) {
+        Uop u;
+        u.type = UOP_GEMM;
+        u.abuf = static_cast<uint32_t>(batch);
+        u.bbuf = static_cast<uint32_t>(batch);
+        u.pacc = static_cast<uint32_t>(batch);
+        e.push_back(u);
+    }
+    for (int batch = 0; batch < 2; ++batch) {
+        Uop u;
+        u.type = UOP_OUTPUT;
+        u.addr = c + static_cast<uint32_t>(batch);
+        u.pacc = static_cast<uint32_t>(batch);
+        e.push_back(u);
+    }
+    return e;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -459,9 +492,11 @@ int main(int argc, char** argv) {
     try {
         run_case("two_by_two_two_k", 0x1000, 0x2000, 0x3000,
                  2 * kSaWidth, 2 * kSaWidth, 2 * kSaWidth,
+                 1,
                  two_by_two_two_k(0x1000, 0x2000, 0x3000));
         run_case("two_blocks", 0x4000, 0x5000, 0x6000,
                  2 * kSaWidth, 3 * kSaWidth, 2 * kSaWidth,
+                 1,
                  two_blocks(0x4000, 0x5000, 0x6000));
         run_command_stream(
             "two_command_group_flip",
@@ -474,7 +509,12 @@ int main(int argc, char** argv) {
         );
         run_case("tail_rows", 0xa000, 0xb000, 0xc000,
                  kSaWidth + 3, kSaWidth + (kSaWidth > 5 ? kSaWidth - 5 : 1), kSaWidth,
+                 1,
                  tail_rows(0xa000, 0xb000, 0xc000));
+        run_case("two_batch_single_tile_merge", 0xd000, 0xe000, 0xf000,
+                 kSaWidth, kSaWidth, kSaWidth,
+                 2,
+                 two_batch_single_tile(0xd000, 0xe000, 0xf000));
         std::cout << "static_uopparse tests passed\n";
     } catch (const std::exception& e) {
         std::cerr << "static_uopparse test failed: " << e.what() << "\n";

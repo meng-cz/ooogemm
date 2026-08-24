@@ -12,6 +12,7 @@ module L4_W32 (
     input  logic [15:0] cmd_m_i,
     input  logic [15:0] cmd_n_i,
     input  logic [15:0] cmd_k_i,
+    input  logic [15:0] cmd_batch_i,
 
     output logic load_mem_req_valid_o,
     input  logic load_mem_req_ready_i,
@@ -61,6 +62,7 @@ module L4_W32 (
         .cmd_m_i(cmd_m_i),
         .cmd_n_i(cmd_n_i),
         .cmd_k_i(cmd_k_i),
+        .cmd_batch_i(cmd_batch_i),
         .load_mem_req_valid_o(load_mem_req_valid_o),
         .load_mem_req_ready_i(load_mem_req_ready_i),
         .load_mem_req_addr_o(load_mem_req_addr_o),

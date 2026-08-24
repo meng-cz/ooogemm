@@ -48,6 +48,7 @@ struct Cmd {
     uint32_t n = 0;
     uint32_t k = 0;
     std::string name;
+    uint32_t batch = 1;
 };
 
 struct Uop {
@@ -148,55 +149,66 @@ std::vector<Uop> reference_for_cmd(const Cmd& cmd) {
         return out;
     }
 
-    for (int block_m_base = 0; block_m_base < tm; block_m_base += block_m_max) {
-        const int block_m = std::min(block_m_max, tm - block_m_base);
-        for (int block_n_base = 0; block_n_base < tn; block_n_base += block_n_max) {
-            const int block_n = std::min(block_n_max, tn - block_n_base);
+    for (uint32_t batch = 0; batch < cmd.batch; ++batch) {
+        const uint32_t a_batch_base =
+            cmd.a_base + batch * static_cast<uint32_t>(tm * tk);
+        const uint32_t b_batch_base =
+            cmd.b_base + batch * static_cast<uint32_t>(tk * tn);
+        const uint32_t c_batch_base =
+            cmd.c_base + batch * static_cast<uint32_t>(tm * tn);
+        for (int block_m_base = 0; block_m_base < tm; block_m_base += block_m_max) {
+            const int block_m = std::min(block_m_max, tm - block_m_base);
+            for (int block_n_base = 0; block_n_base < tn; block_n_base += block_n_max) {
+                const int block_n = std::min(block_n_max, tn - block_n_base);
 
-            for (int kt = 0; kt < tk; ++kt) {
-                for (int lm = 0; lm < block_m; ++lm) {
-                    Uop u;
-                    u.type = UOP_LOAD_A;
-                    u.addr = cmd.a_base + static_cast<uint32_t>((block_m_base + lm) * tk + kt);
-                    u.abuf = static_cast<uint32_t>(lm);
-                    u.valid_rows = tile_valid_rows(cmd.m, block_m_base + lm);
-                    u.tag = cmd.name;
-                    out.push_back(u);
-                }
+                for (int kt = 0; kt < tk; ++kt) {
+                    for (int lm = 0; lm < block_m; ++lm) {
+                        Uop u;
+                        u.type = UOP_LOAD_A;
+                        u.addr = a_batch_base +
+                            static_cast<uint32_t>((block_m_base + lm) * tk + kt);
+                        u.abuf = static_cast<uint32_t>(lm);
+                        u.valid_rows = tile_valid_rows(cmd.m, block_m_base + lm);
+                        u.tag = cmd.name;
+                        out.push_back(u);
+                    }
 
-                for (int ln = 0; ln < block_n; ++ln) {
-                    Uop u;
-                    u.type = UOP_LOAD_B;
-                    u.addr = cmd.b_base + static_cast<uint32_t>(kt * tn + block_n_base + ln);
-                    u.bbuf = static_cast<uint32_t>(ln);
-                    u.valid_rows = tile_valid_rows(cmd.n, block_n_base + ln);
-                    u.tag = cmd.name;
-                    out.push_back(u);
+                    for (int ln = 0; ln < block_n; ++ln) {
+                        Uop u;
+                        u.type = UOP_LOAD_B;
+                        u.addr = b_batch_base +
+                            static_cast<uint32_t>(kt * tn + block_n_base + ln);
+                        u.bbuf = static_cast<uint32_t>(ln);
+                        u.valid_rows = tile_valid_rows(cmd.n, block_n_base + ln);
+                        u.tag = cmd.name;
+                        out.push_back(u);
+                    }
+
+                    for (int lm = 0; lm < block_m; ++lm) {
+                        for (int ln = 0; ln < block_n; ++ln) {
+                            Uop u;
+                            u.type = UOP_GEMM;
+                            u.abuf = static_cast<uint32_t>(lm);
+                            u.bbuf = static_cast<uint32_t>(ln);
+                            u.pacc = static_cast<uint32_t>(lm * block_n + ln);
+                            u.accum = kt != 0;
+                            u.tag = cmd.name;
+                            out.push_back(u);
+                        }
+                    }
                 }
 
                 for (int lm = 0; lm < block_m; ++lm) {
                     for (int ln = 0; ln < block_n; ++ln) {
                         Uop u;
-                        u.type = UOP_GEMM;
-                        u.abuf = static_cast<uint32_t>(lm);
-                        u.bbuf = static_cast<uint32_t>(ln);
+                        u.type = UOP_OUTPUT;
+                        u.addr = c_batch_base +
+                            static_cast<uint32_t>((block_m_base + lm) * tn +
+                                                  block_n_base + ln);
                         u.pacc = static_cast<uint32_t>(lm * block_n + ln);
-                        u.accum = kt != 0;
                         u.tag = cmd.name;
                         out.push_back(u);
                     }
-                }
-            }
-
-            for (int lm = 0; lm < block_m; ++lm) {
-                for (int ln = 0; ln < block_n; ++ln) {
-                    Uop u;
-                    u.type = UOP_OUTPUT;
-                    u.addr = cmd.c_base + static_cast<uint32_t>((block_m_base + lm) * tn +
-                                                                block_n_base + ln);
-                    u.pacc = static_cast<uint32_t>(lm * block_n + ln);
-                    u.tag = cmd.name;
-                    out.push_back(u);
                 }
             }
         }
@@ -235,6 +247,7 @@ public:
         dut.cmd_m_i = 0;
         dut.cmd_n_i = 0;
         dut.cmd_k_i = 0;
+        dut.cmd_batch_i = 0;
     }
 
     void tick() {
@@ -267,6 +280,7 @@ void drive_cmd(Vuopparse& dut, const Cmd& cmd) {
     dut.cmd_m_i = cmd.m;
     dut.cmd_n_i = cmd.n;
     dut.cmd_k_i = cmd.k;
+    dut.cmd_batch_i = cmd.batch;
 }
 
 Uop read_uop(const Vuopparse& dut) {
@@ -418,6 +432,7 @@ std::vector<Cmd> random_cmds(uint32_t seed) {
     std::uniform_int_distribution<int> n_tile_dist(0, max_n_tiles);
     std::uniform_int_distribution<int> k_tile_dist(0, max_k_tiles);
     std::uniform_int_distribution<int> edge_dist(0, kSaWidth - 1);
+    std::uniform_int_distribution<int> batch_dist(1, 4);
     std::uniform_int_distribution<uint32_t> base_dist(0, 4000);
 
     std::vector<Cmd> cmds;
@@ -436,6 +451,7 @@ std::vector<Cmd> random_cmds(uint32_t seed) {
         cmd.k = k_tiles == 0 ? 0u :
             static_cast<uint32_t>((k_tiles - 1) * kSaWidth + 1 + edge_dist(rng));
         cmd.name = "rand" + std::to_string(i);
+        cmd.batch = static_cast<uint32_t>(batch_dist(rng));
         cmds.push_back(cmd);
     }
     return cmds;
@@ -526,6 +542,14 @@ int main(int argc, char** argv) {
             },
             ready_bursty
         );
+
+        Cmd batched_small{0x2100, 0x3100, 0x4100,
+                          static_cast<uint32_t>(kSaWidth),
+                          static_cast<uint32_t>(kSaWidth),
+                          static_cast<uint32_t>(2 * kSaWidth),
+                          "batched_independent"};
+        batched_small.batch = 3;
+        run_sequence("batched_independent", {batched_small}, ready_periodic_stall);
 
         run_sequence("target_extremes", target_extreme_cmds(), ready_bursty);
         run_sequence("random_stress", random_cmds(seed), ready_periodic_stall);
