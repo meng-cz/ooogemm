@@ -15,7 +15,15 @@
 
 namespace {
 
-constexpr int kLastToOutLatency = 3;
+constexpr int kLastToOutLatency = 2;
+#ifndef ACC_FRAC_BITS_TEST
+#define ACC_FRAC_BITS_TEST 18
+#endif
+#ifndef FDOT_CSA_WIDTH_TEST
+#define FDOT_CSA_WIDTH_TEST 64
+#endif
+constexpr int kAccFracBits = ACC_FRAC_BITS_TEST;
+constexpr int kFdotCsaWidth = FDOT_CSA_WIDTH_TEST;
 #ifndef PACC_IDX_WIDTH_TEST
 #define PACC_IDX_WIDTH_TEST 7
 #endif
@@ -58,8 +66,8 @@ struct DecodedFp8 {
 
 struct Expected {
     uint64_t due_cycle = 0;
-    int64_t exp = 0;
-    int64_t sig = 0;
+    int64_t fixed = 0;
+    bool nan = false;
     uint32_t paccidx = 0;
     bool accum = false;
     std::string name;
@@ -90,13 +98,6 @@ std::string hex_sig(int64_t value) {
     return os.str();
 }
 
-uint32_t float_to_bits(float value) {
-    uint32_t bits = 0;
-    static_assert(sizeof(bits) == sizeof(value), "float must be 32 bits");
-    std::memcpy(&bits, &value, sizeof(bits));
-    return bits;
-}
-
 DecodedFp8 decode_e4m3(uint8_t x) {
     DecodedFp8 dec;
     const int exp = (x >> 3) & 0xf;
@@ -117,25 +118,28 @@ DecodedFp8 decode_e4m3(uint8_t x) {
     return dec;
 }
 
-long double fp8_product(uint8_t a, uint8_t b, bool& saw_nan) {
+int64_t fp8_product_fixed(uint8_t a, uint8_t b, bool& saw_nan) {
     const DecodedFp8 da = decode_e4m3(a);
     const DecodedFp8 db = decode_e4m3(b);
 
     if (da.nan || db.nan) {
         saw_nan = true;
-        return 0.0L;
+        return 0;
     }
     if (da.zero || db.zero) {
-        return 0.0L;
+        return 0;
     }
 
     const int prod_sig = da.sig * db.sig;
     const int prod_exp2 = da.exp2 + db.exp2;
-    long double value = std::ldexp(static_cast<long double>(prod_sig), prod_exp2);
-    if (da.sign ^ db.sign) {
-        value = -value;
+    const int shift = prod_exp2 + kAccFracBits;
+    int64_t value = 0;
+    if (shift >= 0) {
+        value = static_cast<int64_t>(prod_sig) << shift;
+    } else {
+        value = static_cast<int64_t>(prod_sig) >> -shift;
     }
-    return value;
+    return (da.sign ^ db.sign) ? -value : value;
 }
 
 struct Pseudo {
@@ -180,15 +184,15 @@ Pseudo pseudo_from_long_double(long double value, bool saw_nan) {
     return Pseudo{top_exp - sig_top, sig};
 }
 
-Pseudo reference_dot_pseudo(const std::vector<Pair>& pairs) {
-    bool saw_nan = false;
-    long double sum = 0.0L;
+int64_t reference_dot_fixed(const std::vector<Pair>& pairs, bool& saw_nan) {
+    saw_nan = false;
+    int64_t sum = 0;
 
     for (const Pair& p : pairs) {
-        sum += fp8_product(p.a, p.b, saw_nan);
+        sum += fp8_product_fixed(p.a, p.b, saw_nan);
     }
 
-    return pseudo_from_long_double(sum, saw_nan);
+    return sum;
 }
 
 bool is_nan_e4m3(uint8_t x) {
@@ -286,8 +290,9 @@ private:
             if (expected_.empty()) {
                 std::ostringstream os;
                 os << "unexpected valid_o at cycle " << cycle_
-                   << ", exp=" << static_cast<int64_t>(dut_.psum_exp_o)
-                   << ", sig=" << hex_sig(sign_extend(dut_.psum_sig_o, kPaccSigWidth));
+                   << ", sum=" << hex_sig(sign_extend(dut_.psum_sum_o, kFdotCsaWidth))
+                   << ", carry=" << hex_sig(sign_extend(dut_.psum_carry_o, kFdotCsaWidth))
+                   << ", nan=" << static_cast<int>(dut_.psum_nan_o);
                 fail(os.str());
                 return;
             }
@@ -300,31 +305,35 @@ private:
                 os << "valid_o at wrong cycle for " << exp.name
                    << ": got cycle " << cycle_
                    << ", expected cycle " << exp.due_cycle
-                   << ", exp=" << static_cast<int64_t>(dut_.psum_exp_o)
-                   << ", sig=" << hex_sig(sign_extend(dut_.psum_sig_o, kPaccSigWidth));
+                   << ", sum=" << hex_sig(sign_extend(dut_.psum_sum_o, kFdotCsaWidth))
+                   << ", carry=" << hex_sig(sign_extend(dut_.psum_carry_o, kFdotCsaWidth))
+                   << ", nan=" << static_cast<int>(dut_.psum_nan_o);
                 fail(os.str());
                 return;
             }
 
-            const int64_t got_exp = sign_extend(dut_.psum_exp_o, kPaccExpWidth);
-            const int64_t got_sig = sign_extend(dut_.psum_sig_o, kPaccSigWidth);
+            const int64_t got_sum = sign_extend(dut_.psum_sum_o, kFdotCsaWidth);
+            const int64_t got_carry = sign_extend(dut_.psum_carry_o, kFdotCsaWidth);
+            const int64_t got_fixed = got_sum + got_carry;
 
-            if (got_exp != exp.exp) {
+            if (static_cast<bool>(dut_.psum_nan_o) != exp.nan) {
                 std::ostringstream os;
-                os << "wrong pseudo exponent for " << exp.name
+                os << "wrong nan flag for " << exp.name
                    << " at cycle " << cycle_
-                   << ": got " << got_exp
-                   << ", expected " << exp.exp;
+                   << ": got " << static_cast<int>(dut_.psum_nan_o)
+                   << ", expected " << static_cast<int>(exp.nan);
                 fail(os.str());
                 return;
             }
 
-            if (got_sig != exp.sig) {
+            if (got_fixed != exp.fixed) {
                 std::ostringstream os;
-                os << "wrong pseudo significand for " << exp.name
+                os << "wrong fixed sum for " << exp.name
                    << " at cycle " << cycle_
-                   << ": got " << hex_sig(got_sig)
-                   << ", expected " << hex_sig(exp.sig);
+                   << ": got sum=" << hex_sig(got_sum)
+                   << ", carry=" << hex_sig(got_carry)
+                   << ", total=" << got_fixed
+                   << ", expected " << exp.fixed;
                 fail(os.str());
                 return;
             }
@@ -352,8 +361,8 @@ private:
             std::ostringstream os;
             os << "missing valid_o for " << expected_.front().name
                << " at due cycle " << cycle_
-               << ", expected exp=" << expected_.front().exp
-               << ", sig=" << hex_sig(expected_.front().sig);
+               << ", expected fixed=" << expected_.front().fixed
+               << ", nan=" << static_cast<int>(expected_.front().nan);
             fail(os.str());
         }
     }
@@ -400,10 +409,11 @@ private:
         dut_.accum_i = accum ? 1 : 0;
 
         if (last) {
-            const Pseudo expected_pseudo = reference_dot_pseudo(current_dot_);
+            bool expected_nan = false;
+            const int64_t expected_fixed = reference_dot_fixed(current_dot_, expected_nan);
             expected_.push_back(Expected{cycle_ + 1 + kLastToOutLatency,
-                                         expected_pseudo.exp,
-                                         expected_pseudo.sig,
+                                         expected_fixed,
+                                         expected_nan,
                                          paccidx & kPaccIdxMask,
                                          accum,
                                          name});

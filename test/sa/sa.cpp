@@ -45,12 +45,10 @@ constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
+constexpr int kFdotAccFracBits = 18;
 
 static_assert(kSaWidth >= 2, "this testbench expects SA_WIDTH_TEST>=2");
-static_assert(kSaWidth <= 4, "this testbench supports SA_WIDTH_TEST<=4");
 static_assert(kSubtileK >= 2, "this testbench expects SUBTILE_K_TEST>=2");
-static_assert(kSubtileK <= 4, "this testbench supports SUBTILE_K_TEST<=4");
-static_assert(kLaneNum >= 2, "this testbench expects at least two lanes");
 
 struct DecodedFp8 {
     bool sign = false;
@@ -152,6 +150,27 @@ long double fp8_product(uint8_t a, uint8_t b, bool& saw_nan) {
     return value;
 }
 
+int64_t fp8_product_fixed(uint8_t a, uint8_t b, bool& saw_nan) {
+    const DecodedFp8 da = decode_e4m3(a);
+    const DecodedFp8 db = decode_e4m3(b);
+    if (da.nan || db.nan) {
+        saw_nan = true;
+        return 0;
+    }
+    if (da.zero || db.zero) {
+        return 0;
+    }
+
+    const int shift = da.exp2 + db.exp2 + kFdotAccFracBits;
+    int64_t value = 0;
+    if (shift >= 0) {
+        value = static_cast<int64_t>(da.sig * db.sig) << shift;
+    } else {
+        value = static_cast<int64_t>(da.sig * db.sig) >> -shift;
+    }
+    return (da.sign ^ db.sign) ? -value : value;
+}
+
 Pseudo pseudo_nan() {
     return Pseudo{kPseudoNanExp, 1};
 }
@@ -178,6 +197,35 @@ Pseudo pseudo_from_long_double(long double value, bool saw_nan = false) {
     const uint64_t mag = static_cast<uint64_t>(scaled);
     const int64_t sig = neg ? -static_cast<int64_t>(mag) : static_cast<int64_t>(mag);
     return Pseudo{top_exp - sig_top, sig};
+}
+
+Pseudo pseudo_from_fixed(int64_t fixed, bool saw_nan = false) {
+    if (saw_nan) {
+        return pseudo_nan();
+    }
+    if (fixed == 0) {
+        return Pseudo{};
+    }
+
+    const bool neg = fixed < 0;
+    uint64_t abs_value = neg ? static_cast<uint64_t>(-fixed) : static_cast<uint64_t>(fixed);
+    int msb = 0;
+    for (int i = 0; i < 63; ++i) {
+        if ((abs_value & (uint64_t{1} << i)) != 0) {
+            msb = i;
+        }
+    }
+
+    uint64_t mag = 0;
+    for (int i = 0; i < kPaccSigWidth - 1; ++i) {
+        const int src = msb - (kPaccSigWidth - 2) + i;
+        if (src >= 0 && src < 63 && ((abs_value & (uint64_t{1} << src)) != 0)) {
+            mag |= uint64_t{1} << i;
+        }
+    }
+
+    const int64_t sig = neg ? -static_cast<int64_t>(mag) : static_cast<int64_t>(mag);
+    return Pseudo{msb - kFdotAccFracBits - (kPaccSigWidth - 2), sig};
 }
 
 int64_t trunc_shift_abs_signed(int64_t sig, int shift) {
@@ -251,11 +299,11 @@ uint32_t pseudo_to_fp32_bits(const Pseudo& value) {
 
 Pseudo reference_cell(const Matrix& m, int row, int col) {
     bool saw_nan = false;
-    long double sum = 0.0L;
+    int64_t sum = 0;
     for (int k = 0; k < kSubtileK; ++k) {
-        sum += fp8_product(m.a[row][k], m.b[k][col], saw_nan);
+        sum += fp8_product_fixed(m.a[row][k], m.b[k][col], saw_nan);
     }
-    return pseudo_from_long_double(sum, saw_nan);
+    return pseudo_from_fixed(sum, saw_nan);
 }
 
 uint32_t pack_row(const uint8_t row[kSubtileK]) {
@@ -264,6 +312,35 @@ uint32_t pack_row(const uint8_t row[kSubtileK]) {
         bits |= static_cast<uint32_t>(row[i]) << (8 * i);
     }
     return bits;
+}
+
+template <typename Port>
+void clear_packed_row(Port& port) {
+#if (SUBTILE_K_TEST * 8) <= 32
+    port = 0;
+#else
+    for (int word = 0; word < ((SUBTILE_K_TEST * 8 + 31) / 32); ++word) {
+        port[word] = 0;
+    }
+#endif
+}
+
+template <typename Port>
+void assign_packed_row(Port& port, const uint8_t row[kSubtileK]) {
+#if (SUBTILE_K_TEST * 8) <= 32
+    port = pack_row(row);
+#else
+    for (int word = 0; word < ((SUBTILE_K_TEST * 8 + 31) / 32); ++word) {
+        uint32_t bits = 0;
+        for (int byte = 0; byte < 4; ++byte) {
+            const int idx = word * 4 + byte;
+            if (idx < kSubtileK) {
+                bits |= static_cast<uint32_t>(row[idx]) << (8 * byte);
+            }
+        }
+        port[word] = bits;
+    }
+#endif
 }
 
 bool is_nan_e4m3(uint8_t x) {
@@ -372,7 +449,7 @@ public:
         same_pacc_interlock_test();
         random_pressure();
 
-        idle(20);
+        drain_pending_outputs();
         if (!expected_rows_.empty()) {
             fail("test finished with pending getacc rows");
         }
@@ -402,8 +479,8 @@ private:
         dut_.bin_valid = 0;
         dut_.bin_laneidx = 0;
         for (int i = 0; i < kSaWidth; ++i) {
-            dut_.ain_data[i] = 0;
-            dut_.bin_data[i] = 0;
+            clear_packed_row(dut_.ain_data[i]);
+            clear_packed_row(dut_.bin_data[i]);
         }
         dut_.gemm_valid = 0;
         dut_.gemm_instid = 0;
@@ -474,7 +551,7 @@ private:
         dut_.bin_laneidx = static_cast<uint32_t>(lane);
 
         for (int row = 0; row < kSaWidth; ++row) {
-            dut_.ain_data[row] = pack_row(m.a[row]);
+            assign_packed_row(dut_.ain_data[row], m.a[row]);
         }
         for (int col = 0; col < kSaWidth; ++col) {
             uint8_t transposed_col[kSubtileK] = {};
@@ -483,7 +560,7 @@ private:
             }
             // SA bin_data expects the already-transposed B view from memory:
             // one row per output column, ordered by K inside the row.
-            dut_.bin_data[col] = pack_row(transposed_col);
+            assign_packed_row(dut_.bin_data[col], transposed_col);
         }
         tick();
     }
@@ -493,7 +570,7 @@ private:
         dut_.ain_valid = 1;
         dut_.ain_laneidx = static_cast<uint32_t>(lane);
         for (int row = 0; row < kSaWidth; ++row) {
-            dut_.ain_data[row] = pack_row(m.a[row]);
+            assign_packed_row(dut_.ain_data[row], m.a[row]);
         }
         tick();
     }
@@ -509,7 +586,7 @@ private:
             }
             // SA bin_data expects the already-transposed B view from memory:
             // one row per output column, ordered by K inside the row.
-            dut_.bin_data[col] = pack_row(transposed_col);
+            assign_packed_row(dut_.bin_data[col], transposed_col);
         }
         tick();
     }
@@ -530,7 +607,7 @@ private:
         dut_.gemm_accum = accum ? 1 : 0;
 
         for (int row = 0; row < kSaWidth; ++row) {
-            dut_.ain_data[row] = pack_row(m.a[row]);
+            assign_packed_row(dut_.ain_data[row], m.a[row]);
         }
         for (int col = 0; col < kSaWidth; ++col) {
             uint8_t transposed_col[kSubtileK] = {};
@@ -539,7 +616,7 @@ private:
             }
             // SA bin_data expects the already-transposed B view from memory:
             // one row per output column, ordered by K inside the row.
-            dut_.bin_data[col] = pack_row(transposed_col);
+            assign_packed_row(dut_.bin_data[col], transposed_col);
         }
 
         dut_.eval();
@@ -583,6 +660,14 @@ private:
             std::ostringstream os;
             os << "expected first allocator choice to be lane 0, got lane " << lane0;
             fail(os.str());
+        }
+
+        if (kLaneNum == 1) {
+            write_matrices(lane0, m0);
+            update_model(m0, 3, false);
+            wait_finish(0x31);
+            getacc_and_expect(3, "alloc_priority_single_lane_idx3");
+            return;
         }
 
         const int lane1 = allocate_while_writing_matrices(lane0, m0, 0x32, 4, false);
@@ -687,9 +772,17 @@ private:
         const Matrix m0 = deterministic_matrix(0x34);
         const Matrix m1 = deterministic_matrix(0x38);
 
-        const int lane0 = allocate(0x510, paccidx, false);
-        const int lane1 = allocate_while_writing_matrices(lane0, m0, 0x511, paccidx, true);
-        update_model(m0, paccidx, false);
+        int lane1 = 0;
+        if (kLaneNum == 1) {
+            const int lane0 = allocate(0x510, paccidx, false);
+            write_matrices(lane0, m0);
+            update_model(m0, paccidx, false);
+            lane1 = allocate(0x511, paccidx, true);
+        } else {
+            const int lane0 = allocate(0x510, paccidx, false);
+            lane1 = allocate_while_writing_matrices(lane0, m0, 0x511, paccidx, true);
+            update_model(m0, paccidx, false);
+        }
 
         write_matrices(lane1, m1);
         update_model(m1, paccidx, true);
@@ -744,6 +837,16 @@ private:
             drive_idle_cycle();
         }
         fail("timed out waiting for all GEMM finishes");
+    }
+
+    void drain_pending_outputs() {
+        const int max_cycles = 20 * kSaWidth + 1000;
+        for (int i = 0; i < max_cycles; ++i) {
+            if (expected_rows_.empty() && pending_finish_.empty()) {
+                return;
+            }
+            drive_idle_cycle();
+        }
     }
 
     void random_pressure() {

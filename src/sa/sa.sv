@@ -26,10 +26,11 @@
 //      chooses the first lane whose current write-side slot has both A and B
 //      ready, whose physical lane is inactive or in its last active cycle, and
 //      whose PACC index differs from the lane started in the immediately
-//      previous cycle.  Only one lane can start in a cycle.  The one-cycle
-//      same-PACC interlock matches paccreg's three-stage add pipeline: a
-//      dependent GEMM that starts after one bubble can use paccreg's s3->s1
-//      bypass, while a back-to-back same-PACC start would still read stale data.
+//      previous cycle.  Only one lane can start in a cycle.  This one-cycle
+//      same-PACC interlock matches paccreg's input protocol: paccreg accepts one
+//      submission per cycle, but not two consecutive submissions to the same
+//      paccidx; a legal N/N+2 same-PACC sequence uses paccreg's writeback-to-read
+//      bypass.
 //   4. The selected lane flips all of its A/B lane buffers on that clock edge.
 //      On the following cycles, the lane is active for exactly SUBTILE_K cycles
 //      and reads rdidx=0..SUBTILE_K-1 from the just-flipped read-side buffers.
@@ -87,6 +88,7 @@ module sa #(
     parameter int PACC_SIG_WIDTH  = 40,
     parameter int FDOT_ACC_WIDTH  = 96,
     parameter int FDOT_ACC_FRAC_BITS = 18,
+    parameter int FDOT_CSA_WIDTH  = FDOT_ACC_WIDTH + 2,
     parameter int GEMM_INSTID_WIDTH = 16,
     parameter int SA_IDX_WIDTH    = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH),
     parameter int K_IDX_WIDTH     = (SUBTILE_K <= 1) ? 1 : $clog2(SUBTILE_K)
@@ -144,9 +146,10 @@ module sa #(
         end
     end
 
+    localparam int FDOT_TO_PACC_REDUCE_STAGES = 1;
     localparam int GEMM_FINISH_LATENCY =
         (2 * SA_WIDTH) + SUBTILE_K + fdot8e4m3_pkg::LAST_TO_OUT_LATENCY +
-        paccreg_pkg::ACCUM_PIPE_STAGES + 3;
+        FDOT_TO_PACC_REDUCE_STAGES + paccreg_pkg::ACCUM_PIPE_STAGES + 3;
 
     logic slot_in_use [LANE_NUM][2];
     logic slot_a_ready [LANE_NUM][2];
@@ -530,7 +533,8 @@ module sa #(
                     .PACC_EXP_WIDTH(PACC_EXP_WIDTH),
                     .PACC_SIG_WIDTH(PACC_SIG_WIDTH),
                     .FDOT_ACC_WIDTH(FDOT_ACC_WIDTH),
-                    .FDOT_ACC_FRAC_BITS(FDOT_ACC_FRAC_BITS)
+                    .FDOT_ACC_FRAC_BITS(FDOT_ACC_FRAC_BITS),
+                    .FDOT_CSA_WIDTH(FDOT_CSA_WIDTH)
                 ) u_pe (
                     .clk(clk),
                     .rst_n(rst_n),

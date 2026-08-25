@@ -1,40 +1,36 @@
-// FP8 E4M3 vector dot product accumulator.
+// FP8 E4M3 vector dot product carry-save accumulator.
 //
 // Input protocol:
 //   - Every cycle with valid_i=1 is accepted; there is no back-pressure.
 //   - first_i marks the first product of one dot product.
 //   - last_i marks the final product of one dot product.
-//   - paccidx_i and accum_i are sampled with valid_i && last_i and
-//     appear with the corresponding valid_o pseudo-float result.
+//   - paccidx_i and accum_i are sampled with valid_i && last_i and appear with
+//     the corresponding valid_o carry-save fixed-point result.
 //   - Back-to-back dot products are supported.
 //
 // Arithmetic:
 //   - FP8 is interpreted as E4M3FN: sign, 4-bit exponent with bias 7,
 //     3-bit fraction, and only exp=15/fraction=7 is NaN.
 //   - Products are formed exactly and aligned into a two's-complement
-//     fixed-point accumulator with ACC_FRAC_BITS fractional bits.
-//   - Two accumulator lanes are used alternately so one product can be
-//     accumulated every cycle.
-//   - The merged exact fixed-point sum is converted to the same pseudo
-//     floating-point format used by paccreg: value = psum_sig_o * 2^psum_exp_o.
+//     fixed-point format with ACC_FRAC_BITS fractional bits.
+//   - Dot products are accumulated as a carry-save pair.  The output represents
+//     value = (psum_sum_o + psum_carry_o) * 2^-ACC_FRAC_BITS; psum_carry_o is
+//     already shifted into its arithmetic weight.
 
 `default_nettype none
 
 package fdot8e4m3_pkg;
 
     localparam int MUL_LAST_TO_SUM_STAGES = 2;
-    localparam int PSEUDO_PACK_STAGES     = 1;
-    localparam int LAST_TO_OUT_LATENCY    =
-        MUL_LAST_TO_SUM_STAGES + PSEUDO_PACK_STAGES;
-    
+    localparam int LAST_TO_OUT_LATENCY    = MUL_LAST_TO_SUM_STAGES;
+
 endpackage
 
 module fdot8e4m3 #(
-    parameter int ACC_WIDTH     = 96,
-    parameter int ACC_FRAC_BITS = 18,
-    parameter int PACC_IDX_WIDTH = 1,
-    parameter int PACC_EXP_WIDTH = 10,
-    parameter int PACC_SIG_WIDTH = 40
+    parameter int ACC_WIDTH      = 96,
+    parameter int ACC_FRAC_BITS  = 18,
+    parameter int FDOT_CSA_WIDTH = ACC_WIDTH + 2,
+    parameter int PACC_IDX_WIDTH = 1
 ) (
     input  logic        clk,
     input  logic        rst_n,
@@ -48,13 +44,12 @@ module fdot8e4m3 #(
     input  logic        accum_i,
 
     output logic        valid_o,
-    output logic signed [PACC_EXP_WIDTH-1:0] psum_exp_o,
-    output logic signed [PACC_SIG_WIDTH-1:0] psum_sig_o,
+    output logic signed [FDOT_CSA_WIDTH-1:0] psum_sum_o,
+    output logic signed [FDOT_CSA_WIDTH-1:0] psum_carry_o,
+    output logic        psum_nan_o,
     output logic [PACC_IDX_WIDTH-1:0] paccidx_o,
     output logic        accum_o
 );
-
-    import fdot8e4m3_pkg::*;
 
     initial begin
         if (ACC_WIDTH <= 40) begin
@@ -63,19 +58,13 @@ module fdot8e4m3 #(
         if (ACC_FRAC_BITS < 18) begin
             $error("ACC_FRAC_BITS must be at least 18 for exact E4M3 products");
         end
+        if (FDOT_CSA_WIDTH < ACC_WIDTH + 2) begin
+            $error("FDOT_CSA_WIDTH must be at least ACC_WIDTH + 2");
+        end
         if (PACC_IDX_WIDTH <= 0) begin
             $error("PACC_IDX_WIDTH must be positive");
         end
-        if (PACC_EXP_WIDTH < 10) begin
-            $error("PACC_EXP_WIDTH must be at least 10");
-        end
-        if ((PACC_SIG_WIDTH < 32) || (PACC_SIG_WIDTH > 48)) begin
-            $error("PACC_SIG_WIDTH must be in the 32..48 bit range");
-        end
     end
-
-    localparam logic signed [PACC_EXP_WIDTH-1:0] PSEUDO_NAN_EXP =
-        $signed({1'b0, {(PACC_EXP_WIDTH-1){1'b1}}});
 
     typedef struct packed {
         logic              sign;
@@ -136,64 +125,31 @@ module fdot8e4m3 #(
         end
     endfunction
 
-    function automatic int find_msb(input logic [ACC_WIDTH-1:0] value);
-        int msb;
-        begin
-            msb = 0;
-            for (int i = 0; i < ACC_WIDTH; i++) begin
-                if (value[i]) begin
-                    msb = i;
-                end
-            end
-            return msb;
-        end
-    endfunction
-
-    function automatic logic acc_bit(
-        input logic [ACC_WIDTH-1:0] value,
-        input int                   index
+    function automatic logic signed [FDOT_CSA_WIDTH-1:0] csa_sum3(
+        input logic signed [FDOT_CSA_WIDTH-1:0] x,
+        input logic signed [FDOT_CSA_WIDTH-1:0] y,
+        input logic signed [FDOT_CSA_WIDTH-1:0] z
     );
         begin
-            if ((index >= 0) && (index < ACC_WIDTH)) begin
-                return value[index];
-            end
-            return 1'b0;
+            return x ^ y ^ z;
         end
     endfunction
 
-    function automatic logic signed [PACC_EXP_WIDTH-1:0] pseudo_exp_field(input int msb);
-        int exp_value;
-        begin
-            exp_value = msb - ACC_FRAC_BITS - (PACC_SIG_WIDTH - 2);
-            return exp_value[PACC_EXP_WIDTH-1:0];
-        end
-    endfunction
-
-    function automatic logic signed [PACC_SIG_WIDTH-1:0] normalized_pseudo_sig(
-        input logic [ACC_WIDTH-1:0] value,
-        input int                   msb,
-        input logic                 sign
+    function automatic logic signed [FDOT_CSA_WIDTH-1:0] csa_carry3(
+        input logic signed [FDOT_CSA_WIDTH-1:0] x,
+        input logic signed [FDOT_CSA_WIDTH-1:0] y,
+        input logic signed [FDOT_CSA_WIDTH-1:0] z
     );
-        logic [PACC_SIG_WIDTH-2:0] mag;
-        logic signed [PACC_SIG_WIDTH-1:0] pos_sig;
-        int          src_index;
+        logic [FDOT_CSA_WIDTH-1:0] carry_bits;
         begin
-            mag = '0;
-            for (int i = 0; i < PACC_SIG_WIDTH - 1; i++) begin
-                src_index = msb - (PACC_SIG_WIDTH - 2) + i;
-                mag[i] = acc_bit(value, src_index);
-            end
-            pos_sig = $signed({1'b0, mag});
-            return sign ? -pos_sig : pos_sig;
+            carry_bits = (x & y) | (x & z) | (y & z);
+            return $signed({carry_bits[FDOT_CSA_WIDTH-2:0], 1'b0});
         end
     endfunction
-
-    logic next_input_lane;
 
     logic        m1_valid;
     logic        m1_first;
     logic        m1_last;
-    logic        m1_lane;
     logic [PACC_IDX_WIDTH-1:0] m1_paccidx;
     logic        m1_accum;
     fp8_dec_t    m1_a;
@@ -202,7 +158,6 @@ module fdot8e4m3 #(
     logic        m2_valid;
     logic        m2_first;
     logic        m2_last;
-    logic        m2_lane;
     logic [PACC_IDX_WIDTH-1:0] m2_paccidx;
     logic        m2_accum;
     logic        m2_nan;
@@ -218,150 +173,95 @@ module fdot8e4m3 #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            next_input_lane <= 1'b0;
-
-            m1_valid <= 1'b0;
-            m1_first <= 1'b0;
-            m1_last  <= 1'b0;
-            m1_lane  <= 1'b0;
+            m1_valid   <= 1'b0;
+            m1_first   <= 1'b0;
+            m1_last    <= 1'b0;
             m1_paccidx <= '0;
-            m1_accum <= 1'b0;
-            m1_a     <= '0;
-            m1_b     <= '0;
+            m1_accum   <= 1'b0;
+            m1_a       <= '0;
+            m1_b       <= '0;
 
             m2_valid   <= 1'b0;
             m2_first   <= 1'b0;
             m2_last    <= 1'b0;
-            m2_lane    <= 1'b0;
             m2_paccidx <= '0;
             m2_accum   <= 1'b0;
             m2_nan     <= 1'b0;
             m2_product <= '0;
         end else begin
-            m1_valid <= valid_i;
-            m1_first <= valid_i && first_i;
-            m1_last  <= valid_i && last_i;
-            m1_lane  <= first_i ? 1'b0 : next_input_lane;
+            m1_valid   <= valid_i;
+            m1_first   <= valid_i && first_i;
+            m1_last    <= valid_i && last_i;
             m1_paccidx <= paccidx_i;
-            m1_accum <= accum_i;
-            m1_a     <= decode_e4m3(a_i);
-            m1_b     <= decode_e4m3(b_i);
+            m1_accum   <= accum_i;
+            m1_a       <= decode_e4m3(a_i);
+            m1_b       <= decode_e4m3(b_i);
 
-            if (valid_i) begin
-                next_input_lane <= first_i ? 1'b1 : ~next_input_lane;
-            end
-
-            m2_valid <= m1_valid;
-            m2_first <= m1_first;
-            m2_last  <= m1_last;
-            m2_lane  <= m1_lane;
+            m2_valid   <= m1_valid;
+            m2_first   <= m1_first;
+            m2_last    <= m1_last;
             m2_paccidx <= m1_paccidx;
             m2_accum   <= m1_accum;
-            m2_nan   <= m1_a.is_nan || m1_b.is_nan;
+            m2_nan     <= m1_a.is_nan || m1_b.is_nan;
             m2_product <= ((m1_a.is_zero || m1_b.is_zero || m1_a.is_nan || m1_b.is_nan) ?
                 '0 :
                 align_product(m1_a.sign ^ m1_b.sign, m1_prod_sig, m1_prod_exp2));
         end
     end
 
-    logic signed [ACC_WIDTH-1:0] acc_lane [2];
-    logic                        acc_nan;
+    logic signed [FDOT_CSA_WIDTH-1:0] csa_sum_q;
+    logic signed [FDOT_CSA_WIDTH-1:0] csa_carry_q;
+    logic                             csa_nan_q;
 
-    logic signed [ACC_WIDTH-1:0] acc_selected_base;
-    logic signed [ACC_WIDTH-1:0] acc_selected_next;
-    logic signed [ACC_WIDTH-1:0] acc_other_value;
-    logic signed [ACC_WIDTH-1:0] merged_sum_next;
-    logic                        merged_nan_next;
+    logic signed [FDOT_CSA_WIDTH-1:0] csa_x;
+    logic signed [FDOT_CSA_WIDTH-1:0] csa_y;
+    logic signed [FDOT_CSA_WIDTH-1:0] csa_z;
+    logic signed [FDOT_CSA_WIDTH-1:0] csa_sum_next;
+    logic signed [FDOT_CSA_WIDTH-1:0] csa_carry_next;
+    logic                             csa_nan_next;
 
     always_comb begin
-        acc_selected_base = m2_first ? '0 : acc_lane[m2_lane];
-        acc_selected_next = acc_selected_base + m2_product;
-        acc_other_value   = m2_first ? '0 : acc_lane[~m2_lane];
-        merged_sum_next   = acc_selected_next + acc_other_value;
-        merged_nan_next   = (m2_first ? 1'b0 : acc_nan) | m2_nan;
+        csa_x = m2_first ? '0 : csa_sum_q;
+        csa_y = m2_first ? '0 : csa_carry_q;
+        csa_z = {{(FDOT_CSA_WIDTH-ACC_WIDTH){m2_product[ACC_WIDTH-1]}}, m2_product};
+        csa_sum_next   = csa_sum3(csa_x, csa_y, csa_z);
+        csa_carry_next = csa_carry3(csa_x, csa_y, csa_z);
+        csa_nan_next   = (m2_first ? 1'b0 : csa_nan_q) | m2_nan;
     end
-
-    logic                        sum_valid;
-    logic signed [ACC_WIDTH-1:0] sum_exact;
-    logic                        sum_nan;
-    logic [PACC_IDX_WIDTH-1:0]   sum_paccidx;
-    logic                        sum_accum;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            acc_lane[0] <= '0;
-            acc_lane[1] <= '0;
-            acc_nan     <= 1'b0;
+            csa_sum_q   <= '0;
+            csa_carry_q <= '0;
+            csa_nan_q   <= 1'b0;
 
-            sum_valid <= 1'b0;
-            sum_exact <= '0;
-            sum_nan   <= 1'b0;
-            sum_paccidx <= '0;
-            sum_accum   <= 1'b0;
+            valid_o      <= 1'b0;
+            psum_sum_o   <= '0;
+            psum_carry_o <= '0;
+            psum_nan_o   <= 1'b0;
+            paccidx_o    <= '0;
+            accum_o      <= 1'b0;
         end else begin
-            sum_valid <= m2_valid && m2_last;
+            valid_o <= m2_valid && m2_last;
 
             if (m2_valid) begin
-                if (m2_first) begin
-                    acc_lane[0] <= '0;
-                    acc_lane[1] <= '0;
-                end
-
-                acc_lane[m2_lane] <= acc_selected_next;
-                acc_nan           <= merged_nan_next;
+                csa_sum_q   <= csa_sum_next;
+                csa_carry_q <= csa_carry_next;
+                csa_nan_q   <= csa_nan_next;
             end
 
             if (m2_valid && m2_last) begin
-                sum_exact <= merged_sum_next;
-                sum_nan   <= merged_nan_next;
-                sum_paccidx <= m2_paccidx;
-                sum_accum   <= m2_accum;
+                psum_sum_o   <= csa_sum_next;
+                psum_carry_o <= csa_carry_next;
+                psum_nan_o   <= csa_nan_next;
+                paccidx_o    <= m2_paccidx;
+                accum_o      <= m2_accum;
             end else begin
-                sum_exact <= '0;
-                sum_nan   <= 1'b0;
-                sum_paccidx <= '0;
-                sum_accum   <= 1'b0;
-            end
-        end
-    end
-
-    logic [ACC_WIDTH-1:0] sum_abs_comb;
-    int                   sum_msb_comb;
-
-    always_comb begin
-        if (sum_exact[ACC_WIDTH-1]) begin
-            sum_abs_comb = ~sum_exact + {{(ACC_WIDTH-1){1'b0}}, 1'b1};
-        end else begin
-            sum_abs_comb = sum_exact;
-        end
-        sum_msb_comb = find_msb(sum_abs_comb);
-    end
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            valid_o    <= 1'b0;
-            psum_exp_o <= '0;
-            psum_sig_o <= '0;
-            paccidx_o  <= '0;
-            accum_o    <= 1'b0;
-        end else begin
-            valid_o   <= sum_valid;
-            paccidx_o <= sum_paccidx;
-            accum_o   <= sum_accum;
-
-            if (sum_nan) begin
-                psum_exp_o <= PSEUDO_NAN_EXP;
-                psum_sig_o <= {{(PACC_SIG_WIDTH-1){1'b0}}, 1'b1};
-            end else if (sum_exact == '0) begin
-                psum_exp_o <= '0;
-                psum_sig_o <= '0;
-            end else begin
-                psum_exp_o <= pseudo_exp_field(sum_msb_comb);
-                psum_sig_o <= normalized_pseudo_sig(
-                    sum_abs_comb,
-                    sum_msb_comb,
-                    sum_exact[ACC_WIDTH-1]
-                );
+                psum_sum_o   <= '0;
+                psum_carry_o <= '0;
+                psum_nan_o   <= 1'b0;
+                paccidx_o    <= '0;
+                accum_o      <= 1'b0;
             end
         end
     end

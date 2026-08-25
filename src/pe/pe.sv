@@ -6,8 +6,10 @@
 // forwarded downward.
 //
 // fdot outputs are aggregated into the single-write-port paccreg by bitwise OR
-// after valid masking. The external schedule must guarantee at most one fdot
-// output is valid in any cycle.
+// after valid masking.  The reduce result is registered before paccreg so the
+// multi-lane OR tree is isolated from both fdot and paccreg pipelines.  The
+// external schedule must guarantee at most one fdot output is valid in any
+// cycle, and must not submit the same paccidx in two consecutive cycles.
 
 `default_nettype none
 
@@ -18,7 +20,8 @@ module pe #(
     parameter int PACC_EXP_WIDTH = 10,
     parameter int PACC_SIG_WIDTH = 40,
     parameter int FDOT_ACC_WIDTH = 96,
-    parameter int FDOT_ACC_FRAC_BITS = 18
+    parameter int FDOT_ACC_FRAC_BITS = 18,
+    parameter int FDOT_CSA_WIDTH = FDOT_ACC_WIDTH + 2
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -101,8 +104,9 @@ module pe #(
     endgenerate
 
     logic fdot_valid [GEMM_LANE_NUM];
-    logic signed [PACC_EXP_WIDTH-1:0] fdot_exp [GEMM_LANE_NUM];
-    logic signed [PACC_SIG_WIDTH-1:0] fdot_sig [GEMM_LANE_NUM];
+    logic signed [FDOT_CSA_WIDTH-1:0] fdot_sum [GEMM_LANE_NUM];
+    logic signed [FDOT_CSA_WIDTH-1:0] fdot_carry [GEMM_LANE_NUM];
+    logic fdot_nan [GEMM_LANE_NUM];
     logic [PACC_IDX_WIDTH-1:0] fdot_paccidx [GEMM_LANE_NUM];
     logic fdot_accum [GEMM_LANE_NUM];
 
@@ -112,9 +116,8 @@ module pe #(
             fdot8e4m3 #(
                 .ACC_WIDTH(FDOT_ACC_WIDTH),
                 .ACC_FRAC_BITS(FDOT_ACC_FRAC_BITS),
-                .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
-                .PACC_EXP_WIDTH(PACC_EXP_WIDTH),
-                .PACC_SIG_WIDTH(PACC_SIG_WIDTH)
+                .FDOT_CSA_WIDTH(FDOT_CSA_WIDTH),
+                .PACC_IDX_WIDTH(PACC_IDX_WIDTH)
             ) u_fdot8e4m3 (
                 .clk(clk),
                 .rst_n(rst_n),
@@ -126,36 +129,65 @@ module pe #(
                 .paccidx_i(left_paccidx_q[lane]),
                 .accum_i(left_accum_q[lane]),
                 .valid_o(fdot_valid[lane]),
-                .psum_exp_o(fdot_exp[lane]),
-                .psum_sig_o(fdot_sig[lane]),
+                .psum_sum_o(fdot_sum[lane]),
+                .psum_carry_o(fdot_carry[lane]),
+                .psum_nan_o(fdot_nan[lane]),
                 .paccidx_o(fdot_paccidx[lane]),
                 .accum_o(fdot_accum[lane])
             );
         end
     endgenerate
 
-    logic paccreg_valid;
-    logic signed [PACC_EXP_WIDTH-1:0] paccreg_exp;
-    logic signed [PACC_SIG_WIDTH-1:0] paccreg_sig;
-    logic [PACC_IDX_WIDTH-1:0] paccreg_paccidx;
-    logic paccreg_accum;
+    logic paccreg_valid_comb;
+    logic signed [FDOT_CSA_WIDTH-1:0] paccreg_sum_comb;
+    logic signed [FDOT_CSA_WIDTH-1:0] paccreg_carry_comb;
+    logic paccreg_nan_comb;
+    logic [PACC_IDX_WIDTH-1:0] paccreg_paccidx_comb;
+    logic paccreg_accum_comb;
+
+    logic paccreg_valid_q;
+    logic signed [FDOT_CSA_WIDTH-1:0] paccreg_sum_q;
+    logic signed [FDOT_CSA_WIDTH-1:0] paccreg_carry_q;
+    logic paccreg_nan_q;
+    logic [PACC_IDX_WIDTH-1:0] paccreg_paccidx_q;
+    logic paccreg_accum_q;
 
     always_comb begin
-        paccreg_valid   = 1'b0;
-        paccreg_exp     = '0;
-        paccreg_sig     = '0;
-        paccreg_paccidx = '0;
-        paccreg_accum   = 1'b0;
+        paccreg_valid_comb   = 1'b0;
+        paccreg_sum_comb     = '0;
+        paccreg_carry_comb   = '0;
+        paccreg_nan_comb     = 1'b0;
+        paccreg_paccidx_comb = '0;
+        paccreg_accum_comb   = 1'b0;
 
         for (int lane_idx = 0; lane_idx < GEMM_LANE_NUM; lane_idx++) begin
-            paccreg_valid   |= fdot_valid[lane_idx];
-            paccreg_exp     |= fdot_exp[lane_idx] &
-                {PACC_EXP_WIDTH{fdot_valid[lane_idx]}};
-            paccreg_sig     |= fdot_sig[lane_idx] &
-                {PACC_SIG_WIDTH{fdot_valid[lane_idx]}};
-            paccreg_paccidx |= fdot_paccidx[lane_idx] &
+            paccreg_valid_comb   |= fdot_valid[lane_idx];
+            paccreg_sum_comb     |= fdot_sum[lane_idx] &
+                {FDOT_CSA_WIDTH{fdot_valid[lane_idx]}};
+            paccreg_carry_comb   |= fdot_carry[lane_idx] &
+                {FDOT_CSA_WIDTH{fdot_valid[lane_idx]}};
+            paccreg_nan_comb     |= fdot_nan[lane_idx] & fdot_valid[lane_idx];
+            paccreg_paccidx_comb |= fdot_paccidx[lane_idx] &
                 {PACC_IDX_WIDTH{fdot_valid[lane_idx]}};
-            paccreg_accum   |= fdot_accum[lane_idx] & fdot_valid[lane_idx];
+            paccreg_accum_comb   |= fdot_accum[lane_idx] & fdot_valid[lane_idx];
+        end
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            paccreg_valid_q   <= 1'b0;
+            paccreg_sum_q     <= '0;
+            paccreg_carry_q   <= '0;
+            paccreg_nan_q     <= 1'b0;
+            paccreg_paccidx_q <= '0;
+            paccreg_accum_q   <= 1'b0;
+        end else begin
+            paccreg_valid_q   <= paccreg_valid_comb;
+            paccreg_sum_q     <= paccreg_sum_comb;
+            paccreg_carry_q   <= paccreg_carry_comb;
+            paccreg_nan_q     <= paccreg_nan_comb;
+            paccreg_paccidx_q <= paccreg_paccidx_comb;
+            paccreg_accum_q   <= paccreg_accum_comb;
         end
     end
 
@@ -163,15 +195,19 @@ module pe #(
         .PACC_NUM(PACC_NUM),
         .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
         .PACC_EXP_WIDTH(PACC_EXP_WIDTH),
-        .PACC_SIG_WIDTH(PACC_SIG_WIDTH)
+        .PACC_SIG_WIDTH(PACC_SIG_WIDTH),
+        .FDOT_ACC_WIDTH(FDOT_ACC_WIDTH),
+        .FDOT_ACC_FRAC_BITS(FDOT_ACC_FRAC_BITS),
+        .FDOT_CSA_WIDTH(FDOT_CSA_WIDTH)
     ) u_paccreg (
         .clk(clk),
         .rst_n(rst_n),
-        .valid_i(paccreg_valid),
-        .psum_exp_i(paccreg_exp),
-        .psum_sig_i(paccreg_sig),
-        .paccidx_i(paccreg_paccidx),
-        .accum_i(paccreg_accum),
+        .valid_i(paccreg_valid_q),
+        .psum_sum_i(paccreg_sum_q),
+        .psum_carry_i(paccreg_carry_q),
+        .psum_nan_i(paccreg_nan_q),
+        .paccidx_i(paccreg_paccidx_q),
+        .accum_i(paccreg_accum_q),
         .getacc_i(getacc_i),
         .getacc_idx_i(getacc_idx_i),
         .getacc_o(getacc_o),

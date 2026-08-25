@@ -633,8 +633,16 @@ private:
         push_pattern_cmd("det_exact_32x32x32", 32, 32, kSubtileK, 0x1004u);
         push_pattern_cmd("det_cross_33x33x33", 33, 33, kSubtileK + 1, 0x1005u);
         push_pattern_cmd("det_rect_65x7x64", 65, 7, 2 * kSubtileK, 0x1006u);
-        push_pattern_cmd("det_multi_block_square_161x161x97", 161, 161, 3 * kSubtileK + 1, 0x1007u);
-        push_pattern_cmd("det_multi_block_rect_257x193x129", 257, 193, 4 * kSubtileK + 1, 0x1008u);
+        const int multi_square_dim =
+            std::max(161, kSaWidth * kParserBlockM + 1);
+        const int multi_rect_m =
+            std::max(257, kSaWidth * (kParserBlockM + 1) + 1);
+        const int multi_rect_n =
+            std::max(193, kSaWidth * kParserBlockN + 1);
+        push_pattern_cmd("det_multi_block_square", multi_square_dim, multi_square_dim,
+                         3 * kSubtileK + 1, 0x1007u);
+        push_pattern_cmd("det_multi_block_rect", multi_rect_m, multi_rect_n,
+                         4 * kSubtileK + 1, 0x1008u);
 
         const int dim_choices[] = {
             1, 2, 7, 15, 31, 32, 33, 47, 63, 64, 65,

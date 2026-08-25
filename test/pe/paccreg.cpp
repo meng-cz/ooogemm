@@ -32,9 +32,17 @@ constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccIdxWidth = PACC_IDX_WIDTH_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
-constexpr int kAccumLatency = 3;
+constexpr int kAccumLatency = 6;
 constexpr int kGetaccLatency = 4;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
+#ifndef FDOT_ACC_FRAC_BITS_TEST
+#define FDOT_ACC_FRAC_BITS_TEST 18
+#endif
+#ifndef FDOT_CSA_WIDTH_TEST
+#define FDOT_CSA_WIDTH_TEST 64
+#endif
+constexpr int kFdotAccFracBits = FDOT_ACC_FRAC_BITS_TEST;
+constexpr int kFdotCsaWidth = FDOT_CSA_WIDTH_TEST;
 
 uint32_t float_to_bits(float value) {
     uint32_t bits = 0;
@@ -57,6 +65,12 @@ struct ExpectedGet {
     uint64_t due_cycle = 0;
     uint32_t bits = 0;
     std::string name;
+};
+
+struct FixedInput {
+    int64_t sum = 0;
+    int64_t carry = 0;
+    bool nan = false;
 };
 
 uint64_t low_mask(int width) {
@@ -103,6 +117,39 @@ Pseudo pseudo_from_long_double(long double value) {
     const uint64_t mag = static_cast<uint64_t>(scaled);
     const int64_t sig = neg ? -static_cast<int64_t>(mag) : static_cast<int64_t>(mag);
     return Pseudo{top_exp - sig_top, sig};
+}
+
+Pseudo pseudo_from_fixed(int64_t fixed, bool nan = false) {
+    if (nan) {
+        return pseudo_nan();
+    }
+    if (fixed == 0) {
+        return Pseudo{};
+    }
+
+    const bool neg = fixed < 0;
+    uint64_t abs_value = neg ? static_cast<uint64_t>(-fixed) : static_cast<uint64_t>(fixed);
+    int msb = 0;
+    for (int i = 0; i < 63; ++i) {
+        if ((abs_value & (uint64_t{1} << i)) != 0) {
+            msb = i;
+        }
+    }
+
+    uint64_t mag = 0;
+    for (int i = 0; i < kPaccSigWidth - 1; ++i) {
+        const int src = msb - (kPaccSigWidth - 2) + i;
+        if (src >= 0 && src < 63 && ((abs_value & (uint64_t{1} << src)) != 0)) {
+            mag |= uint64_t{1} << i;
+        }
+    }
+
+    const int64_t sig = neg ? -static_cast<int64_t>(mag) : static_cast<int64_t>(mag);
+    return Pseudo{msb - kFdotAccFracBits - (kPaccSigWidth - 2), sig};
+}
+
+int64_t fixed_from_long_double(long double value) {
+    return static_cast<int64_t>(std::llround(std::ldexp(value, kFdotAccFracBits)));
 }
 
 int64_t trunc_shift_abs_signed(int64_t sig, int shift) {
@@ -203,8 +250,9 @@ private:
 
     void clear_inputs() {
         dut_.valid_i = 0;
-        dut_.psum_exp_i = 0;
-        dut_.psum_sig_i = 0;
+        dut_.psum_sum_i = 0;
+        dut_.psum_carry_i = 0;
+        dut_.psum_nan_i = 0;
         dut_.paccidx_i = 0;
         dut_.accum_i = 0;
         dut_.getacc_i = 0;
@@ -273,23 +321,42 @@ private:
         }
     }
 
-    void send_acc(int idx, const Pseudo& value, bool accum) {
+    void send_acc(int idx, const FixedInput& value, bool accum) {
         dut_.valid_i = 1;
-        dut_.psum_exp_i = bits_of_signed(value.exp, kPaccExpWidth);
-        dut_.psum_sig_i = bits_of_signed(value.sig, kPaccSigWidth);
+        dut_.psum_sum_i = bits_of_signed(value.sum, kFdotCsaWidth);
+        dut_.psum_carry_i = bits_of_signed(value.carry, kFdotCsaWidth);
+        dut_.psum_nan_i = value.nan ? 1 : 0;
         dut_.paccidx_i = idx;
         dut_.accum_i = accum ? 1 : 0;
         dut_.getacc_i = 0;
         dut_.getacc_idx_i = 0;
 
-        model_[idx] = add_pseudo(model_[idx], value, accum);
+        model_[idx] = add_pseudo(
+            model_[idx],
+            pseudo_from_fixed(value.sum + value.carry, value.nan),
+            accum
+        );
         tick();
+    }
+
+    void send_value(int idx, long double value, bool accum) {
+        send_acc(idx, FixedInput{fixed_from_long_double(value), 0, false}, accum);
+    }
+
+    void send_split_value(int idx, long double value, int64_t carry, bool accum) {
+        const int64_t fixed = fixed_from_long_double(value);
+        send_acc(idx, FixedInput{fixed - carry, carry, false}, accum);
+    }
+
+    void send_nan(int idx, bool accum) {
+        send_acc(idx, FixedInput{0, 0, true}, accum);
     }
 
     void request_get(int idx, const std::string& name) {
         dut_.valid_i = 0;
-        dut_.psum_exp_i = 0;
-        dut_.psum_sig_i = 0;
+        dut_.psum_sum_i = 0;
+        dut_.psum_carry_i = 0;
+        dut_.psum_nan_i = 0;
         dut_.paccidx_i = 0;
         dut_.accum_i = 0;
         dut_.getacc_i = 1;
@@ -314,33 +381,33 @@ private:
     void directed_tests() {
         get_all("reset");
 
-        send_acc(0, pseudo_from_long_double(1.5L), false);
+        send_value(0, 1.5L, false);
         get_all("cover_1p5");
 
-        send_acc(0, pseudo_from_long_double(2.25L), true);
+        send_value(0, 2.25L, true);
         get_all("accum_2p25");
 
-        send_acc(0, pseudo_from_long_double(-4.0L), false);
+        send_value(0, -4.0L, false);
         get_all("cover_negative");
 
-        send_acc(1, pseudo_from_long_double(8.0L), false);
-        send_acc(2, pseudo_from_long_double(-3.5L), false);
-        send_acc(1, pseudo_from_long_double(0.5L), true);
+        send_value(1, 8.0L, false);
+        send_value(2, -3.5L, false);
+        send_value(1, 0.5L, true);
         get_all("independent_regs");
 
-        send_acc(3, pseudo_from_long_double(1.0L), false);
+        send_split_value(3, 1.0L, 12345, false);
         idle(1);
-        send_acc(3, pseudo_from_long_double(2.0L), true);
+        send_split_value(3, 2.0L, -54321, true);
         idle(1);
-        send_acc(3, pseudo_from_long_double(3.0L), true);
+        send_value(3, 3.0L, true);
         get_all("back_to_back_same_idx");
 
-        send_acc(4, pseudo_nan(), false);
+        send_nan(4, false);
         idle(1);
-        send_acc(4, pseudo_from_long_double(1.0L), true);
+        send_value(4, 1.0L, true);
         get_all("nan_sticky");
 
-        send_acc(4, pseudo_from_long_double(7.0L), false);
+        send_value(4, 7.0L, false);
         get_all("nan_cover_clear");
     }
 
@@ -359,9 +426,17 @@ private:
                 if (idx == last_idx) {
                     idle(1);
                 }
-                Pseudo value = nan_dist(rng_)
-                    ? pseudo_nan()
-                    : pseudo_from_long_double(static_cast<long double>(value_dist(rng_)) / 16.0L);
+                const long double real_value =
+                    static_cast<long double>(value_dist(rng_)) / 16.0L;
+                FixedInput value;
+                if (nan_dist(rng_)) {
+                    value.nan = true;
+                } else {
+                    const int64_t fixed = fixed_from_long_double(real_value);
+                    const int64_t carry = (i & 1) ? int64_t{17} : int64_t{0};
+                    value.sum = fixed - carry;
+                    value.carry = carry;
+                }
                 const bool accum = accum_dist(rng_);
                 send_acc(idx, value, accum);
                 last_idx = idx;

@@ -36,10 +36,12 @@ constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccIdxWidth = PACC_IDX_WIDTH_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
-constexpr int kFdotLatency = 3;
-constexpr int kPaccregAccumLatency = 3;
+constexpr int kFdotLatency = 2;
+constexpr int kFdotToPaccregReduceLatency = 1;
+constexpr int kPaccregAccumLatency = 6;
 constexpr int kGetaccLatency = 4;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
+constexpr int kFdotAccFracBits = 18;
 
 struct LaneIn {
     uint8_t valid = 0;
@@ -138,25 +140,25 @@ uint8_t random_finite_e4m3(std::mt19937& rng) {
     return value;
 }
 
-long double fp8_product(uint8_t a, uint8_t b, bool& saw_nan) {
+int64_t fp8_product_fixed(uint8_t a, uint8_t b, bool& saw_nan) {
     const DecodedFp8 da = decode_e4m3(a);
     const DecodedFp8 db = decode_e4m3(b);
     if (da.nan || db.nan) {
         saw_nan = true;
-        return 0.0L;
+        return 0;
     }
     if (da.zero || db.zero) {
-        return 0.0L;
+        return 0;
     }
 
-    long double value = std::ldexp(
-        static_cast<long double>(da.sig * db.sig),
-        da.exp2 + db.exp2
-    );
-    if (da.sign ^ db.sign) {
-        value = -value;
+    const int shift = da.exp2 + db.exp2 + kFdotAccFracBits;
+    int64_t value = 0;
+    if (shift >= 0) {
+        value = static_cast<int64_t>(da.sig * db.sig) << shift;
+    } else {
+        value = static_cast<int64_t>(da.sig * db.sig) >> -shift;
     }
-    return value;
+    return (da.sign ^ db.sign) ? -value : value;
 }
 
 Pseudo pseudo_nan() {
@@ -187,13 +189,42 @@ Pseudo pseudo_from_long_double(long double value, bool saw_nan = false) {
     return Pseudo{top_exp - sig_top, sig};
 }
 
+Pseudo pseudo_from_fixed(int64_t fixed, bool saw_nan = false) {
+    if (saw_nan) {
+        return pseudo_nan();
+    }
+    if (fixed == 0) {
+        return Pseudo{};
+    }
+
+    const bool neg = fixed < 0;
+    uint64_t abs_value = neg ? static_cast<uint64_t>(-fixed) : static_cast<uint64_t>(fixed);
+    int msb = 0;
+    for (int i = 0; i < 63; ++i) {
+        if ((abs_value & (uint64_t{1} << i)) != 0) {
+            msb = i;
+        }
+    }
+
+    uint64_t mag = 0;
+    for (int i = 0; i < kPaccSigWidth - 1; ++i) {
+        const int src = msb - (kPaccSigWidth - 2) + i;
+        if (src >= 0 && src < 63 && ((abs_value & (uint64_t{1} << src)) != 0)) {
+            mag |= uint64_t{1} << i;
+        }
+    }
+
+    const int64_t sig = neg ? -static_cast<int64_t>(mag) : static_cast<int64_t>(mag);
+    return Pseudo{msb - kFdotAccFracBits - (kPaccSigWidth - 2), sig};
+}
+
 Pseudo reference_dot_pseudo(const std::vector<Pair>& pairs) {
     bool saw_nan = false;
-    long double sum = 0.0L;
+    int64_t sum = 0;
     for (const Pair& p : pairs) {
-        sum += fp8_product(p.a, p.b, saw_nan);
+        sum += fp8_product_fixed(p.a, p.b, saw_nan);
     }
-    return pseudo_from_long_double(sum, saw_nan);
+    return pseudo_from_fixed(sum, saw_nan);
 }
 
 int64_t trunc_shift_abs_signed(int64_t sig, int shift) {
@@ -280,7 +311,8 @@ public:
         reset();
         directed_tests();
         random_tests();
-        idle(kFdotLatency + kPaccregAccumLatency + kGetaccLatency + 8);
+        idle(kFdotLatency + kFdotToPaccregReduceLatency +
+             kPaccregAccumLatency + kGetaccLatency + 8);
 
         if (!expected_gets_.empty()) {
             fail("test finished with pending getacc output");
@@ -454,7 +486,8 @@ private:
     }
 
     void get_all(const std::string& prefix) {
-        idle(kFdotLatency + kPaccregAccumLatency + 2);
+        idle(kFdotLatency + kFdotToPaccregReduceLatency +
+             kPaccregAccumLatency + 2);
         for (int idx = 0; idx < kPaccNum; ++idx) {
             request_get(idx, prefix + "_idx" + std::to_string(idx));
         }
