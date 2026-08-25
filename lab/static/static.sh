@@ -124,6 +124,11 @@ else
   echo "static_lab: reuse ${EXE}"
 fi
 
+if [[ "${BUILD_ONLY:-0}" == "1" ]]; then
+  echo "static_lab: build-only done ${EXE}"
+  exit 0
+fi
+
 "${EXE}" \
   "--m=${M_SIZE}" \
   "--n=${N_SIZE}" \

@@ -407,6 +407,17 @@ private:
             completion_cycles_[static_cast<size_t>(cmd_idx)] = cycle_;
             last_completion_cycle_ = cycle_;
             ++completed_cmds_;
+            const uint64_t latency_cycles =
+                completion_cycles_[static_cast<size_t>(cmd_idx)] -
+                issue_cycles_[static_cast<size_t>(cmd_idx)] + 1;
+            std::cout << "static_lab: progress completed=" << completed_cmds_
+                      << "/" << opt_.count
+                      << " cmd=" << cmd_idx
+                      << " cycle=" << cycle_
+                      << " latency=" << std::fixed << std::setprecision(6)
+                      << (static_cast<double>(latency_cycles) / 1000.0)
+                      << "(KCycle)\n";
+            std::cout.flush();
         } else if (seen > expected_writes_per_cmd_) {
             fail("too many store writes for command " + std::to_string(cmd_idx));
         }
