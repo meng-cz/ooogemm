@@ -18,6 +18,9 @@ ROOT_DIR = SCRIPT_DIR.parent.parent
 class Hardware:
     lane: int
     width: int
+    abuf_size: int
+    bbuf_size: int
+    pacc_num: int
 
 
 @dataclass(frozen=True)
@@ -61,8 +64,24 @@ def parse_hardware_configs(value: str, default: list[Hardware]) -> list[Hardware
         return default
     configs: list[Hardware] = []
     for part in value.replace(",", " ").split():
-        lane, width = part.split(":", 1)
-        configs.append(Hardware(int(lane), int(width)))
+        fields = part.split(":")
+        if len(fields) == 2:
+            lane, width = fields
+            lane_i = int(lane)
+            defaults = {
+                1: (4, 4, 4),
+                4: (8, 8, 16),
+                16: (16, 16, 64),
+            }
+            abuf_size, bbuf_size, pacc_num = defaults.get(lane_i, (16, 16, 16))
+            configs.append(Hardware(lane_i, int(width), abuf_size, bbuf_size, pacc_num))
+        elif len(fields) == 5:
+            lane, width, abuf_size, bbuf_size, pacc_num = fields
+            configs.append(Hardware(int(lane), int(width), int(abuf_size), int(bbuf_size), int(pacc_num)))
+        else:
+            raise ValueError(
+                "hardware config must be lane:width or lane:width:abuf:bbuf:pacc"
+            )
     return configs
 
 
@@ -75,7 +94,11 @@ def log_filename(axis: str, hw: Hardware, m: int, n: int, k: int, count: int) ->
 
 
 def task_label(task: Task) -> str:
-    return f"{task.axis} L{task.hw.lane}_W{task.hw.width} MNK={task.m}x{task.n}x{task.k}"
+    return (
+        f"{task.axis} L{task.hw.lane}_W{task.hw.width} "
+        f"ABUF={task.hw.abuf_size} BBUF={task.hw.bbuf_size} PACC={task.hw.pacc_num} "
+        f"MNK={task.m}x{task.n}x{task.k}"
+    )
 
 
 def progress_fields(progress: Progress) -> str:
@@ -99,7 +122,13 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--m-values", default=os.environ.get("M_VALUES", "1 4 16 32 64 128 256 512"))
     parser.add_argument("--n-values", default=os.environ.get("N_VALUES", "32 64 128 256 512"))
     parser.add_argument("--k-values", default=os.environ.get("K_VALUES", "32 64 128 256 512"))
-    parser.add_argument("--hardware-configs", default=os.environ.get("HARDWARE_CONFIGS", "1:64 4:32 16:16"))
+    parser.add_argument(
+        "--hardware-configs",
+        default=os.environ.get(
+            "HARDWARE_CONFIGS",
+            "1:64:4:4:4 4:32:8:8:16 16:16:16:16:64",
+        ),
+    )
     parser.add_argument("--data-root", type=Path, default=Path(os.environ.get("DATA_ROOT", ROOT_DIR / "data/static")))
     parser.add_argument("--log-dir", type=Path, default=Path(os.environ.get("LOG_DIR", ROOT_DIR / "data/static/log")))
     parser.add_argument("--force", action="store_true", default=env_flag("FORCE", False))
@@ -115,7 +144,11 @@ def build_all_tasks(args: argparse.Namespace) -> list[Task]:
     k_values = parse_int_list(args.k_values, [32, 64, 128, 256, 512])
     hardware = parse_hardware_configs(
         args.hardware_configs,
-        [Hardware(1, 64), Hardware(4, 32), Hardware(16, 16)],
+        [
+            Hardware(1, 64, 4, 4, 4),
+            Hardware(4, 32, 8, 8, 16),
+            Hardware(16, 16, 16, 16, 64),
+        ],
     )
 
     data_root = args.data_root.resolve()
@@ -163,10 +196,20 @@ def command_for_task(task: Task) -> list[str]:
     ]
 
 
-def make_env(args: argparse.Namespace) -> dict[str, str]:
+def hardware_env(hw: Hardware) -> dict[str, str]:
+    return {
+        "ABUF_SIZE": str(hw.abuf_size),
+        "BBUF_SIZE": str(hw.bbuf_size),
+        "PACC_NUM": str(hw.pacc_num),
+    }
+
+
+def make_env(args: argparse.Namespace, hw: Hardware | None = None) -> dict[str, str]:
     env = os.environ.copy()
     if args.rebuild:
         env["REBUILD"] = "1"
+    if hw is not None:
+        env.update(hardware_env(hw))
     return env
 
 
@@ -174,14 +217,14 @@ def prebuild_hardware(args: argparse.Namespace, tasks: list[Task], print_lock: t
     if args.dry_run or args.no_prebuild or args.jobs <= 1 or not tasks:
         return True
 
-    env = make_env(args)
-    env["BUILD_ONLY"] = "1"
     prebuild_dir = (args.data_root.resolve() / "prebuild")
     args.log_dir.mkdir(parents=True, exist_ok=True)
     prebuild_dir.mkdir(parents=True, exist_ok=True)
 
     hardware = sorted({task.hw for task in tasks}, key=lambda hw: (hw.lane, hw.width))
     for hw in hardware:
+        env = make_env(args, hw)
+        env["BUILD_ONLY"] = "1"
         log_file = args.log_dir.resolve() / f"prebuild_L{hw.lane}_W{hw.width}.log"
         cmd = [
             str(SCRIPT_DIR / "static.sh"),
@@ -194,9 +237,18 @@ def prebuild_hardware(args: argparse.Namespace, tasks: list[Task], print_lock: t
             str(prebuild_dir),
         ]
         with print_lock:
-            print(f"static_lab: prebuild L{hw.lane}_W{hw.width} log={log_file}", flush=True)
+            print(
+                f"static_lab: prebuild L{hw.lane}_W{hw.width} "
+                f"ABUF={hw.abuf_size} BBUF={hw.bbuf_size} PACC={hw.pacc_num} "
+                f"log={log_file}",
+                flush=True,
+            )
         with log_file.open("w") as log:
             log.write(f"cmd={' '.join(cmd)}\n")
+            log.write(
+                f"hardware=ABUF_SIZE={hw.abuf_size} "
+                f"BBUF_SIZE={hw.bbuf_size} PACC_NUM={hw.pacc_num}\n"
+            )
             log.write(f"started={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n")
             log.flush()
             rc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, env=env).returncode
@@ -220,7 +272,7 @@ def run_task(
     child_lock: threading.Lock,
 ) -> int:
     cmd = command_for_task(task)
-    env = make_env(args)
+    env = make_env(args, task.hw)
     task.out_dir.mkdir(parents=True, exist_ok=True)
     task.log_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -238,6 +290,10 @@ def run_task(
     start = time.monotonic()
     with task.log_file.open("w") as log:
         log.write(f"cmd={' '.join(cmd)}\n")
+        log.write(
+            f"hardware=ABUF_SIZE={task.hw.abuf_size} "
+            f"BBUF_SIZE={task.hw.bbuf_size} PACC_NUM={task.hw.pacc_num}\n"
+        )
         log.write(f"output={task.out_file}\n")
         log.write(f"started={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}\n")
         log.flush()
@@ -291,9 +347,9 @@ def main() -> int:
 
     if args.dry_run:
         for task in pending:
+            print(f"{task_label(task)}", flush=True)
             print(
-                " ".join(command_for_task(task)) +
-                f" > {task.log_file} 2>&1",
+                " ".join(command_for_task(task)) + f" > {task.log_file} 2>&1",
                 flush=True,
             )
         return 0

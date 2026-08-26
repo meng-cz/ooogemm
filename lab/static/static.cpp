@@ -210,6 +210,8 @@ public:
                   << " cycles=" << (last_completion_cycle_ - first_issue_cycle_ + 1)
                   << " throughput=" << throughput_per_kcycle_
                   << " latency=" << latency_kcycle_
+                  << " input_bus_util=" << input_bus_util_
+                  << " output_bus_util=" << output_bus_util_
                   << "\n";
     }
 
@@ -229,8 +231,12 @@ private:
     int completed_cmds_ = 0;
     uint64_t first_issue_cycle_ = 0;
     uint64_t last_completion_cycle_ = 0;
+    uint64_t input_bus_payload_cycles_ = 0;
+    uint64_t output_bus_payload_cycles_ = 0;
     double throughput_per_kcycle_ = 0.0;
     double latency_kcycle_ = 0.0;
+    double input_bus_util_ = 0.0;
+    double output_bus_util_ = 0.0;
     std::vector<uint64_t> issue_cycles_;
     std::vector<uint64_t> completion_cycles_;
     std::vector<uint64_t> writes_seen_;
@@ -379,8 +385,10 @@ private:
                 fail("response fired without a selected pending response");
             }
             pending_rsp_.erase(pending_rsp_.begin() + rsp_index);
+            ++input_bus_payload_cycles_;
         }
         if (wr_fire) {
+            ++output_bus_payload_cycles_;
             record_store(wr_addr_fire);
         }
 
@@ -430,6 +438,10 @@ private:
         const uint64_t elapsed_cycles = last_completion_cycle_ - first_issue_cycle_ + 1;
         throughput_per_kcycle_ =
             static_cast<double>(opt_.count) * 1000.0 / static_cast<double>(elapsed_cycles);
+        input_bus_util_ =
+            static_cast<double>(input_bus_payload_cycles_) / static_cast<double>(elapsed_cycles);
+        output_bus_util_ =
+            static_cast<double>(output_bus_payload_cycles_) / static_cast<double>(elapsed_cycles);
 
         uint64_t latency_sum = 0;
         for (int i = 0; i < opt_.count; ++i) {
@@ -463,7 +475,9 @@ private:
         }
         out << std::fixed << std::setprecision(6)
             << "throughput=" << throughput_per_kcycle_ << "(GEMM cmd per KCycle)\n"
-            << "latency=" << latency_kcycle_ << "(KCycle)\n";
+            << "latency=" << latency_kcycle_ << "(KCycle)\n"
+            << "input_bus_util=" << input_bus_util_ << "(payload cycle per cycle)\n"
+            << "output_bus_util=" << output_bus_util_ << "(payload cycle per cycle)\n";
     }
 };
 
