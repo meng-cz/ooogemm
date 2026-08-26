@@ -1,6 +1,6 @@
 // Static GEMM uop parser with explicit double-buffer and PACC fence uops.
 //
-// Interface-compatible with uopparse.  A command describes one BxMxNxK batched
+// Interface-compatible with dynamic_uopparse.  A command describes one BxMxNxK batched
 // GEMM.  For normal-size per-batch GEMMs, batches are expanded as independent
 // MxNxK GEMMs in batch order.  If one batch instance has fewer output tiles
 // than a full BLOCK_M x BLOCK_N PACC block, this parser can pack output tiles

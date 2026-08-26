@@ -1,4 +1,4 @@
-// GEMM uop parser.
+// Dynamic GEMM uop parser implementation.
 //
 // A command describes one complete BxMxNxK batched GEMM.  This dynamic parser
 // treats the batch dimension as B independent MxNxK GEMMs in batch order; it
@@ -24,7 +24,7 @@
 
 `default_nettype none
 
-module uopparse #(
+module dynamic_uopparse_core #(
     parameter int SA_WIDTH       = 4,
     parameter int SUBTILE_K      = 32,
     parameter int ABUF_SIZE      = 4,
@@ -518,6 +518,84 @@ module uopparse #(
             end
         end
     end
+
+endmodule
+
+// Public dynamic parser interface.  Physical resource sizes are accepted for
+// integration with the backend, while block construction and emitted tags use
+// the independent logical namespaces consumed by dynamic_rename.
+module dynamic_uopparse #(
+    parameter int SA_WIDTH        = 4,
+    parameter int SUBTILE_K       = 32,
+    parameter int ABUF_SIZE       = 4,
+    parameter int BBUF_SIZE       = 4,
+    parameter int PACC_NUM        = 16,
+    parameter int ABUF_LOGIC_SIZE = ABUF_SIZE,
+    parameter int BBUF_LOGIC_SIZE = BBUF_SIZE,
+    parameter int PACC_LOGIC_SIZE = PACC_NUM,
+    parameter int ADDR_WIDTH      = 32,
+    parameter int DIM_WIDTH       = 16,
+    parameter int ABUF_IDX_WIDTH  = (ABUF_LOGIC_SIZE <= 1) ? 1 : $clog2(ABUF_LOGIC_SIZE),
+    parameter int BBUF_IDX_WIDTH  = (BBUF_LOGIC_SIZE <= 1) ? 1 : $clog2(BBUF_LOGIC_SIZE),
+    parameter int PACC_IDX_WIDTH  = (PACC_LOGIC_SIZE <= 1) ? 1 : $clog2(PACC_LOGIC_SIZE),
+    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int TILE_COUNT_WIDTH = DIM_WIDTH + 1
+) (
+    input  logic clk,
+    input  logic rst_n,
+    input  logic cmd_valid_i,
+    output logic cmd_ready_o,
+    input  logic [ADDR_WIDTH-1:0] cmd_a_base_i,
+    input  logic [ADDR_WIDTH-1:0] cmd_b_base_i,
+    input  logic [ADDR_WIDTH-1:0] cmd_c_base_i,
+    input  logic [DIM_WIDTH-1:0] cmd_m_i,
+    input  logic [DIM_WIDTH-1:0] cmd_n_i,
+    input  logic [DIM_WIDTH-1:0] cmd_k_i,
+    input  logic [DIM_WIDTH-1:0] cmd_batch_i,
+    output logic uop_valid_o,
+    input  logic uop_ready_i,
+    output uopparse_pkg::uop_type_e uop_type_o,
+    output logic [ADDR_WIDTH-1:0] uop_addr_o,
+    output logic [ABUF_IDX_WIDTH-1:0] uop_abufidx_o,
+    output logic [BBUF_IDX_WIDTH-1:0] uop_bbufidx_o,
+    output logic [PACC_IDX_WIDTH-1:0] uop_paccidx_o,
+    output logic [LOAD_ROWS_WIDTH-1:0] uop_valid_rows_o,
+    output logic uop_accum_o
+);
+
+    initial begin
+        if ((ABUF_LOGIC_SIZE <= 0) || (BBUF_LOGIC_SIZE <= 0) ||
+            (PACC_LOGIC_SIZE <= 0)) begin
+            $error("dynamic logical resource sizes must be positive");
+        end
+    end
+
+    dynamic_uopparse_core #(
+        .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_K(SUBTILE_K),
+        .ABUF_SIZE(ABUF_LOGIC_SIZE),
+        .BBUF_SIZE(BBUF_LOGIC_SIZE),
+        .PACC_NUM(PACC_LOGIC_SIZE),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .DIM_WIDTH(DIM_WIDTH),
+        .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH),
+        .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),
+        .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
+        .LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH),
+        .TILE_COUNT_WIDTH(TILE_COUNT_WIDTH)
+    ) u_core (
+        .clk(clk), .rst_n(rst_n),
+        .cmd_valid_i(cmd_valid_i), .cmd_ready_o(cmd_ready_o),
+        .cmd_a_base_i(cmd_a_base_i), .cmd_b_base_i(cmd_b_base_i),
+        .cmd_c_base_i(cmd_c_base_i),
+        .cmd_m_i(cmd_m_i), .cmd_n_i(cmd_n_i), .cmd_k_i(cmd_k_i),
+        .cmd_batch_i(cmd_batch_i),
+        .uop_valid_o(uop_valid_o), .uop_ready_i(uop_ready_i),
+        .uop_type_o(uop_type_o), .uop_addr_o(uop_addr_o),
+        .uop_abufidx_o(uop_abufidx_o), .uop_bbufidx_o(uop_bbufidx_o),
+        .uop_paccidx_o(uop_paccidx_o), .uop_valid_rows_o(uop_valid_rows_o),
+        .uop_accum_o(uop_accum_o)
+    );
 
 endmodule
 

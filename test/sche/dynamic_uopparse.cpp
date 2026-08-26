@@ -498,7 +498,7 @@ int main(int argc, char** argv) {
         const std::pair<int, int> block = choose_block();
         const int block_m = block.first;
         const int block_n = block.second;
-        std::cout << "uopparse test config: SA_WIDTH=" << kSaWidth
+        std::cout << "dynamic_uopparse test config: SA_WIDTH=" << kSaWidth
                   << " SUBTILE_K=" << kSubtileK
                   << " ABUF_SIZE=" << kABufSize
                   << " BBUF_SIZE=" << kBBufSize
@@ -561,9 +561,9 @@ int main(int argc, char** argv) {
         run_sequence("target_extremes", target_extreme_cmds(), ready_bursty);
         run_sequence("random_stress", random_cmds(seed), ready_periodic_stall);
 
-        std::cout << "uopparse tests passed\n";
+        std::cout << "dynamic_uopparse tests passed\n";
     } catch (const std::exception& e) {
-        std::cerr << "uopparse test failed: " << e.what() << "\n";
+        std::cerr << "dynamic_uopparse test failed: " << e.what() << "\n";
         return 1;
     }
     return 0;
