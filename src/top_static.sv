@@ -230,22 +230,57 @@ module top_static #(
         .uop_accum_o(parser_uop_accum)
     );
 
-    uop_entry_t uop_fifo [UOP_FIFO_DEPTH];
-    logic [UOP_FIFO_IDX_WIDTH-1:0] fifo_wr_ptr_q;
-    logic [UOP_FIFO_IDX_WIDTH-1:0] fifo_rd_ptr_q;
-    logic [UOP_FIFO_CNT_WIDTH-1:0] fifo_count_q;
+    // Each execution class has two FIFO banks.  The active bank is drained
+    // by its execution unit while the other bank receives the next group.
+    uop_entry_t load_fifo [2][UOP_FIFO_DEPTH];
+    uop_entry_t gemm_fifo [2][UOP_FIFO_DEPTH];
+    uop_entry_t output_fifo [2][UOP_FIFO_DEPTH];
+    logic load_bank_q, gemm_bank_q, output_bank_q;
+    logic [UOP_FIFO_IDX_WIDTH-1:0] load_wr_ptr_q [2], load_rd_ptr_q [2];
+    logic [UOP_FIFO_IDX_WIDTH-1:0] gemm_wr_ptr_q [2], gemm_rd_ptr_q [2];
+    logic [UOP_FIFO_IDX_WIDTH-1:0] output_wr_ptr_q [2], output_rd_ptr_q [2];
+    logic [UOP_FIFO_CNT_WIDTH-1:0] load_fifo_count_q [2];
+    logic [UOP_FIFO_CNT_WIDTH-1:0] gemm_fifo_count_q [2];
+    logic [UOP_FIFO_CNT_WIDTH-1:0] output_fifo_count_q [2];
+    uop_entry_t load_fifo_head, gemm_fifo_head, output_fifo_head;
 
-    wire fifo_empty = fifo_count_q == '0;
-    wire fifo_full = fifo_count_q == UOP_FIFO_CNT_WIDTH'(UOP_FIFO_DEPTH);
-    wire fifo_head_valid = !fifo_empty;
-    uop_entry_t fifo_head;
+    wire load_fifo_empty = load_fifo_count_q[load_bank_q] == '0;
+    wire gemm_fifo_empty = gemm_fifo_count_q[gemm_bank_q] == '0;
+    wire output_fifo_empty = output_fifo_count_q[output_bank_q] == '0;
+    wire load_fifo_full = load_fifo_count_q[load_bank_q] == UOP_FIFO_CNT_WIDTH'(UOP_FIFO_DEPTH);
+    wire gemm_fifo_full = gemm_fifo_count_q[gemm_bank_q] == UOP_FIFO_CNT_WIDTH'(UOP_FIFO_DEPTH);
+    wire output_fifo_full = output_fifo_count_q[output_bank_q] == UOP_FIFO_CNT_WIDTH'(UOP_FIFO_DEPTH);
+    wire load_write_bank = load_bank_q;
+    wire gemm_write_bank = gemm_bank_q;
+    wire output_write_bank = output_bank_q;
+    assign load_fifo_head = load_fifo[int'(load_bank_q)][int'(load_rd_ptr_q[load_bank_q])];
+    assign gemm_fifo_head = gemm_fifo[int'(gemm_bank_q)][int'(gemm_rd_ptr_q[gemm_bank_q])];
+    assign output_fifo_head = output_fifo[int'(output_bank_q)][int'(output_rd_ptr_q[output_bank_q])];
 
-    assign fifo_head = uop_fifo[int'(fifo_rd_ptr_q)];
-    assign parser_uop_ready = !fifo_full;
-    wire fifo_push = parser_uop_valid && parser_uop_ready;
+    logic load_fifo_pop, gemm_fifo_pop, output_fifo_pop;
+    wire load_fifo_pop_fire = !load_fifo_empty && load_fifo_pop;
+    wire gemm_fifo_pop_fire = !gemm_fifo_empty && gemm_fifo_pop;
+    wire output_fifo_pop_fire = !output_fifo_empty && output_fifo_pop;
+    wire gemm_fifo_all_empty = (gemm_fifo_count_q[0] == '0) && (gemm_fifo_count_q[1] == '0);
+    wire load_fifo_all_empty = (load_fifo_count_q[0] == '0) && (load_fifo_count_q[1] == '0);
+    wire output_fifo_all_empty = (output_fifo_count_q[0] == '0) && (output_fifo_count_q[1] == '0);
+    wire parser_uop_fire = parser_uop_valid && parser_uop_ready;
 
-    logic fifo_pop;
-    wire fifo_pop_fire = fifo_head_valid && fifo_pop;
+    always_comb begin
+        unique case (parser_uop_type)
+            UOP_LOAD_A, UOP_LOAD_B: parser_uop_ready = !load_fifo_full;
+            UOP_GEMM: parser_uop_ready = !gemm_fifo_full;
+            UOP_OUTPUT: parser_uop_ready = !output_fifo_full;
+            // A barrier is consumed only after all older work is drained.
+            UOP_BUF_SWAP: parser_uop_ready = load_fifo_all_empty &&
+                gemm_fifo_all_empty &&
+                (load_outstanding_q == '0) &&
+                (gemm_outstanding == '0);
+            UOP_ACC_FENCE: parser_uop_ready = output_fifo_all_empty &&
+                (output_outstanding_q == '0);
+            default: parser_uop_ready = 1'b1;
+        endcase
+    end
 
     logic load_uop_valid;
     logic load_uop_ready;
@@ -478,6 +513,7 @@ module top_static #(
     wire [1:0] load_done_count =
         {1'b0, abuf_ready_valid} + {1'b0, bbuf_ready_valid};
     wire [1:0] output_done_count = {1'b0, store_done_valid};
+    logic [OUTSTANDING_CNT_WIDTH-1:0] gemm_outstanding;
 
     function automatic logic [OUTPUT_TRACK_IDX_WIDTH-1:0] output_track_ptr_inc(
         input logic [OUTPUT_TRACK_IDX_WIDTH-1:0] ptr
@@ -491,9 +527,13 @@ module top_static #(
     endfunction
 
     always_comb begin
+        gemm_outstanding = '0;
         gemm_track_free_found = 1'b0;
         gemm_track_free_idx = '0;
         for (int i = 0; i < GEMM_TRACK_DEPTH; i++) begin
+            if (gemm_track_valid_q[i]) begin
+                gemm_outstanding = gemm_outstanding + OUTSTANDING_CNT_WIDTH'(1);
+            end
             if (!gemm_track_valid_q[i] && !gemm_track_free_found) begin
                 gemm_track_free_found = 1'b1;
                 gemm_track_free_idx = GEMM_TRACK_IDX_WIDTH'(i);
@@ -542,7 +582,9 @@ module top_static #(
     end
 
     always_comb begin
-        fifo_pop = 1'b0;
+        load_fifo_pop = 1'b0;
+        gemm_fifo_pop = 1'b0;
+        output_fifo_pop = 1'b0;
 
         load_uop_valid = 1'b0;
         load_uop_is_b = 1'b0;
@@ -560,59 +602,48 @@ module top_static #(
         sa_gemm_paccidx = '0;
         sa_gemm_accum = 1'b0;
 
-        if (fifo_head_valid) begin
-            unique case (fifo_head.typ)
-                UOP_LOAD_A, UOP_LOAD_B: begin
-                    load_uop_valid = 1'b1;
-                    load_uop_is_b = fifo_head.typ == UOP_LOAD_B;
-                    load_uop_addr = fifo_head.addr;
-                    load_uop_abufidx = fifo_head.abufidx;
-                    load_uop_bbufidx = fifo_head.bbufidx;
-                    load_uop_valid_rows = fifo_head.valid_rows;
-                    fifo_pop = load_uop_ready;
-                end
-
-                UOP_GEMM: begin
-                    if ((gemm_pipe_state_q == GEMM_PIPE_IDLE) &&
-                        gemm_track_free_found &&
-                        (pacc_read_count_q[int'(fifo_head.paccidx)] == '0)) begin
-                        sa_gemm_valid = 1'b1;
-                        sa_gemm_paccidx = fifo_head.paccidx;
-                        sa_gemm_accum = fifo_head.accum;
-                        fifo_pop = sa_gemm_ready;
-                    end
-                end
-
-                UOP_OUTPUT: begin
-                    if ((pacc_write_count_q[int'(fifo_head.paccidx)] == '0) &&
-                        output_track_can_push) begin
-                        store_uop_valid = 1'b1;
-                        store_uop_addr = fifo_head.addr;
-                        store_uop_paccidx = fifo_head.paccidx;
-                        fifo_pop = store_uop_ready;
-                    end
-                end
-
-                UOP_BUF_SWAP: begin
-                    fifo_pop = load_outstanding_q == '0;
-                end
-
-                UOP_ACC_FENCE: begin
-                    fifo_pop = output_outstanding_q == '0;
-                end
-
-                default: begin
-                    fifo_pop = 1'b1;
-                end
-            endcase
+        if (!load_fifo_empty) begin
+            load_uop_valid = 1'b1;
+            load_uop_is_b = load_fifo_head.typ == UOP_LOAD_B;
+            load_uop_addr = load_fifo_head.addr;
+            load_uop_abufidx = load_fifo_head.abufidx;
+            load_uop_bbufidx = load_fifo_head.bbufidx;
+            load_uop_valid_rows = load_fifo_head.valid_rows;
+            load_fifo_pop = load_uop_ready;
+        end
+        if (!gemm_fifo_empty && (gemm_pipe_state_q == GEMM_PIPE_IDLE) &&
+            gemm_track_free_found &&
+            (pacc_read_count_q[int'(gemm_fifo_head.paccidx)] == '0)) begin
+            sa_gemm_valid = 1'b1;
+            sa_gemm_paccidx = gemm_fifo_head.paccidx;
+            sa_gemm_accum = gemm_fifo_head.accum;
+            gemm_fifo_pop = sa_gemm_ready;
+        end
+        if (!output_fifo_empty && (pacc_write_count_q[int'(output_fifo_head.paccidx)] == '0) &&
+            output_track_can_push) begin
+            store_uop_valid = 1'b1;
+            store_uop_addr = output_fifo_head.addr;
+            store_uop_paccidx = output_fifo_head.paccidx;
+            output_fifo_pop = store_uop_ready;
         end
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            fifo_wr_ptr_q <= '0;
-            fifo_rd_ptr_q <= '0;
-            fifo_count_q <= '0;
+            load_bank_q <= 1'b0;
+            gemm_bank_q <= 1'b0;
+            output_bank_q <= 1'b0;
+            for (int bank = 0; bank < 2; bank++) begin
+                load_wr_ptr_q[bank] <= '0;
+                load_rd_ptr_q[bank] <= '0;
+                load_fifo_count_q[bank] <= '0;
+                gemm_wr_ptr_q[bank] <= '0;
+                gemm_rd_ptr_q[bank] <= '0;
+                gemm_fifo_count_q[bank] <= '0;
+                output_wr_ptr_q[bank] <= '0;
+                output_rd_ptr_q[bank] <= '0;
+                output_fifo_count_q[bank] <= '0;
+            end
             gemm_pipe_state_q <= GEMM_PIPE_IDLE;
             gemm_lane_q <= '0;
             gemm_abufidx_q <= '0;
@@ -620,15 +651,6 @@ module top_static #(
             gemm_instid_q <= '0;
             load_outstanding_q <= '0;
             output_outstanding_q <= '0;
-            for (int i = 0; i < UOP_FIFO_DEPTH; i++) begin
-                uop_fifo[i].typ <= UOP_LOAD_A;
-                uop_fifo[i].addr <= '0;
-                uop_fifo[i].abufidx <= '0;
-                uop_fifo[i].bbufidx <= '0;
-                uop_fifo[i].paccidx <= '0;
-                uop_fifo[i].valid_rows <= '0;
-                uop_fifo[i].accum <= 1'b0;
-            end
             for (int i = 0; i < PACC_NUM; i++) begin
                 pacc_write_count_q[i] <= '0;
                 pacc_read_count_q[i] <= '0;
@@ -645,26 +667,52 @@ module top_static #(
                 output_track_paccidx_q[i] <= '0;
             end
         end else begin
-            if (fifo_push) begin
-                uop_fifo[int'(fifo_wr_ptr_q)].typ <= parser_uop_type;
-                uop_fifo[int'(fifo_wr_ptr_q)].addr <= parser_uop_addr;
-                uop_fifo[int'(fifo_wr_ptr_q)].abufidx <= parser_uop_abufidx;
-                uop_fifo[int'(fifo_wr_ptr_q)].bbufidx <= parser_uop_bbufidx;
-                uop_fifo[int'(fifo_wr_ptr_q)].paccidx <= parser_uop_paccidx;
-                uop_fifo[int'(fifo_wr_ptr_q)].valid_rows <= parser_uop_valid_rows;
-                uop_fifo[int'(fifo_wr_ptr_q)].accum <= parser_uop_accum;
-                fifo_wr_ptr_q <= fifo_ptr_inc(fifo_wr_ptr_q);
-            end
-
-            if (fifo_pop_fire) begin
-                fifo_rd_ptr_q <= fifo_ptr_inc(fifo_rd_ptr_q);
-            end
-
-            unique case ({fifo_push, fifo_pop_fire})
-                2'b10: fifo_count_q <= fifo_count_q + UOP_FIFO_CNT_WIDTH'(1);
-                2'b01: fifo_count_q <= fifo_count_q - UOP_FIFO_CNT_WIDTH'(1);
-                default: begin
+            if (parser_uop_fire) begin
+                if (parser_uop_type == UOP_LOAD_A || parser_uop_type == UOP_LOAD_B) begin
+                    load_fifo[int'(load_write_bank)][int'(load_wr_ptr_q[load_write_bank])] <=
+                        '{typ: parser_uop_type, addr: parser_uop_addr,
+                          abufidx: parser_uop_abufidx, bbufidx: parser_uop_bbufidx,
+                          paccidx: parser_uop_paccidx, valid_rows: parser_uop_valid_rows,
+                          accum: parser_uop_accum};
+                    load_wr_ptr_q[load_write_bank] <= fifo_ptr_inc(load_wr_ptr_q[load_write_bank]);
+                end else if (parser_uop_type == UOP_GEMM) begin
+                    gemm_fifo[int'(gemm_write_bank)][int'(gemm_wr_ptr_q[gemm_write_bank])] <=
+                        '{typ: parser_uop_type, addr: parser_uop_addr,
+                          abufidx: parser_uop_abufidx, bbufidx: parser_uop_bbufidx,
+                          paccidx: parser_uop_paccidx, valid_rows: parser_uop_valid_rows,
+                          accum: parser_uop_accum};
+                    gemm_wr_ptr_q[gemm_write_bank] <= fifo_ptr_inc(gemm_wr_ptr_q[gemm_write_bank]);
+                end else if (parser_uop_type == UOP_OUTPUT) begin
+                    output_fifo[int'(output_write_bank)][int'(output_wr_ptr_q[output_write_bank])] <=
+                        '{typ: parser_uop_type, addr: parser_uop_addr,
+                          abufidx: parser_uop_abufidx, bbufidx: parser_uop_bbufidx,
+                          paccidx: parser_uop_paccidx, valid_rows: parser_uop_valid_rows,
+                          accum: parser_uop_accum};
+                    output_wr_ptr_q[output_write_bank] <= fifo_ptr_inc(output_wr_ptr_q[output_write_bank]);
+                end else if (parser_uop_type == UOP_BUF_SWAP) begin
+                    load_bank_q <= ~load_bank_q;
+                    gemm_bank_q <= ~gemm_bank_q;
+                    output_bank_q <= ~output_bank_q;
                 end
+            end
+
+            if (load_fifo_pop_fire) load_rd_ptr_q[load_bank_q] <= fifo_ptr_inc(load_rd_ptr_q[load_bank_q]);
+            if (gemm_fifo_pop_fire) gemm_rd_ptr_q[gemm_bank_q] <= fifo_ptr_inc(gemm_rd_ptr_q[gemm_bank_q]);
+            if (output_fifo_pop_fire) output_rd_ptr_q[output_bank_q] <= fifo_ptr_inc(output_rd_ptr_q[output_bank_q]);
+            unique case ({parser_uop_fire && (parser_uop_type == UOP_LOAD_A || parser_uop_type == UOP_LOAD_B), load_fifo_pop_fire})
+                2'b10: load_fifo_count_q[load_bank_q] <= load_fifo_count_q[load_bank_q] + 1'b1;
+                2'b01: load_fifo_count_q[load_bank_q] <= load_fifo_count_q[load_bank_q] - 1'b1;
+                default: begin end
+            endcase
+            unique case ({parser_uop_fire && (parser_uop_type == UOP_GEMM), gemm_fifo_pop_fire})
+                2'b10: gemm_fifo_count_q[gemm_bank_q] <= gemm_fifo_count_q[gemm_bank_q] + 1'b1;
+                2'b01: gemm_fifo_count_q[gemm_bank_q] <= gemm_fifo_count_q[gemm_bank_q] - 1'b1;
+                default: begin end
+            endcase
+            unique case ({parser_uop_fire && (parser_uop_type == UOP_OUTPUT), output_fifo_pop_fire})
+                2'b10: output_fifo_count_q[output_bank_q] <= output_fifo_count_q[output_bank_q] + 1'b1;
+                2'b01: output_fifo_count_q[output_bank_q] <= output_fifo_count_q[output_bank_q] - 1'b1;
+                default: begin end
             endcase
 
             unique case (gemm_pipe_state_q)
@@ -672,12 +720,12 @@ module top_static #(
                     if (gemm_dispatch_fire) begin
                         gemm_pipe_state_q <= GEMM_PIPE_READ;
                         gemm_lane_q <= sa_gemm_alloc_lane;
-                        gemm_abufidx_q <= fifo_head.abufidx;
-                        gemm_bbufidx_q <= fifo_head.bbufidx;
+                        gemm_abufidx_q <= gemm_fifo_head.abufidx;
+                        gemm_bbufidx_q <= gemm_fifo_head.bbufidx;
                         gemm_instid_q <= gemm_instid_q + GEMM_INSTID_WIDTH'(1);
                         gemm_track_valid_q[int'(gemm_track_free_idx)] <= 1'b1;
                         gemm_track_instid_q[int'(gemm_track_free_idx)] <= gemm_instid_q;
-                        gemm_track_paccidx_q[int'(gemm_track_free_idx)] <= fifo_head.paccidx;
+                        gemm_track_paccidx_q[int'(gemm_track_free_idx)] <= gemm_fifo_head.paccidx;
                     end
                 end
 
@@ -706,7 +754,7 @@ module top_static #(
             end
 
             if (output_dispatch_fire) begin
-                output_track_paccidx_q[int'(output_track_wr_ptr_q)] <= fifo_head.paccidx;
+                    output_track_paccidx_q[int'(output_track_wr_ptr_q)] <= output_fifo_head.paccidx;
                 output_track_wr_ptr_q <= output_track_ptr_inc(output_track_wr_ptr_q);
             end
 
@@ -726,12 +774,12 @@ module top_static #(
             for (int pacc = 0; pacc < PACC_NUM; pacc++) begin
                 pacc_write_count_q[pacc] <= pacc_write_count_q[pacc] +
                     OUTSTANDING_CNT_WIDTH'(gemm_dispatch_fire &&
-                        (fifo_head.paccidx == PACC_IDX_WIDTH'(pacc))) -
+                        (gemm_fifo_head.paccidx == PACC_IDX_WIDTH'(pacc))) -
                     OUTSTANDING_CNT_WIDTH'(sa_gemm_finish && gemm_finish_found &&
                         (gemm_finish_paccidx == PACC_IDX_WIDTH'(pacc)));
                 pacc_read_count_q[pacc] <= pacc_read_count_q[pacc] +
                     OUTSTANDING_CNT_WIDTH'(output_dispatch_fire &&
-                        (fifo_head.paccidx == PACC_IDX_WIDTH'(pacc))) -
+                        (output_fifo_head.paccidx == PACC_IDX_WIDTH'(pacc))) -
                     OUTSTANDING_CNT_WIDTH'(store_done_valid &&
                         (output_finish_paccidx == PACC_IDX_WIDTH'(pacc)));
             end

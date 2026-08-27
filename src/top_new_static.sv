@@ -1,0 +1,248 @@
+// Top-level integration for new_static_uopparse.
+// The parser has independent LOAD/GEMM/OUTPUT streams; this top connects
+// each stream directly to its execution unit.  GEMM retains the two-cycle
+// operand-buffer read path used by top_static.
+`default_nettype none
+
+module top_new_static #(
+    parameter int SA_WIDTH = 32,
+    parameter int SUBTILE_K = 32,
+    parameter int LANE_NUM = 4,
+    parameter int ABUF_SIZE = 64,
+    parameter int BBUF_SIZE = 64,
+    parameter int PACC_NUM = 16,
+    parameter int ADDR_WIDTH = 32,
+    parameter int DIM_WIDTH = 16,
+    parameter int STORE_ROW_WRITE_BEATS = 1,
+    parameter int LOAD_DATA_WIDTH = 256,
+    parameter int LANE_IDX_WIDTH = (LANE_NUM <= 1) ? 1 : $clog2(LANE_NUM),
+    parameter int ABUF_IDX_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
+    parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
+    parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
+    parameter int ROW8_WIDTH = SUBTILE_K * 8,
+    parameter int LOAD_BUS_ID_WIDTH =
+        ((SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+          (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)) <= 1) ? 1 :
+        $clog2(SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+          (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)),
+    parameter int ROW32_WIDTH = SA_WIDTH * 32,
+    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int STORE_MEM_DATA_WIDTH = ROW32_WIDTH / STORE_ROW_WRITE_BEATS,
+    parameter int GEMM_INSTID_WIDTH = 16,
+    parameter int COUNT_WIDTH = 16
+) (
+    input logic clk,
+    input logic rst_n,
+    input logic cmd_valid_i,
+    output logic cmd_ready_o,
+    input logic [ADDR_WIDTH-1:0] cmd_a_base_i,
+    input logic [ADDR_WIDTH-1:0] cmd_b_base_i,
+    input logic [ADDR_WIDTH-1:0] cmd_c_base_i,
+    input logic [DIM_WIDTH-1:0] cmd_m_i,
+    input logic [DIM_WIDTH-1:0] cmd_n_i,
+    input logic [DIM_WIDTH-1:0] cmd_k_i,
+    input logic [DIM_WIDTH-1:0] cmd_batch_i,
+    output logic load_mem_req_valid_o,
+    input logic load_mem_req_ready_i,
+    output logic [ADDR_WIDTH-1:0] load_mem_req_addr_o,
+    output logic [LOAD_BUS_ID_WIDTH-1:0] load_mem_req_id_o,
+    input logic load_mem_rsp_valid_i,
+    output logic load_mem_rsp_ready_o,
+    input logic [LOAD_BUS_ID_WIDTH-1:0] load_mem_rsp_id_i,
+    input logic [LOAD_DATA_WIDTH-1:0] load_mem_rsp_data_i,
+    output logic store_mem_wr_valid_o,
+    input logic store_mem_wr_ready_i,
+    output logic [ADDR_WIDTH-1:0] store_mem_wr_addr_o,
+    output logic [STORE_MEM_DATA_WIDTH-1:0] store_mem_wr_data_o,
+    output logic cmd_done_valid_o
+);
+    import uopparse_pkg::*;
+
+    logic load_valid, load_ready, load_is_b, load_group;
+    logic [ADDR_WIDTH-1:0] load_addr;
+    logic [ABUF_IDX_WIDTH-1:0] load_abufidx;
+    logic [BBUF_IDX_WIDTH-1:0] load_bbufidx;
+    logic [LOAD_ROWS_WIDTH-1:0] load_valid_rows;
+    logic load_done;
+
+    logic gemm_valid, gemm_ready, gemm_group;
+    logic [ABUF_IDX_WIDTH-1:0] gemm_abufidx;
+    logic [BBUF_IDX_WIDTH-1:0] gemm_bbufidx;
+    logic [PACC_IDX_WIDTH-1:0] gemm_paccidx;
+    logic gemm_accum;
+    logic gemm_done;
+
+    logic output_valid, output_ready, output_group;
+    logic [ADDR_WIDTH-1:0] output_addr;
+    logic [PACC_IDX_WIDTH-1:0] output_paccidx;
+    logic output_done;
+
+    new_static_uopparse #(
+        .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K), .ABUF_SIZE(ABUF_SIZE),
+        .BBUF_SIZE(BBUF_SIZE), .PACC_NUM(PACC_NUM), .ADDR_WIDTH(ADDR_WIDTH),
+        .DIM_WIDTH(DIM_WIDTH), .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH),
+        .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH), .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
+        .LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH), .COUNT_WIDTH(COUNT_WIDTH)
+    ) parser (
+        .clk(clk), .rst_n(rst_n),
+        .cmd_valid_i(cmd_valid_i), .cmd_ready_o(cmd_ready_o),
+        .cmd_a_base_i(cmd_a_base_i), .cmd_b_base_i(cmd_b_base_i),
+        .cmd_c_base_i(cmd_c_base_i), .cmd_m_i(cmd_m_i), .cmd_n_i(cmd_n_i),
+        .cmd_k_i(cmd_k_i), .cmd_batch_i(cmd_batch_i),
+        .load_valid_o(load_valid), .load_ready_i(load_ready),
+        .load_is_b_o(load_is_b), .load_group_o(load_group),
+        .load_addr_o(load_addr), .load_abufidx_o(load_abufidx),
+        .load_bbufidx_o(load_bbufidx), .load_valid_rows_o(load_valid_rows),
+        .gemm_valid_o(gemm_valid), .gemm_ready_i(gemm_ready),
+        .gemm_group_o(gemm_group), .gemm_abufidx_o(gemm_abufidx),
+        .gemm_bbufidx_o(gemm_bbufidx), .gemm_paccidx_o(gemm_paccidx),
+        .gemm_accum_o(gemm_accum),
+        .output_valid_o(output_valid), .output_ready_i(output_ready),
+        .output_group_o(output_group), .output_addr_o(output_addr),
+        .output_paccidx_o(output_paccidx),
+        .load_done_valid_i(load_done), .gemm_done_valid_i(gemm_done),
+        .output_done_valid_i(output_done), .cmd_done_valid_o(cmd_done_valid_o)
+    );
+
+    logic abuf_wr_valid, bbuf_wr_valid;
+    logic [ABUF_IDX_WIDTH-1:0] abuf_wr_idx;
+    logic [BBUF_IDX_WIDTH-1:0] bbuf_wr_idx;
+    logic [SA_WIDTH-1:0] abuf_wr_bank_en, bbuf_wr_bank_en;
+    logic [ROW8_WIDTH-1:0] abuf_wr_data [SA_WIDTH];
+    logic [ROW8_WIDTH-1:0] bbuf_wr_data [SA_WIDTH];
+    logic abuf_ready_valid, bbuf_ready_valid;
+    logic [ABUF_IDX_WIDTH-1:0] abuf_ready_idx;
+    logic [BBUF_IDX_WIDTH-1:0] bbuf_ready_idx;
+
+    assign load_done = abuf_ready_valid | bbuf_ready_valid;
+
+    loadunit #(
+        .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K), .ABUF_SIZE(ABUF_SIZE),
+        .BBUF_SIZE(BBUF_SIZE), .ADDR_WIDTH(ADDR_WIDTH),
+        .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH), .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),
+        .BUS_ID_WIDTH(LOAD_BUS_ID_WIDTH), .ROWS_LEFT_WIDTH(LOAD_ROWS_WIDTH),
+        .ROW_DATA_WIDTH(ROW8_WIDTH), .LOAD_DATA_WIDTH(LOAD_DATA_WIDTH)
+    ) load_unit (
+        .clk(clk), .rst_n(rst_n), .uop_valid_i(load_valid),
+        .uop_ready_o(load_ready), .uop_is_b_i(load_is_b), .uop_addr_i(load_addr),
+        .uop_abufidx_i(load_abufidx), .uop_bbufidx_i(load_bbufidx),
+        .uop_valid_rows_i(load_valid_rows),
+        .mem_req_valid_o(load_mem_req_valid_o), .mem_req_ready_i(load_mem_req_ready_i),
+        .mem_req_addr_o(load_mem_req_addr_o), .mem_req_id_o(load_mem_req_id_o),
+        .mem_rsp_valid_i(load_mem_rsp_valid_i), .mem_rsp_ready_o(load_mem_rsp_ready_o),
+        .mem_rsp_id_i(load_mem_rsp_id_i), .mem_rsp_data_i(load_mem_rsp_data_i),
+        .abuf_wr_valid_o(abuf_wr_valid), .abuf_wr_idx_o(abuf_wr_idx),
+        .abuf_wr_bank_en_o(abuf_wr_bank_en), .abuf_wr_data_o(abuf_wr_data),
+        .bbuf_wr_valid_o(bbuf_wr_valid), .bbuf_wr_idx_o(bbuf_wr_idx),
+        .bbuf_wr_bank_en_o(bbuf_wr_bank_en), .bbuf_wr_data_o(bbuf_wr_data),
+        .abuf_ready_valid_o(abuf_ready_valid), .abuf_ready_idx_o(abuf_ready_idx),
+        .bbuf_ready_valid_o(bbuf_ready_valid), .bbuf_ready_idx_o(bbuf_ready_idx)
+    );
+
+    logic abuf_rd_valid, bbuf_rd_valid;
+    logic [ABUF_IDX_WIDTH-1:0] abuf_rd_idx;
+    logic [BBUF_IDX_WIDTH-1:0] bbuf_rd_idx;
+    logic [ROW8_WIDTH-1:0] abuf_rd_data [SA_WIDTH];
+    logic [ROW8_WIDTH-1:0] bbuf_rd_data [SA_WIDTH];
+
+    oprandbuf #(.BUF_SIZE(ABUF_SIZE), .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K),
+        .BUF_IDX_WIDTH(ABUF_IDX_WIDTH), .BANK_DATA_WIDTH(ROW8_WIDTH)) abuf (
+        .clk(clk), .rst_n(rst_n), .wr_valid_i(abuf_wr_valid), .wr_idx_i(abuf_wr_idx),
+        .wr_bank_en_i(abuf_wr_bank_en), .wr_data_i(abuf_wr_data),
+        .rd_valid_i(abuf_rd_valid), .rd_idx_i(abuf_rd_idx), .rd_valid_o(),
+        .rd_data_o(abuf_rd_data));
+    oprandbuf #(.BUF_SIZE(BBUF_SIZE), .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K),
+        .BUF_IDX_WIDTH(BBUF_IDX_WIDTH), .BANK_DATA_WIDTH(ROW8_WIDTH)) bbuf (
+        .clk(clk), .rst_n(rst_n), .wr_valid_i(bbuf_wr_valid), .wr_idx_i(bbuf_wr_idx),
+        .wr_bank_en_i(bbuf_wr_bank_en), .wr_data_i(bbuf_wr_data),
+        .rd_valid_i(bbuf_rd_valid), .rd_idx_i(bbuf_rd_idx), .rd_valid_o(),
+        .rd_data_o(bbuf_rd_data));
+
+    logic gemm_pipe_read_q, gemm_pipe_write_q;
+    logic [LANE_IDX_WIDTH-1:0] gemm_lane_q;
+    logic [ABUF_IDX_WIDTH-1:0] gemm_abuf_q;
+    logic [BBUF_IDX_WIDTH-1:0] gemm_bbuf_q;
+    logic [GEMM_INSTID_WIDTH-1:0] gemm_instid_q;
+    logic sa_gemm_valid, sa_gemm_ready;
+    logic [LANE_IDX_WIDTH-1:0] sa_alloc_lane;
+    logic [GEMM_INSTID_WIDTH-1:0] sa_finish_id;
+    logic sa_finish_valid;
+    logic sa_ain_valid, sa_bin_valid;
+    logic [ROW8_WIDTH-1:0] sa_ain_data [SA_WIDTH];
+    logic [ROW8_WIDTH-1:0] sa_bin_data [SA_WIDTH];
+    logic [PACC_IDX_WIDTH-1:0] sa_getacc_idx;
+    logic sa_getacc_valid, sa_getacc_ready, sa_getacc_data_valid;
+    logic [ROW32_WIDTH-1:0] sa_getacc_data;
+
+    assign gemm_ready = !gemm_pipe_read_q && !gemm_pipe_write_q && sa_gemm_ready;
+    assign sa_gemm_valid = gemm_valid && gemm_ready;
+    assign sa_ain_valid = gemm_pipe_write_q;
+    assign sa_bin_valid = gemm_pipe_write_q;
+    assign abuf_rd_valid = gemm_pipe_read_q;
+    assign bbuf_rd_valid = gemm_pipe_read_q;
+    assign abuf_rd_idx = gemm_abuf_q;
+    assign bbuf_rd_idx = gemm_bbuf_q;
+    assign gemm_done = sa_finish_valid;
+
+    always_comb begin
+        for (int i = 0; i < SA_WIDTH; i++) begin
+            sa_ain_data[i] = abuf_rd_data[i];
+            sa_bin_data[i] = bbuf_rd_data[i];
+        end
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            gemm_pipe_read_q <= 1'b0;
+            gemm_pipe_write_q <= 1'b0;
+            gemm_lane_q <= '0;
+            gemm_abuf_q <= '0;
+            gemm_bbuf_q <= '0;
+            gemm_instid_q <= '0;
+        end else begin
+            gemm_pipe_read_q <= sa_gemm_valid;
+            gemm_pipe_write_q <= gemm_pipe_read_q;
+            if (sa_gemm_valid) begin
+                gemm_lane_q <= sa_alloc_lane;
+                gemm_abuf_q <= gemm_abufidx;
+                gemm_bbuf_q <= gemm_bbufidx;
+                gemm_instid_q <= gemm_instid_q + 1'b1;
+            end
+        end
+    end
+
+    logic store_getacc_valid, store_getacc_ready, store_getacc_data_valid;
+    logic [PACC_IDX_WIDTH-1:0] store_getacc_idx;
+    logic [ROW32_WIDTH-1:0] store_getacc_data;
+    storeunit #(.SA_WIDTH(SA_WIDTH), .PACC_NUM(PACC_NUM), .ADDR_WIDTH(ADDR_WIDTH),
+        .PACC_IDX_WIDTH(PACC_IDX_WIDTH), .ROW_DATA_WIDTH(ROW32_WIDTH),
+        .ROW_WRITE_BEATS(STORE_ROW_WRITE_BEATS), .MEM_DATA_WIDTH(STORE_MEM_DATA_WIDTH)) store_unit (
+        .clk(clk), .rst_n(rst_n), .uop_valid_i(output_valid), .uop_ready_o(output_ready),
+        .uop_addr_i(output_addr), .uop_paccidx_i(output_paccidx),
+        .sa_getacc_valid_o(store_getacc_valid), .sa_getacc_ready_i(sa_getacc_ready),
+        .sa_getacc_idx_o(store_getacc_idx), .sa_getacc_data_valid_i(sa_getacc_data_valid),
+        .sa_getacc_data_i(sa_getacc_data), .mem_wr_valid_o(store_mem_wr_valid_o),
+        .mem_wr_ready_i(store_mem_wr_ready_i), .mem_wr_addr_o(store_mem_wr_addr_o),
+        .mem_wr_data_o(store_mem_wr_data_o), .done_valid_o(output_done));
+
+    logic [PACC_IDX_WIDTH-1:0] sa_paccidx;
+    logic sa_accum;
+    assign sa_paccidx = gemm_paccidx;
+    assign sa_accum = gemm_accum;
+    sa #(.SA_WIDTH(SA_WIDTH), .LANE_NUM(LANE_NUM), .SUBTILE_K(SUBTILE_K),
+        .PACC_NUM(PACC_NUM), .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
+        .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH)) sa_impl (
+        .clk(clk), .rst_n(rst_n),
+        .ain_valid(sa_ain_valid), .ain_data(sa_ain_data), .ain_laneidx(gemm_lane_q),
+        .bin_valid(sa_bin_valid), .bin_data(sa_bin_data), .bin_laneidx(gemm_lane_q),
+        .gemm_valid(sa_gemm_valid), .gemm_ready(sa_gemm_ready),
+        .gemm_alloc_lane(sa_alloc_lane), .gemm_instid(gemm_instid_q),
+        .gemm_paccidx(sa_paccidx), .gemm_accum(sa_accum),
+        .gemm_finish(sa_finish_valid), .gemm_finish_instid(sa_finish_id),
+        .getacc_valid(store_getacc_valid), .getacc_ready(sa_getacc_ready),
+        .getacc_idx(store_getacc_idx), .getacc_data_valid(sa_getacc_data_valid),
+        .getacc_data(sa_getacc_data));
+
+endmodule
+
+`default_nettype wire

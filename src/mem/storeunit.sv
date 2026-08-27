@@ -13,14 +13,14 @@
 //       row_idx * ROW_WRITE_BEATS + beat_idx
 //
 // Pipeline structure:
-//   1. uop accept: latch tile address and pacc index when enough row-FIFO space
-//      is available for an entire SA response burst.
-//   2. getacc request: hold sa_getacc_valid_o/paccidx stable until SA accepts.
-//   3. row capture: push every SA getacc row into a row FIFO.  SA has no
-//      backpressure on getacc_data, so the FIFO is sized to absorb a full tile.
-//   4. write output: pop rows into a registered write-channel stage, split
-//      them into ROW_WRITE_BEATS bus writes, preserve row/beat order, and hold
-//      addr/data stable under bus backpressure.
+//   1. uop accept: enqueue tile address and PACC index in an ordered descriptor
+//      FIFO, independently of the active getacc and writeback operations.
+//   2. getacc request: walk the descriptor FIFO with a fetch pointer and start
+//      the next SA row scan whenever the row FIFO has room for a complete tile.
+//   3. row capture: enqueue only row data.  Since both getacc and writeback are
+//      ordered, the row FIFO head always belongs to the descriptor FIFO head.
+//   4. write output: derive row/beat addresses from the head descriptor, split
+//      rows into bus beats, and pop the descriptor after its final beat.
 
 `default_nettype none
 
@@ -36,7 +36,12 @@ module storeunit #(
     parameter int MEM_DATA_WIDTH  = ROW_DATA_WIDTH / ROW_WRITE_BEATS,
     parameter int FIFO_DEPTH      = SA_WIDTH * 2,
     parameter int FIFO_IDX_WIDTH  = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH),
-    parameter int FIFO_CNT_WIDTH  = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH + 1)
+    parameter int FIFO_CNT_WIDTH  = (FIFO_DEPTH <= 1) ? 1 : $clog2(FIFO_DEPTH + 1),
+    parameter int UOP_FIFO_DEPTH  = PACC_NUM,
+    parameter int UOP_FIFO_IDX_WIDTH =
+        (UOP_FIFO_DEPTH <= 1) ? 1 : $clog2(UOP_FIFO_DEPTH),
+    parameter int UOP_FIFO_CNT_WIDTH =
+        (UOP_FIFO_DEPTH <= 1) ? 1 : $clog2(UOP_FIFO_DEPTH + 1)
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -91,19 +96,24 @@ module storeunit #(
         if (FIFO_DEPTH < SA_WIDTH) begin
             $error("FIFO_DEPTH must be at least SA_WIDTH");
         end
+        if (UOP_FIFO_DEPTH <= 0) begin
+            $error("UOP_FIFO_DEPTH must be positive");
+        end
     end
 
-    logic req_valid_q;
-    logic [PACC_IDX_WIDTH-1:0] req_paccidx_q;
-    logic [ADDR_WIDTH-1:0] req_row_base_q;
+    logic [ADDR_WIDTH-1:0] uop_addr_fifo [UOP_FIFO_DEPTH];
+    logic [PACC_IDX_WIDTH-1:0] uop_pacc_fifo [UOP_FIFO_DEPTH];
+    logic [UOP_FIFO_IDX_WIDTH-1:0] uop_wr_ptr_q;
+    logic [UOP_FIFO_IDX_WIDTH-1:0] uop_rd_ptr_q;
+    logic [UOP_FIFO_IDX_WIDTH-1:0] uop_fetch_ptr_q;
+    logic [UOP_FIFO_CNT_WIDTH-1:0] uop_count_q;
+    logic [UOP_FIFO_CNT_WIDTH-1:0] unfetched_count_q;
 
     logic getacc_active_q;
     logic [ROW_IDX_WIDTH-1:0] recv_row_q;
-    logic [ADDR_WIDTH-1:0] active_row_base_q;
 
-    logic [ADDR_WIDTH-1:0] fifo_addr [FIFO_DEPTH];
-    logic [ROW_DATA_WIDTH-1:0] fifo_data [FIFO_DEPTH];
-    logic fifo_last_row [FIFO_DEPTH];
+    (* ram_style = "block" *)
+    logic [ROW_DATA_WIDTH-1:0] row_fifo_data [FIFO_DEPTH];
     logic [FIFO_IDX_WIDTH-1:0] fifo_wr_ptr_q;
     logic [FIFO_IDX_WIDTH-1:0] fifo_rd_ptr_q;
     logic [FIFO_CNT_WIDTH-1:0] fifo_count_q;
@@ -113,6 +123,7 @@ module storeunit #(
     logic [ROW_DATA_WIDTH-1:0] out_data_q;
     logic out_last_row_q;
     logic [BEAT_IDX_WIDTH-1:0] out_beat_q;
+    logic [ROW_IDX_WIDTH-1:0] write_row_q;
 
     function automatic logic [ADDR_WIDTH-1:0] row_base_addr(
         input logic [ADDR_WIDTH-1:0] tile_addr
@@ -151,16 +162,30 @@ module storeunit #(
         end
     endfunction
 
+    function automatic logic [UOP_FIFO_IDX_WIDTH-1:0] uop_fifo_ptr_inc(
+        input logic [UOP_FIFO_IDX_WIDTH-1:0] ptr
+    );
+        begin
+            if (int'(ptr) == (UOP_FIFO_DEPTH - 1)) begin
+                return '0;
+            end
+            return ptr + UOP_FIFO_IDX_WIDTH'(1);
+        end
+    endfunction
+
     wire [FIFO_CNT_WIDTH-1:0] fifo_free_count =
         FIFO_CNT_WIDTH'(FIFO_DEPTH) - fifo_count_q;
     wire fifo_has_full_tile_space =
         fifo_free_count >= FIFO_CNT_WIDTH'(SA_WIDTH);
 
-    assign uop_ready_o = !req_valid_q && !getacc_active_q && fifo_has_full_tile_space;
+    wire descriptor_pop;
+    assign uop_ready_o =
+        (uop_count_q < UOP_FIFO_CNT_WIDTH'(UOP_FIFO_DEPTH)) || descriptor_pop;
     wire uop_fire = uop_valid_i && uop_ready_o;
 
-    assign sa_getacc_valid_o = req_valid_q;
-    assign sa_getacc_idx_o = req_paccidx_q;
+    assign sa_getacc_valid_o = !getacc_active_q &&
+        (unfetched_count_q != '0) && fifo_has_full_tile_space;
+    assign sa_getacc_idx_o = uop_pacc_fifo[int'(uop_fetch_ptr_q)];
     wire sa_getacc_fire = sa_getacc_valid_o && sa_getacc_ready_i;
 
     wire row_push = sa_getacc_data_valid_i && getacc_active_q;
@@ -168,22 +193,35 @@ module storeunit #(
 
     wire mem_wr_fire = mem_wr_valid_o && mem_wr_ready_i;
     wire out_last_beat = int'(out_beat_q) == (ROW_WRITE_BEATS - 1);
-    wire out_can_load_row = !out_valid_q || (mem_wr_fire && out_last_beat);
-    wire fifo_pop_to_out = out_can_load_row && (fifo_count_q != '0);
+    // Do not replace the output stage on a tile's final beat: the descriptor
+    // head advances on that edge, so the next tile is loaded one cycle later.
+    wire out_can_load_row = !out_valid_q ||
+        (mem_wr_fire && out_last_beat && !out_last_row_q);
+    wire fifo_pop_to_out = out_can_load_row &&
+        (fifo_count_q != '0) && (uop_count_q != '0);
+    wire [ROW_IDX_WIDTH-1:0] row_to_load =
+        (out_valid_q && mem_wr_fire && out_last_beat) ?
+        (write_row_q + ROW_IDX_WIDTH'(1)) : write_row_q;
+    wire row_to_load_is_last = int'(row_to_load) == (SA_WIDTH - 1);
 
     assign mem_wr_valid_o = out_valid_q;
     assign mem_wr_addr_o = out_addr_q + ADDR_WIDTH'(out_beat_q);
     assign mem_wr_data_o = beat_data(out_data_q, out_beat_q);
     assign done_valid_o = mem_wr_fire && out_last_beat && out_last_row_q;
+    // Once the final row is registered in the output stage, no more row-FIFO
+    // data belongs to this descriptor.  Advance the descriptor head now so
+    // the two FIFO heads retain their strict ordering invariant under bus stalls.
+    assign descriptor_pop = fifo_pop_to_out && row_to_load_is_last;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            req_valid_q <= 1'b0;
-            req_paccidx_q <= '0;
-            req_row_base_q <= '0;
+            uop_wr_ptr_q <= '0;
+            uop_rd_ptr_q <= '0;
+            uop_fetch_ptr_q <= '0;
+            uop_count_q <= '0;
+            unfetched_count_q <= '0;
             getacc_active_q <= 1'b0;
             recv_row_q <= '0;
-            active_row_base_q <= '0;
             fifo_wr_ptr_q <= '0;
             fifo_rd_ptr_q <= '0;
             fifo_count_q <= '0;
@@ -192,29 +230,22 @@ module storeunit #(
             out_data_q <= '0;
             out_last_row_q <= 1'b0;
             out_beat_q <= '0;
-            for (int i = 0; i < FIFO_DEPTH; i++) begin
-                fifo_addr[i] <= '0;
-                fifo_data[i] <= '0;
-                fifo_last_row[i] <= 1'b0;
-            end
+            write_row_q <= '0;
         end else begin
             if (uop_fire) begin
-                req_valid_q <= 1'b1;
-                req_paccidx_q <= uop_paccidx_i;
-                req_row_base_q <= row_base_addr(uop_addr_i);
+                uop_addr_fifo[int'(uop_wr_ptr_q)] <= uop_addr_i;
+                uop_pacc_fifo[int'(uop_wr_ptr_q)] <= uop_paccidx_i;
+                uop_wr_ptr_q <= uop_fifo_ptr_inc(uop_wr_ptr_q);
             end
 
             if (sa_getacc_fire) begin
-                req_valid_q <= 1'b0;
                 getacc_active_q <= 1'b1;
-                active_row_base_q <= req_row_base_q;
                 recv_row_q <= '0;
+                uop_fetch_ptr_q <= uop_fifo_ptr_inc(uop_fetch_ptr_q);
             end
 
             if (row_push) begin
-                fifo_addr[int'(fifo_wr_ptr_q)] <= row_addr(active_row_base_q, recv_row_q);
-                fifo_data[int'(fifo_wr_ptr_q)] <= sa_getacc_data_i;
-                fifo_last_row[int'(fifo_wr_ptr_q)] <= recv_last_row;
+                row_fifo_data[int'(fifo_wr_ptr_q)] <= sa_getacc_data_i;
                 fifo_wr_ptr_q <= fifo_ptr_inc(fifo_wr_ptr_q);
 
                 if (recv_last_row) begin
@@ -227,9 +258,11 @@ module storeunit #(
 
             if (fifo_pop_to_out) begin
                 out_valid_q <= 1'b1;
-                out_addr_q <= fifo_addr[int'(fifo_rd_ptr_q)];
-                out_data_q <= fifo_data[int'(fifo_rd_ptr_q)];
-                out_last_row_q <= fifo_last_row[int'(fifo_rd_ptr_q)];
+                out_addr_q <= row_addr(
+                    row_base_addr(uop_addr_fifo[int'(uop_rd_ptr_q)]),
+                    row_to_load);
+                out_data_q <= row_fifo_data[int'(fifo_rd_ptr_q)];
+                out_last_row_q <= row_to_load_is_last;
                 out_beat_q <= '0;
                 fifo_rd_ptr_q <= fifo_ptr_inc(fifo_rd_ptr_q);
             end else if (mem_wr_fire && !out_last_beat) begin
@@ -239,6 +272,29 @@ module storeunit #(
                 out_last_row_q <= 1'b0;
                 out_beat_q <= '0;
             end
+
+            if (descriptor_pop) begin
+                write_row_q <= '0;
+                uop_rd_ptr_q <= uop_fifo_ptr_inc(uop_rd_ptr_q);
+            end else if (mem_wr_fire && out_last_beat && !out_last_row_q) begin
+                write_row_q <= write_row_q + ROW_IDX_WIDTH'(1);
+            end
+
+            unique case ({uop_fire, descriptor_pop})
+                2'b10: uop_count_q <= uop_count_q + UOP_FIFO_CNT_WIDTH'(1);
+                2'b01: uop_count_q <= uop_count_q - UOP_FIFO_CNT_WIDTH'(1);
+                default: begin
+                end
+            endcase
+
+            unique case ({uop_fire, sa_getacc_fire})
+                2'b10: unfetched_count_q <=
+                    unfetched_count_q + UOP_FIFO_CNT_WIDTH'(1);
+                2'b01: unfetched_count_q <=
+                    unfetched_count_q - UOP_FIFO_CNT_WIDTH'(1);
+                default: begin
+                end
+            endcase
 
             unique case ({row_push, fifo_pop_to_out})
                 2'b10: fifo_count_q <= fifo_count_q + FIFO_CNT_WIDTH'(1);

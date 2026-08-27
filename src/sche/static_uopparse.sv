@@ -45,8 +45,9 @@ module static_uopparse #(
     parameter int ABUF_GROUP_SIZE = ABUF_SIZE / 2,
     parameter int BBUF_GROUP_SIZE = BBUF_SIZE / 2,
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
-    parameter int BLOCK_M        = choose_block_m(ABUF_GROUP_SIZE, BBUF_GROUP_SIZE, PACC_NUM),
-    parameter int BLOCK_N        = choose_block_n(ABUF_GROUP_SIZE, BBUF_GROUP_SIZE, PACC_NUM),
+    parameter int PACC_GROUP_SIZE = PACC_NUM / 2,
+    parameter int BLOCK_M        = choose_block_m(ABUF_GROUP_SIZE, BBUF_GROUP_SIZE, PACC_GROUP_SIZE),
+    parameter int BLOCK_N        = choose_block_n(ABUF_GROUP_SIZE, BBUF_GROUP_SIZE, PACC_GROUP_SIZE),
     parameter int TILE_COUNT_WIDTH = DIM_WIDTH + 1
 ) (
     input  logic clk,
@@ -81,7 +82,7 @@ module static_uopparse #(
     localparam int MERGE_BLOCK_TILES_BBUF =
         (MERGE_BLOCK_TILES_ABUF < BBUF_GROUP_SIZE) ? MERGE_BLOCK_TILES_ABUF : BBUF_GROUP_SIZE;
     localparam int MERGE_BLOCK_TILES =
-        (MERGE_BLOCK_TILES_BBUF < PACC_NUM) ? MERGE_BLOCK_TILES_BBUF : PACC_NUM;
+        (MERGE_BLOCK_TILES_BBUF < PACC_GROUP_SIZE) ? MERGE_BLOCK_TILES_BBUF : PACC_GROUP_SIZE;
 
     function automatic int choose_block_m(
         input int abuf_group_size,
@@ -173,14 +174,17 @@ module static_uopparse #(
         if (PACC_NUM <= 0) begin
             $error("PACC_NUM must be positive");
         end
+        if ((PACC_NUM < 2) || ((PACC_NUM & 1) != 0)) begin
+            $error("PACC_NUM must be an even number >= 2 for ACC ping-pong");
+        end
         if ((BLOCK_M <= 0) || (BLOCK_M > ABUF_GROUP_SIZE)) begin
             $error("BLOCK_M must fit one ABuf ping-pong group");
         end
         if ((BLOCK_N <= 0) || (BLOCK_N > BBUF_GROUP_SIZE)) begin
             $error("BLOCK_N must fit one BBuf ping-pong group");
         end
-        if ((BLOCK_M * BLOCK_N) > PACC_NUM) begin
-            $error("BLOCK_M * BLOCK_N must not exceed PACC_NUM");
+        if ((BLOCK_M * BLOCK_N) > PACC_GROUP_SIZE) begin
+            $error("BLOCK_M * BLOCK_N must not exceed one PACC group");
         end
     end
 
@@ -266,12 +270,13 @@ module static_uopparse #(
     function automatic logic [PACC_IDX_WIDTH-1:0] pacc_of(
         input tile_count_t local_m,
         input tile_count_t local_n,
-        input tile_count_t block_n
+        input tile_count_t block_n,
+        input logic         acc_group
     );
         tile_count_t pacc_full;
         begin
             pacc_full = (local_m * block_n) + local_n;
-            return pacc_full[PACC_IDX_WIDTH-1:0];
+            return PACC_IDX_WIDTH'(pacc_full + (acc_group ? PACC_GROUP_SIZE : 0));
         end
     endfunction
 
@@ -338,6 +343,7 @@ module static_uopparse #(
     logic read_group_q;
     logic load_group_q;
     logic next_command_load_group_q;
+    logic acc_group_q;
     logic command_fence_pending_q;
     logic fence_before_swap_q;
 
@@ -483,11 +489,13 @@ module static_uopparse #(
                 if (merge_mode_q) begin
                     uop_abufidx_o = abuf_slot(read_group_q, gemm_m_idx_q);
                     uop_bbufidx_o = bbuf_slot(read_group_q, gemm_m_idx_q);
-                    uop_paccidx_o = gemm_m_idx_q[PACC_IDX_WIDTH-1:0];
+                    uop_paccidx_o = PACC_IDX_WIDTH'(gemm_m_idx_q +
+                        (acc_group_q ? PACC_GROUP_SIZE : 0));
                 end else begin
                     uop_abufidx_o = abuf_slot(read_group_q, gemm_m_idx_q);
                     uop_bbufidx_o = bbuf_slot(read_group_q, gemm_n_idx_q);
-                    uop_paccidx_o = pacc_of(gemm_m_idx_q, gemm_n_idx_q, block_n_q);
+                    uop_paccidx_o = pacc_of(gemm_m_idx_q, gemm_n_idx_q,
+                        block_n_q, acc_group_q);
                 end
                 uop_accum_o   = (k_tile_q != '0);
             end
@@ -501,7 +509,8 @@ module static_uopparse #(
                         (merge_tile_m_q[int'(out_m_idx_q)] * tn_q) +
                         merge_tile_n_q[int'(out_m_idx_q)]
                     );
-                    uop_paccidx_o = out_m_idx_q[PACC_IDX_WIDTH-1:0];
+                    uop_paccidx_o = PACC_IDX_WIDTH'(out_m_idx_q +
+                        (acc_group_q ? PACC_GROUP_SIZE : 0));
                 end else begin
                     uop_addr_o = addr_add_tile(
                         c_base_q,
@@ -509,7 +518,8 @@ module static_uopparse #(
                         ((block_m_base_q + out_m_idx_q) * tn_q) +
                         block_n_base_q + out_n_idx_q
                     );
-                    uop_paccidx_o = pacc_of(out_m_idx_q, out_n_idx_q, block_n_q);
+                    uop_paccidx_o = pacc_of(out_m_idx_q, out_n_idx_q,
+                        block_n_q, acc_group_q);
                 end
             end
 
@@ -556,6 +566,7 @@ module static_uopparse #(
             read_group_q <= 1'b0;
             load_group_q <= 1'b0;
             next_command_load_group_q <= 1'b0;
+            acc_group_q <= 1'b0;
             command_fence_pending_q <= 1'b0;
             fence_before_swap_q <= 1'b0;
         end else begin
@@ -741,8 +752,13 @@ module static_uopparse #(
                             out_n_idx_q <= '0;
                             read_group_q <= 1'b0;
                             load_group_q <= 1'b0;
+                            acc_group_q <= ~acc_group_q;
                             command_fence_pending_q <= 1'b0;
-                            fence_before_swap_q <= 1'b1;
+                            // ACC halves alternate per output block.  The
+                            // next block can overlap the current block's
+                            // OUTPUT when it uses the other half; fence only
+                            // when the following block reuses this half.
+                            fence_before_swap_q <= acc_group_q;
                         end else begin
                             state_q <= ST_IDLE;
                             k_tile_q <= '0;
@@ -754,6 +770,7 @@ module static_uopparse #(
                             read_group_q <= 1'b0;
                             load_group_q <= 1'b0;
                             next_command_load_group_q <= ~read_group_q;
+                            acc_group_q <= ~acc_group_q;
                             command_fence_pending_q <= 1'b0;
                             fence_before_swap_q <= 1'b0;
                         end

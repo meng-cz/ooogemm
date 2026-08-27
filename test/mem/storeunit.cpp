@@ -286,7 +286,8 @@ private:
     }
 
     void update_after_tick(bool uop_fire, const Uop& uop,
-                           bool getacc_fire, bool rsp_fire,
+                           bool getacc_fire, uint32_t getacc_idx,
+                           bool rsp_fire,
                            bool wr_fire) {
         if (uop_fire) {
             pending_getacc_.push_back(uop);
@@ -298,7 +299,7 @@ private:
             }
             Uop exp = pending_getacc_.front();
             pending_getacc_.pop_front();
-            if (dut_.sa_getacc_idx_o != (exp.pacc & kPaccIdxMask)) {
+            if (getacc_idx != (exp.pacc & kPaccIdxMask)) {
                 fail("wrong sa_getacc_idx_o");
             }
             start_burst_from_getacc(exp);
@@ -332,8 +333,13 @@ private:
 
     void run_sequence(const std::string& name,
                       const std::vector<Uop>& uops,
-                      int max_cycles) {
+                      int max_cycles,
+                      bool check_fifo_overlap = false) {
         size_t uop_idx = 0;
+        size_t accepted_before_first_done = 0;
+        bool first_done_seen = false;
+        bool saw_getacc_write_overlap = false;
+        uint64_t prior_accept_cycle = 0;
         std::bernoulli_distribution getacc_ready_dist(0.60);
         std::bernoulli_distribution wr_ready_dist(0.45);
 
@@ -351,13 +357,28 @@ private:
 
             const bool uop_fire = dut_.uop_valid_i && dut_.uop_ready_o;
             const bool getacc_fire = dut_.sa_getacc_valid_o && dut_.sa_getacc_ready_i;
+            const uint32_t getacc_idx = dut_.sa_getacc_idx_o;
             const bool wr_fire = dut_.mem_wr_valid_o && dut_.mem_wr_ready_i;
+
+            if (uop_fire && !first_done_seen) {
+                if (check_fifo_overlap && accepted_before_first_done != 0 &&
+                    cycle_ != prior_accept_cycle + 1) {
+                    fail(name + ": OUTPUT uops were not accepted consecutively");
+                }
+                ++accepted_before_first_done;
+                prior_accept_cycle = cycle_;
+            }
+            if (getacc_fire && dut_.mem_wr_valid_o) {
+                saw_getacc_write_overlap = true;
+            }
+            if (dut_.done_valid_o) first_done_seen = true;
 
             check_getacc_stability(getacc_fire);
             check_write_output(wr_fire);
 
             tick_raw();
-            update_after_tick(uop_fire, cur_uop, getacc_fire, rsp_fire, wr_fire);
+            update_after_tick(uop_fire, cur_uop, getacc_fire, getacc_idx,
+                              rsp_fire, wr_fire);
             if (uop_fire) {
                 ++uop_idx;
             }
@@ -368,6 +389,12 @@ private:
                 expected_writes_.empty() &&
                 !dut_.mem_wr_valid_o &&
                 !dut_.sa_getacc_valid_o) {
+                if (check_fifo_overlap && accepted_before_first_done != uops.size()) {
+                    fail(name + ": descriptor FIFO did not absorb all directed uops");
+                }
+                if (check_fifo_overlap && !saw_getacc_write_overlap) {
+                    fail(name + ": getacc and bus writeback never overlapped");
+                }
                 std::cout << name << ": passed, uops=" << uops.size()
                           << " cycles=" << cycle_ << "\n";
                 return;
@@ -391,7 +418,8 @@ private:
                 Uop{0x120, 7, "out2"},
                 Uop{0x121, 1, "out3"},
             },
-            2000
+            2000,
+            true
         );
     }
 
