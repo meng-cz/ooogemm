@@ -2,10 +2,21 @@
 #include "verilated.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
+
+#ifndef SA_WIDTH_TEST
+#define SA_WIDTH_TEST 8
+#endif
+#ifndef SUBTILE_K_TEST
+#define SUBTILE_K_TEST 16
+#endif
+#ifndef PACC_GROUP_SIZE_TEST
+#define PACC_GROUP_SIZE_TEST 4
+#endif
 
 namespace {
 
@@ -29,6 +40,14 @@ void print_addr(uint32_t addr) {
               << addr << std::dec << std::setfill(' ');
 }
 
+int env_positive(const char* name, int fallback) {
+    const char* value = std::getenv(name);
+    if (value == nullptr) return fallback;
+    const int parsed = std::stoi(value);
+    if (parsed <= 0) throw std::runtime_error(std::string(name) + " must be positive");
+    return parsed;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -48,10 +67,14 @@ int main(int argc, char** argv) {
     dut.cmd_a_base_i = 0x00010000;
     dut.cmd_b_base_i = 0x00020000;
     dut.cmd_c_base_i = 0x00030000;
-    dut.cmd_m_i = 64;
-    dut.cmd_n_i = 64;
-    dut.cmd_k_i = 64;
-    dut.cmd_batch_i = 1;
+    const int m = env_positive("UOP_M", 64);
+    const int n = env_positive("UOP_N", 64);
+    const int k = env_positive("UOP_K", 64);
+    const int batch = env_positive("UOP_BATCH", 1);
+    dut.cmd_m_i = m;
+    dut.cmd_n_i = n;
+    dut.cmd_k_i = k;
+    dut.cmd_batch_i = batch;
     dut.eval();
     for (int i = 0; i < 3; ++i) tick(dut, cycle);
     dut.rst_n = 1;
@@ -107,7 +130,7 @@ int main(int argc, char** argv) {
         // GEMM of a K-wave or the first OUTPUT of an output block is issued.
         // LOAD issued in that cycle belongs to the same group and prepares the
         // following group's GEMM input.
-        constexpr unsigned kPaccGroupSize = 4;
+        constexpr unsigned kPaccGroupSize = PACC_GROUP_SIZE_TEST;
         const bool starts_gemm_group = gemm_fire &&
             (static_cast<unsigned>(dut.gemm_paccidx_o) % kPaccGroupSize) == 0;
         const bool starts_output_group = output_fire &&
@@ -157,9 +180,18 @@ int main(int argc, char** argv) {
         tick(dut, cycle);
         if (cmd_sent && dut.cmd_done_valid_o) {
             if (!completions.empty()) throw std::runtime_error("command completed before uop completions");
-            if (load_count != 256 || gemm_count != 256 || output_count != 64) {
+            const uint64_t tm = (static_cast<uint64_t>(m) + SA_WIDTH_TEST - 1) /
+                                SA_WIDTH_TEST;
+            const uint64_t tn = (static_cast<uint64_t>(n) + SA_WIDTH_TEST - 1) /
+                                SA_WIDTH_TEST;
+            const uint64_t tk = (static_cast<uint64_t>(k) + SUBTILE_K_TEST - 1) /
+                                SUBTILE_K_TEST;
+            if (gemm_count != static_cast<uint64_t>(batch) * tm * tn * tk ||
+                output_count != static_cast<uint64_t>(batch) * tm * tn) {
                 throw std::runtime_error("unexpected uop counts");
             }
+            std::cout << "\n# totals LOAD=" << load_count << " GEMM=" << gemm_count
+                      << " OUTPUT=" << output_count << '\n';
             return 0;
         }
     }

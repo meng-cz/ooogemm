@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <iostream>
@@ -31,6 +32,18 @@
 #endif
 #ifndef TOP_NEW_STATIC_PERF_TEST
 #define TOP_NEW_STATIC_PERF_TEST 0
+#endif
+#ifndef PERF_M_TEST
+#define PERF_M_TEST 256
+#endif
+#ifndef PERF_N_TEST
+#define PERF_N_TEST 256
+#endif
+#ifndef PERF_K_TEST
+#define PERF_K_TEST 256
+#endif
+#ifndef PERF_BATCH_TEST
+#define PERF_BATCH_TEST 1
 #endif
 
 namespace {
@@ -225,7 +238,8 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
                       << " stores=" << tb.store_writes << "\n";
 #if TOP_NEW_STATIC_PERF_TEST
             const double elapsed = static_cast<double>(tb.cycle - tb.issue_cycle + 1);
-            const double scalar_macs = static_cast<double>(m) * n * k;
+            const double scalar_macs =
+                static_cast<double>(batch) * m * n * k;
             const double peak_macs_per_cycle =
                 static_cast<double>(SA_WIDTH_TEST) * SA_WIDTH_TEST;
             const double ideal_compute_cycles = scalar_macs / peak_macs_per_cycle;
@@ -254,32 +268,48 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     try {
 #if TOP_NEW_STATIC_PERF_TEST
-        // The performance configuration is supplied by the shell script.
+        const auto env_dimension = [](const char* name, int fallback) {
+            const char* value = std::getenv(name);
+            if (value == nullptr) return fallback;
+            const int parsed = std::stoi(value);
+            if (parsed <= 0) fail(std::string(name) + " must be positive");
+            return parsed;
+        };
+        const int perf_m = env_dimension("PERF_RUN_M", PERF_M_TEST);
+        const int perf_n = env_dimension("PERF_RUN_N", PERF_N_TEST);
+        const int perf_k = env_dimension("PERF_RUN_K", PERF_K_TEST);
+        const int perf_batch = env_dimension("PERF_RUN_BATCH", PERF_BATCH_TEST);
+
+        // The performance dimensions may be overridden at run time so one
+        // compiled RTL model can cover multiple GEMM command shapes.
         // Calculate bus transactions from tile dimensions and the fixed
         // 256-bit load bus rather than hard-coding a small-test count.
-        constexpr int tm = (256 + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
-        constexpr int tn = (256 + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
-        constexpr int tk = (256 + SUBTILE_K_TEST - 1) / SUBTILE_K_TEST;
+        const int tm = (perf_m + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
+        const int tn = (perf_n + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
+        const int tk = (perf_k + SUBTILE_K_TEST - 1) / SUBTILE_K_TEST;
         constexpr int a_group = ABUF_SIZE_TEST / 2;
         constexpr int b_group = BBUF_SIZE_TEST / 2;
         constexpr int acc_group = PACC_NUM_TEST / 2;
         constexpr int block_cap = (a_group < b_group) ?
             ((a_group < acc_group) ? a_group : acc_group) :
             ((b_group < acc_group) ? b_group : acc_group);
-        constexpr int block_m = choose_block_m(tm, tn, a_group, b_group, block_cap);
-        constexpr int block_n = choose_block_n(tm, tn, a_group, b_group, block_cap);
-        constexpr int blocks_m = (tm + block_m - 1) / block_m;
-        constexpr int blocks_n = (tn + block_n - 1) / block_n;
+        const int block_m = choose_block_m(tm, tn, a_group, b_group, block_cap);
+        const int block_n = choose_block_n(tm, tn, a_group, b_group, block_cap);
+        const int blocks_m = (tm + block_m - 1) / block_m;
+        const int blocks_n = (tn + block_n - 1) / block_n;
         constexpr int row_width_bytes = SUBTILE_K_TEST;
         constexpr int rows_per_load_beat = 256 / (row_width_bytes * 8);
         constexpr int load_beats_per_tile =
             (SA_WIDTH_TEST + rows_per_load_beat - 1) / rows_per_load_beat;
-        constexpr int expected_loads = blocks_m * blocks_n * tk *
-            (block_m + block_n) * load_beats_per_tile;
-        constexpr int expected_stores = tm * tn * SA_WIDTH_TEST *
-            STORE_ROW_WRITE_BEATS_TEST;
-        run_case("perf_256x256x256", 256, 256, 256, 1, 0,
-                 expected_loads, expected_stores, 256.0f);
+        const bool merge_batch = tm * tn < block_cap;
+        const int expected_loads = merge_batch ?
+            (2 * perf_batch * tm * tn * tk * load_beats_per_tile) :
+            (perf_batch * blocks_m * blocks_n * tk *
+             (block_m + block_n) * load_beats_per_tile);
+        const int expected_stores = perf_batch * tm * tn *
+            SA_WIDTH_TEST * STORE_ROW_WRITE_BEATS_TEST;
+        run_case("perf_batched_gemm", perf_m, perf_n, perf_k, perf_batch, 0,
+                 expected_loads, expected_stores, static_cast<float>(perf_k));
 #else
         // SA_WIDTH=2, SUBTILE_K=2, LOAD_DATA_WIDTH=256: one tile is one bus beat.
         run_case("one_wave", 2, 2, 2, 1, 3, 2, 4, 2.0f);

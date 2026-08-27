@@ -18,23 +18,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 SUBTILE_K="${SUBTILE_K:-32}"
-LOAD_DATA_WIDTH="${LOAD_DATA_WIDTH:-256}"
+LOAD_DATA_WIDTH="${LOAD_DATA_WIDTH:-512}"
 ABUF_SIZE="${ABUF_SIZE:-16}"
 BBUF_SIZE="${BBUF_SIZE:-16}"
 PACC_NUM="${PACC_NUM:-16}"
-STORE_ROW_WRITE_BEATS="${STORE_ROW_WRITE_BEATS:-${SA_WIDTH}}"
+STORE_ROW_WRITE_BEATS="${STORE_ROW_WRITE_BEATS:-1}"
 ADDR_WIDTH="${ADDR_WIDTH:-32}"
 DIM_WIDTH="${DIM_WIDTH:-16}"
-UOP_FIFO_DEPTH="${UOP_FIFO_DEPTH:-32}"
 GEMM_INSTID_WIDTH="${GEMM_INSTID_WIDTH:-16}"
-GEMM_TRACK_DEPTH="${GEMM_TRACK_DEPTH:-256}"
-OUTPUT_TRACK_DEPTH="${OUTPUT_TRACK_DEPTH:-32}"
 PACC_EXP_WIDTH="${PACC_EXP_WIDTH:-10}"
 PACC_SIG_WIDTH="${PACC_SIG_WIDTH:-40}"
 VERILATOR_JOBS="${VERILATOR_JOBS:-4}"
 CXX_OPT_FLAGS="${CXX_OPT_FLAGS:--O3 -g0}"
 VERILATOR_EXTRA_FLAGS="${VERILATOR_EXTRA_FLAGS:---hierarchical --hierarchical-threads 2}"
-BUILD_ROOT="${BUILD_DIR:-/tmp/ooogemm_static_lab_L${LANE_NUM}_W${SA_WIDTH}}"
+if [[ "${ABUF_SIZE}" == "${BBUF_SIZE}" ]]; then
+  CONFIG_TAG="L${LANE_NUM}_W${SA_WIDTH}_AB${ABUF_SIZE}_ACC${PACC_NUM}"
+else
+  CONFIG_TAG="L${LANE_NUM}_W${SA_WIDTH}_AB${ABUF_SIZE}_BB${BBUF_SIZE}_ACC${PACC_NUM}"
+fi
+BUILD_ROOT="${BUILD_DIR:-/tmp/ooogemm_static_lab_${CONFIG_TAG}}"
 MAX_CYCLES="${MAX_CYCLES:-0}"
 LOAD_RSP_DELAY="${LOAD_RSP_DELAY:-4}"
 
@@ -42,12 +44,12 @@ read -r -a VERILATOR_EXTRA_FLAGS_ARR <<< "${VERILATOR_EXTRA_FLAGS}"
 
 mkdir -p "${BUILD_ROOT}" "${OUT_DIR}"
 
-OUT_FILE="${OUT_DIR}/L${LANE_NUM}_W${SA_WIDTH}_${M_SIZE}X${N_SIZE}X${K_SIZE}_Cnt${COUNT}.txt"
-EXE="${BUILD_ROOT}/Vtop_static"
+OUT_FILE="${OUT_DIR}/${CONFIG_TAG}_${M_SIZE}X${N_SIZE}X${K_SIZE}_Cnt${COUNT}.txt"
+EXE="${BUILD_ROOT}/Vtop_new_static"
 
 SOURCES=(
   "${ROOT_DIR}/src/sche/uop.sv"
-  "${ROOT_DIR}/src/sche/static_uopparse.sv"
+  "${ROOT_DIR}/src/sche/new_static_uopparse.sv"
   "${ROOT_DIR}/src/buf/oprandbuf.sv"
   "${ROOT_DIR}/src/pe/fdot8e4m3.sv"
   "${ROOT_DIR}/src/pe/paccreg.sv"
@@ -56,11 +58,11 @@ SOURCES=(
   "${ROOT_DIR}/src/sa/sa.sv"
   "${ROOT_DIR}/src/mem/loadunit.sv"
   "${ROOT_DIR}/src/mem/storeunit.sv"
-  "${ROOT_DIR}/src/top_static.sv"
+  "${ROOT_DIR}/src/top_new_static.sv"
   "${SCRIPT_DIR}/static.cpp"
 )
 
-BUILD_STAMP="${BUILD_ROOT}/.static_lab_build_key"
+BUILD_STAMP="${BUILD_ROOT}/.new_static_lab_build_key"
 BUILD_KEY="$({
   printf '%s\n' \
     "LANE_NUM=${LANE_NUM}" \
@@ -73,10 +75,7 @@ BUILD_KEY="$({
     "STORE_ROW_WRITE_BEATS=${STORE_ROW_WRITE_BEATS}" \
     "ADDR_WIDTH=${ADDR_WIDTH}" \
     "DIM_WIDTH=${DIM_WIDTH}" \
-    "UOP_FIFO_DEPTH=${UOP_FIFO_DEPTH}" \
     "GEMM_INSTID_WIDTH=${GEMM_INSTID_WIDTH}" \
-    "GEMM_TRACK_DEPTH=${GEMM_TRACK_DEPTH}" \
-    "OUTPUT_TRACK_DEPTH=${OUTPUT_TRACK_DEPTH}" \
     "PACC_EXP_WIDTH=${PACC_EXP_WIDTH}" \
     "PACC_SIG_WIDTH=${PACC_SIG_WIDTH}" \
     "CXX_OPT_FLAGS=${CXX_OPT_FLAGS}" \
@@ -86,10 +85,10 @@ BUILD_KEY="$({
   done
 } | sha256sum | cut -d' ' -f1)"
 
-echo "static_lab: build/run LANE=${LANE_NUM} WIDTH=${SA_WIDTH} MNK=${M_SIZE}x${N_SIZE}x${K_SIZE} COUNT=${COUNT}"
+echo "static_lab: build/run CONFIG=${CONFIG_TAG} MNK=${M_SIZE}x${N_SIZE}x${K_SIZE} COUNT=${COUNT}"
 
 if [[ "${REBUILD:-0}" == "1" || ! -x "${EXE}" || ! -f "${BUILD_STAMP}" || "$(cat "${BUILD_STAMP}")" != "${BUILD_KEY}" ]]; then
-  echo "static_lab: compile LANE=${LANE_NUM} WIDTH=${SA_WIDTH}"
+  echo "static_lab: compile CONFIG=${CONFIG_TAG}"
   verilator \
     --quiet \
     --sv \
@@ -98,7 +97,7 @@ if [[ "${REBUILD:-0}" == "1" || ! -x "${EXE}" || ! -f "${BUILD_STAMP}" || "$(cat
     --build \
     --build-jobs "${VERILATOR_JOBS}" \
     --Mdir "${BUILD_ROOT}" \
-    --top-module top_static \
+    --top-module top_new_static \
     "${VERILATOR_EXTRA_FLAGS_ARR[@]}" \
     "-GSA_WIDTH=${SA_WIDTH}" \
     "-GSUBTILE_K=${SUBTILE_K}" \
@@ -108,12 +107,9 @@ if [[ "${REBUILD:-0}" == "1" || ! -x "${EXE}" || ! -f "${BUILD_STAMP}" || "$(cat
     "-GPACC_NUM=${PACC_NUM}" \
     "-GADDR_WIDTH=${ADDR_WIDTH}" \
     "-GDIM_WIDTH=${DIM_WIDTH}" \
-    "-GUOP_FIFO_DEPTH=${UOP_FIFO_DEPTH}" \
     "-GSTORE_ROW_WRITE_BEATS=${STORE_ROW_WRITE_BEATS}" \
     "-GLOAD_DATA_WIDTH=${LOAD_DATA_WIDTH}" \
     "-GGEMM_INSTID_WIDTH=${GEMM_INSTID_WIDTH}" \
-    "-GGEMM_TRACK_DEPTH=${GEMM_TRACK_DEPTH}" \
-    "-GOUTPUT_TRACK_DEPTH=${OUTPUT_TRACK_DEPTH}" \
     -CFLAGS "${CXX_OPT_FLAGS} -DSA_WIDTH_TEST=${SA_WIDTH} -DSUBTILE_K_TEST=${SUBTILE_K} -DLANE_NUM_TEST=${LANE_NUM} -DABUF_SIZE_TEST=${ABUF_SIZE} -DBBUF_SIZE_TEST=${BBUF_SIZE} -DPACC_NUM_TEST=${PACC_NUM} -DPACC_EXP_WIDTH_TEST=${PACC_EXP_WIDTH} -DPACC_SIG_WIDTH_TEST=${PACC_SIG_WIDTH} -DSTORE_ROW_WRITE_BEATS_TEST=${STORE_ROW_WRITE_BEATS} -DLOAD_DATA_WIDTH_TEST=${LOAD_DATA_WIDTH}" \
     "${SOURCES[@]}"
   printf '%s\n' "${BUILD_KEY}" > "${BUILD_STAMP}"

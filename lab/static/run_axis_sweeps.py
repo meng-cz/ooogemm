@@ -69,9 +69,9 @@ def parse_hardware_configs(value: str, default: list[Hardware]) -> list[Hardware
             lane, width = fields
             lane_i = int(lane)
             defaults = {
-                1: (4, 4, 4),
-                4: (8, 8, 16),
-                16: (16, 16, 64),
+                1: (8, 8, 8),
+                4: (16, 16, 32),
+                16: (32, 32, 128),
             }
             abuf_size, bbuf_size, pacc_num = defaults.get(lane_i, (16, 16, 16))
             configs.append(Hardware(lane_i, int(width), abuf_size, bbuf_size, pacc_num))
@@ -85,18 +85,24 @@ def parse_hardware_configs(value: str, default: list[Hardware]) -> list[Hardware
     return configs
 
 
+def hardware_tag(hw: Hardware) -> str:
+    tag = f"L{hw.lane}_W{hw.width}_AB{hw.abuf_size}"
+    if hw.bbuf_size != hw.abuf_size:
+        tag += f"_BB{hw.bbuf_size}"
+    return f"{tag}_ACC{hw.pacc_num}"
+
+
 def result_filename(hw: Hardware, m: int, n: int, k: int, count: int) -> str:
-    return f"L{hw.lane}_W{hw.width}_{m}X{n}X{k}_Cnt{count}.txt"
+    return f"{hardware_tag(hw)}_{m}X{n}X{k}_Cnt{count}.txt"
 
 
 def log_filename(axis: str, hw: Hardware, m: int, n: int, k: int, count: int) -> str:
-    return f"{axis}_L{hw.lane}_W{hw.width}_{m}X{n}X{k}_Cnt{count}.log"
+    return f"{axis}_{hardware_tag(hw)}_{m}X{n}X{k}_Cnt{count}.log"
 
 
 def task_label(task: Task) -> str:
     return (
-        f"{task.axis} L{task.hw.lane}_W{task.hw.width} "
-        f"ABUF={task.hw.abuf_size} BBUF={task.hw.bbuf_size} PACC={task.hw.pacc_num} "
+        f"{task.axis} {hardware_tag(task.hw)} "
         f"MNK={task.m}x{task.n}x{task.k}"
     )
 
@@ -126,7 +132,11 @@ def make_parser() -> argparse.ArgumentParser:
         "--hardware-configs",
         default=os.environ.get(
             "HARDWARE_CONFIGS",
-            "1:64:4:4:4 4:32:8:8:16 16:16:16:16:64",
+            # The first three configurations normalize total operand/PACC
+            # storage; the final three (including L16_W16 once) normalize the
+            # per-buffer entry counts.
+            "1:64:8:8:8 4:32:16:16:32 16:16:32:32:128 "
+            "1:64:32:32:128 4:32:32:32:128",
         ),
     )
     parser.add_argument("--data-root", type=Path, default=Path(os.environ.get("DATA_ROOT", ROOT_DIR / "data/static")))
@@ -145,9 +155,11 @@ def build_all_tasks(args: argparse.Namespace) -> list[Task]:
     hardware = parse_hardware_configs(
         args.hardware_configs,
         [
-            Hardware(1, 64, 4, 4, 4),
-            Hardware(4, 32, 8, 8, 16),
-            Hardware(16, 16, 16, 16, 64),
+            Hardware(1, 64, 8, 8, 8),
+            Hardware(4, 32, 16, 16, 32),
+            Hardware(16, 16, 32, 32, 128),
+            Hardware(1, 64, 32, 32, 128),
+            Hardware(4, 32, 32, 32, 128),
         ],
     )
 
@@ -221,11 +233,14 @@ def prebuild_hardware(args: argparse.Namespace, tasks: list[Task], print_lock: t
     args.log_dir.mkdir(parents=True, exist_ok=True)
     prebuild_dir.mkdir(parents=True, exist_ok=True)
 
-    hardware = sorted({task.hw for task in tasks}, key=lambda hw: (hw.lane, hw.width))
+    hardware = sorted(
+        {task.hw for task in tasks},
+        key=lambda hw: (hw.lane, hw.width, hw.abuf_size, hw.bbuf_size, hw.pacc_num),
+    )
     for hw in hardware:
         env = make_env(args, hw)
         env["BUILD_ONLY"] = "1"
-        log_file = args.log_dir.resolve() / f"prebuild_L{hw.lane}_W{hw.width}.log"
+        log_file = args.log_dir.resolve() / f"prebuild_{hardware_tag(hw)}.log"
         cmd = [
             str(SCRIPT_DIR / "static.sh"),
             str(hw.lane),
@@ -238,8 +253,7 @@ def prebuild_hardware(args: argparse.Namespace, tasks: list[Task], print_lock: t
         ]
         with print_lock:
             print(
-                f"static_lab: prebuild L{hw.lane}_W{hw.width} "
-                f"ABUF={hw.abuf_size} BBUF={hw.bbuf_size} PACC={hw.pacc_num} "
+                f"static_lab: prebuild {hardware_tag(hw)} "
                 f"log={log_file}",
                 flush=True,
             )
@@ -255,7 +269,11 @@ def prebuild_hardware(args: argparse.Namespace, tasks: list[Task], print_lock: t
             log.write(f"finished={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} rc={rc}\n")
         if rc != 0:
             with print_lock:
-                print(f"static_lab: prebuild failed L{hw.lane}_W{hw.width} rc={rc} log={log_file}", flush=True)
+                print(
+                    f"static_lab: prebuild failed {hardware_tag(hw)} "
+                    f"rc={rc} log={log_file}",
+                    flush=True,
+                )
             return False
     return True
 

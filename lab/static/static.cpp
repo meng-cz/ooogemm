@@ -1,4 +1,4 @@
-#include "Vtop_static.h"
+#include "Vtop_new_static.h"
 #include "verilated.h"
 
 #include <algorithm>
@@ -38,10 +38,10 @@ namespace {
 #define PACC_NUM_TEST 16
 #endif
 #ifndef STORE_ROW_WRITE_BEATS_TEST
-#define STORE_ROW_WRITE_BEATS_TEST SA_WIDTH_TEST
+#define STORE_ROW_WRITE_BEATS_TEST 1
 #endif
 #ifndef LOAD_DATA_WIDTH_TEST
-#define LOAD_DATA_WIDTH_TEST 256
+#define LOAD_DATA_WIDTH_TEST 512
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
@@ -60,8 +60,11 @@ constexpr int kWritesPerOutputTile = kSaWidth * kRowWriteBeats;
 static_assert(kLaneNum >= 1, "LANE_NUM_TEST must be positive");
 static_assert(kABufSize >= 4 && kBBufSize >= 4, "operand buffers must have ping-pong halves");
 static_assert(kPaccNum >= 1, "PACC_NUM_TEST must be positive");
-static_assert(kRowWriteBeats == kSaWidth,
-              "static lab expects one FP32 word per store beat");
+static_assert(kRowWriteBeats >= 1 &&
+              (kRowWriteBeats & (kRowWriteBeats - 1)) == 0,
+              "STORE_ROW_WRITE_BEATS_TEST must be one or a power of two");
+static_assert(((kSaWidth * 32) % kRowWriteBeats) == 0,
+              "output row width must be divisible by STORE_ROW_WRITE_BEATS_TEST");
 static_assert((kSubtileK & (kSubtileK - 1)) == 0,
               "SUBTILE_K_TEST must be a power of two");
 static_assert((kLoadDataBits & (kLoadDataBits - 1)) == 0,
@@ -120,6 +123,11 @@ std::string result_filename(int m, int n, int k, int count) {
     std::ostringstream os;
     os << "L" << kLaneNum
        << "_W" << kSaWidth
+       << "_AB" << kABufSize;
+    if (kBBufSize != kABufSize) {
+        os << "_BB" << kBBufSize;
+    }
+    os << "_ACC" << kPaccNum
        << "_" << m << "X" << n << "X" << k
        << "_Cnt" << count << ".txt";
     return os.str();
@@ -221,7 +229,7 @@ private:
     static constexpr uint32_t kCBase = 0x00030000u;
 
     Options opt_;
-    Vtop_static dut_;
+    Vtop_new_static dut_;
     uint64_t cycle_ = 0;
     uint64_t output_tiles_per_cmd_ = 0;
     uint64_t expected_writes_per_cmd_ = 0;
