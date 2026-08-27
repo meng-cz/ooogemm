@@ -49,7 +49,7 @@ module loadunit #(
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int ROW_IDX_WIDTH  = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH),
     parameter int ROW_DATA_WIDTH = SUBTILE_K * 8,
-    parameter int LOAD_DATA_WIDTH = 256,
+    parameter int LOAD_DATA_WIDTH = 1024,
     parameter int BUS_ID_WIDTH   =
         ((SA_WIDTH * ((ROW_DATA_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW_DATA_WIDTH / LOAD_DATA_WIDTH) : 1)) <= 1) ? 1 :

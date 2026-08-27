@@ -51,15 +51,14 @@
 // GETACC timing:
 //   1. A request is accepted when getacc_valid && getacc_ready. A new request
 //      can be accepted while idle or on the last active row of the prior request.
-//   2. An accepted request enters a SA_WIDTH-cycle row scan. On scan cycle N,
-//      every PE in row N receives getacc_i=1 with the saved getacc_idx.
+//   2. An accepted request enters a SA_WIDTH/GETACC_ROWS_PER_CYCLE-cycle scan.
+//      Scan cycle N requests GETACC_ROWS_PER_CYCLE consecutive PE rows.
 //   3. Each PE's paccreg returns FP32 after paccreg_pkg::GETACC_PIPE_STAGES.
 //      Per column, all row results are valid-masked and reduced by a two-stage
-//      OR tree. Since the row scan requests one row per cycle, at most one row
-//      per column contributes valid data to the OR tree in a cycle.
-//   4. getacc_data_valid marks each output row. getacc_data[col*32 +: 32] is
-//      the FP32 value from that row and column. Rows are emitted in increasing
-//      row order.
+//      OR tree per row slot, preserving all concurrently returned rows.
+//   4. getacc_data_valid marks each output row group. Row slot R occupies
+//      getacc_data[R*SA_WIDTH*32 +: SA_WIDTH*32], and groups are emitted in
+//      increasing row order.
 //   5. sa_pkg::GETACC_FIRST_LATENCY is the fixed latency from a successful
 //      getacc handshake clock edge to the first row's getacc_data_valid.
 
@@ -90,8 +89,11 @@ module sa #(
     parameter int FDOT_ACC_FRAC_BITS = 18,
     parameter int FDOT_CSA_WIDTH  = FDOT_ACC_WIDTH + 2,
     parameter int GEMM_INSTID_WIDTH = 16,
-    parameter int SA_IDX_WIDTH    = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH),
-    parameter int K_IDX_WIDTH     = (SUBTILE_K <= 1) ? 1 : $clog2(SUBTILE_K)
+    parameter int K_IDX_WIDTH     = (SUBTILE_K <= 1) ? 1 : $clog2(SUBTILE_K),
+    parameter int GETACC_ROWS_PER_CYCLE = 1,
+    parameter int GETACC_GROUPS_PER_TILE = SA_WIDTH / GETACC_ROWS_PER_CYCLE,
+    parameter int GETACC_GROUP_IDX_WIDTH =
+        (GETACC_GROUPS_PER_TILE <= 1) ? 1 : $clog2(GETACC_GROUPS_PER_TILE)
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -119,7 +121,7 @@ module sa #(
     input  logic [PACC_IDX_WIDTH-1:0] getacc_idx,
 
     output logic getacc_data_valid,
-    output logic [SA_WIDTH*32-1:0] getacc_data
+    output logic [SA_WIDTH*32*GETACC_ROWS_PER_CYCLE-1:0] getacc_data
 );
 
     import fdot8e4m3_pkg::*;
@@ -143,6 +145,13 @@ module sa #(
         end
         if (PACC_IDX_WIDTH <= 0) begin
             $error("PACC_IDX_WIDTH must be positive");
+        end
+        if (GETACC_ROWS_PER_CYCLE <= 0 ||
+            GETACC_ROWS_PER_CYCLE > SA_WIDTH) begin
+            $error("GETACC_ROWS_PER_CYCLE must be in [1, SA_WIDTH]");
+        end
+        if ((SA_WIDTH % GETACC_ROWS_PER_CYCLE) != 0) begin
+            $error("SA_WIDTH must be divisible by GETACC_ROWS_PER_CYCLE");
         end
     end
 
@@ -468,12 +477,12 @@ module sa #(
     logic [31:0] pe_getacc_data_o [SA_WIDTH][SA_WIDTH];
 
     logic getacc_active;
-    logic [SA_IDX_WIDTH-1:0] getacc_count;
+    logic [GETACC_GROUP_IDX_WIDTH-1:0] getacc_count;
     logic [PACC_IDX_WIDTH-1:0] getacc_idx_q;
     logic getacc_last_cycle;
 
     assign getacc_last_cycle = getacc_active &&
-        (int'(getacc_count) == (SA_WIDTH - 1));
+        (int'(getacc_count) == (GETACC_GROUPS_PER_TILE - 1));
     assign getacc_ready = !getacc_active || getacc_last_cycle;
 
     wire getacc_fire = getacc_valid && getacc_ready;
@@ -523,7 +532,9 @@ module sa #(
                 end
 
                 assign pe_getacc_i[pe_row][pe_col] = getacc_active &&
-                    (int'(getacc_count) == pe_row);
+                    (pe_row >= (int'(getacc_count) * GETACC_ROWS_PER_CYCLE)) &&
+                    (pe_row < ((int'(getacc_count) + 1) *
+                               GETACC_ROWS_PER_CYCLE));
                 assign pe_getacc_idx_i[pe_row][pe_col] = getacc_idx_q;
 
                 pe #(
@@ -564,36 +575,45 @@ module sa #(
     logic finish_pipe_valid [GEMM_FINISH_LATENCY];
     logic [GEMM_INSTID_WIDTH-1:0] finish_pipe_instid [GEMM_FINISH_LATENCY];
 
-    logic reduce_s1_valid [SA_WIDTH][2];
-    logic [31:0] reduce_s1_data [SA_WIDTH][2];
-    logic reduce_s1_valid_comb [SA_WIDTH][2];
-    logic [31:0] reduce_s1_data_comb [SA_WIDTH][2];
-    logic reduce_s1_any_comb [SA_WIDTH];
-    logic [31:0] reduce_s1_or_comb [SA_WIDTH];
+    logic reduce_s1_valid [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
+    logic [31:0] reduce_s1_data [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
+    logic reduce_s1_valid_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
+    logic [31:0] reduce_s1_data_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
+    logic reduce_s1_any_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH];
+    logic [31:0] reduce_s1_or_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH];
     logic reduce_s1_any_all_comb;
 
     always_comb begin
         reduce_s1_any_all_comb = 1'b0;
-        for (int col = 0; col < SA_WIDTH; col++) begin
-            for (int part = 0; part < 2; part++) begin
-                reduce_s1_valid_comb[col][part] = 1'b0;
-                reduce_s1_data_comb[col][part] = 32'd0;
-            end
+        for (int slot = 0; slot < GETACC_ROWS_PER_CYCLE; slot++) begin
+            for (int col = 0; col < SA_WIDTH; col++) begin
+                for (int part = 0; part < 2; part++) begin
+                    reduce_s1_valid_comb[slot][col][part] = 1'b0;
+                    reduce_s1_data_comb[slot][col][part] = 32'd0;
+                end
 
-            for (int row = 0; row < SA_WIDTH; row++) begin
-                int part;
-                part = (row < ((SA_WIDTH + 1) / 2)) ? 0 : 1;
-                reduce_s1_valid_comb[col][part] |= pe_getacc_o[row][col];
-                reduce_s1_data_comb[col][part] |= pe_getacc_data_o[row][col] &
-                    {32{pe_getacc_o[row][col]}};
-            end
+                for (int row = 0; row < SA_WIDTH; row++) begin
+                    int part;
+                    part = (row < ((SA_WIDTH + 1) / 2)) ? 0 : 1;
+                    if ((row % GETACC_ROWS_PER_CYCLE) == slot) begin
+                        reduce_s1_valid_comb[slot][col][part] |=
+                            pe_getacc_o[row][col];
+                        reduce_s1_data_comb[slot][col][part] |=
+                            pe_getacc_data_o[row][col] &
+                            {32{pe_getacc_o[row][col]}};
+                    end
+                end
 
-            reduce_s1_any_comb[col] =
-                reduce_s1_valid[col][0] | reduce_s1_valid[col][1];
-            reduce_s1_or_comb[col] =
-                (reduce_s1_data[col][0] & {32{reduce_s1_valid[col][0]}}) |
-                (reduce_s1_data[col][1] & {32{reduce_s1_valid[col][1]}});
-            reduce_s1_any_all_comb |= reduce_s1_any_comb[col];
+                reduce_s1_any_comb[slot][col] =
+                    reduce_s1_valid[slot][col][0] |
+                    reduce_s1_valid[slot][col][1];
+                reduce_s1_or_comb[slot][col] =
+                    (reduce_s1_data[slot][col][0] &
+                     {32{reduce_s1_valid[slot][col][0]}}) |
+                    (reduce_s1_data[slot][col][1] &
+                     {32{reduce_s1_valid[slot][col][1]}});
+                reduce_s1_any_all_comb |= reduce_s1_any_comb[slot][col];
+            end
         end
     end
 
@@ -629,12 +649,14 @@ module sa #(
             getacc_count <= '0;
             getacc_idx_q <= '0;
 
-            for (int col = 0; col < SA_WIDTH; col++) begin
-                for (int part = 0; part < 2; part++) begin
-                    reduce_s1_valid[col][part] <= 1'b0;
-                    reduce_s1_data[col][part] <= 32'd0;
+            for (int slot = 0; slot < GETACC_ROWS_PER_CYCLE; slot++) begin
+                for (int col = 0; col < SA_WIDTH; col++) begin
+                    for (int part = 0; part < 2; part++) begin
+                        reduce_s1_valid[slot][col][part] <= 1'b0;
+                        reduce_s1_data[slot][col][part] <= 32'd0;
+                    end
+                    getacc_data[(slot*SA_WIDTH+col)*32 +: 32] <= 32'd0;
                 end
-                getacc_data[col*32 +: 32] <= 32'd0;
             end
             getacc_data_valid <= 1'b0;
         end else begin
@@ -711,7 +733,7 @@ module sa #(
                     getacc_count <= '0;
                 end else begin
                     getacc_count <= getacc_count +
-                        {{(SA_IDX_WIDTH-1){1'b0}}, 1'b1};
+                        GETACC_GROUP_IDX_WIDTH'(1);
                 end
             end else if (getacc_fire) begin
                 getacc_active <= 1'b1;
@@ -719,12 +741,17 @@ module sa #(
                 getacc_idx_q <= getacc_idx;
             end
 
-            for (int col = 0; col < SA_WIDTH; col++) begin
-                for (int part = 0; part < 2; part++) begin
-                    reduce_s1_valid[col][part] <= reduce_s1_valid_comb[col][part];
-                    reduce_s1_data[col][part] <= reduce_s1_data_comb[col][part];
+            for (int slot = 0; slot < GETACC_ROWS_PER_CYCLE; slot++) begin
+                for (int col = 0; col < SA_WIDTH; col++) begin
+                    for (int part = 0; part < 2; part++) begin
+                        reduce_s1_valid[slot][col][part] <=
+                            reduce_s1_valid_comb[slot][col][part];
+                        reduce_s1_data[slot][col][part] <=
+                            reduce_s1_data_comb[slot][col][part];
+                    end
+                    getacc_data[(slot*SA_WIDTH+col)*32 +: 32] <=
+                        reduce_s1_or_comb[slot][col];
                 end
-                getacc_data[col*32 +: 32] <= reduce_s1_or_comb[col];
             end
             getacc_data_valid <= reduce_s1_any_all_comb;
         end

@@ -35,14 +35,14 @@ module top_static #(
     parameter int ADDR_WIDTH      = 32,
     parameter int DIM_WIDTH       = 16,
     parameter int UOP_FIFO_DEPTH  = 16,
-    parameter int STORE_ROW_WRITE_BEATS = 1,
+    parameter int STORE_ROWS_PER_CYCLE = 1,
 
     parameter int LANE_IDX_WIDTH  = (LANE_NUM <= 1) ? 1 : $clog2(LANE_NUM),
     parameter int ABUF_IDX_WIDTH  = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
     parameter int BBUF_IDX_WIDTH  = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH  = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
     parameter int ROW8_WIDTH      = SUBTILE_K * 8,
-    parameter int LOAD_DATA_WIDTH = 256,
+    parameter int LOAD_DATA_WIDTH = 1024,
     parameter int LOAD_BUS_ID_WIDTH =
         ((SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)) <= 1) ? 1 :
@@ -50,7 +50,8 @@ module top_static #(
           (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)),
     parameter int ROW32_WIDTH     = SA_WIDTH * 32,
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
-    parameter int STORE_MEM_DATA_WIDTH = ROW32_WIDTH / STORE_ROW_WRITE_BEATS,
+    parameter int STORE_MEM_DATA_WIDTH =
+        ROW32_WIDTH * STORE_ROWS_PER_CYCLE,
     parameter int GEMM_INSTID_WIDTH = 16,
     parameter int GEMM_TRACK_DEPTH = 256,
     parameter int OUTPUT_TRACK_DEPTH = PACC_NUM,
@@ -135,8 +136,9 @@ module top_static #(
         if (UOP_FIFO_DEPTH <= 0) begin
             $error("UOP_FIFO_DEPTH must be positive");
         end
-        if (STORE_ROW_WRITE_BEATS <= 0) begin
-            $error("STORE_ROW_WRITE_BEATS must be positive");
+        if (STORE_ROWS_PER_CYCLE <= 0 ||
+            STORE_ROWS_PER_CYCLE > SA_WIDTH) begin
+            $error("STORE_ROWS_PER_CYCLE must be in [1, SA_WIDTH]");
         end
         if (GEMM_TRACK_DEPTH <= 0) begin
             $error("GEMM_TRACK_DEPTH must be positive");
@@ -144,11 +146,8 @@ module top_static #(
         if (OUTPUT_TRACK_DEPTH <= 0) begin
             $error("OUTPUT_TRACK_DEPTH must be positive");
         end
-        if ((STORE_ROW_WRITE_BEATS & (STORE_ROW_WRITE_BEATS - 1)) != 0) begin
-            $error("STORE_ROW_WRITE_BEATS must be one or a power of two");
-        end
-        if ((ROW32_WIDTH % STORE_ROW_WRITE_BEATS) != 0) begin
-            $error("ROW32_WIDTH must be divisible by STORE_ROW_WRITE_BEATS");
+        if ((SA_WIDTH % STORE_ROWS_PER_CYCLE) != 0) begin
+            $error("SA_WIDTH must be divisible by STORE_ROWS_PER_CYCLE");
         end
     end
 
@@ -404,7 +403,7 @@ module top_static #(
     logic sa_getacc_ready;
     logic [PACC_IDX_WIDTH-1:0] sa_getacc_idx;
     logic sa_getacc_data_valid;
-    logic [ROW32_WIDTH-1:0] sa_getacc_data;
+    logic [STORE_MEM_DATA_WIDTH-1:0] sa_getacc_data;
 
     storeunit #(
         .SA_WIDTH(SA_WIDTH),
@@ -412,7 +411,7 @@ module top_static #(
         .ADDR_WIDTH(ADDR_WIDTH),
         .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
         .ROW_DATA_WIDTH(ROW32_WIDTH),
-        .ROW_WRITE_BEATS(STORE_ROW_WRITE_BEATS),
+        .ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE),
         .MEM_DATA_WIDTH(STORE_MEM_DATA_WIDTH)
     ) u_storeunit (
         .clk(clk),
@@ -456,7 +455,8 @@ module top_static #(
         .LANE_IDX_WIDTH(LANE_IDX_WIDTH),
         .PACC_NUM(PACC_NUM),
         .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
-        .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH)
+        .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH),
+        .GETACC_ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE)
     ) u_sa (
         .clk(clk),
         .rst_n(rst_n),

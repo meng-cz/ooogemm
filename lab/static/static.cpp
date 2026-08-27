@@ -37,11 +37,11 @@ namespace {
 #ifndef PACC_NUM_TEST
 #define PACC_NUM_TEST 16
 #endif
-#ifndef STORE_ROW_WRITE_BEATS_TEST
-#define STORE_ROW_WRITE_BEATS_TEST 1
+#ifndef STORE_ROWS_PER_CYCLE_TEST
+#define STORE_ROWS_PER_CYCLE_TEST 1
 #endif
 #ifndef LOAD_DATA_WIDTH_TEST
-#define LOAD_DATA_WIDTH_TEST 512
+#define LOAD_DATA_WIDTH_TEST 1024
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
@@ -50,21 +50,20 @@ constexpr int kLaneNum = LANE_NUM_TEST;
 constexpr int kABufSize = ABUF_SIZE_TEST;
 constexpr int kBBufSize = BBUF_SIZE_TEST;
 constexpr int kPaccNum = PACC_NUM_TEST;
-constexpr int kRowWriteBeats = STORE_ROW_WRITE_BEATS_TEST;
+constexpr int kStoreRowsPerCycle = STORE_ROWS_PER_CYCLE_TEST;
 constexpr int kLoadRowBits = kSubtileK * 8;
 constexpr int kLoadRowWords = (kLoadRowBits + 31) / 32;
 constexpr int kLoadDataBits = LOAD_DATA_WIDTH_TEST;
 constexpr int kLoadBeatWords = (kLoadDataBits + 31) / 32;
-constexpr int kWritesPerOutputTile = kSaWidth * kRowWriteBeats;
+constexpr int kWritesPerOutputTile = kSaWidth / kStoreRowsPerCycle;
 
 static_assert(kLaneNum >= 1, "LANE_NUM_TEST must be positive");
 static_assert(kABufSize >= 4 && kBBufSize >= 4, "operand buffers must have ping-pong halves");
 static_assert(kPaccNum >= 1, "PACC_NUM_TEST must be positive");
-static_assert(kRowWriteBeats >= 1 &&
-              (kRowWriteBeats & (kRowWriteBeats - 1)) == 0,
-              "STORE_ROW_WRITE_BEATS_TEST must be one or a power of two");
-static_assert(((kSaWidth * 32) % kRowWriteBeats) == 0,
-              "output row width must be divisible by STORE_ROW_WRITE_BEATS_TEST");
+static_assert(kStoreRowsPerCycle >= 1,
+              "STORE_ROWS_PER_CYCLE_TEST must be positive");
+static_assert((kSaWidth % kStoreRowsPerCycle) == 0,
+              "SA_WIDTH_TEST must be divisible by STORE_ROWS_PER_CYCLE_TEST");
 static_assert((kSubtileK & (kSubtileK - 1)) == 0,
               "SUBTILE_K_TEST must be a power of two");
 static_assert((kLoadDataBits & (kLoadDataBits - 1)) == 0,

@@ -28,11 +28,11 @@ module static_debug_top #(
     input logic load_mem_rsp_valid_i,
     output logic load_mem_rsp_ready_o,
     input logic [2:0] load_mem_rsp_id_i,
-    input logic [255:0] load_mem_rsp_data_i,
+    input logic [1023:0] load_mem_rsp_data_i,
     output logic store_mem_wr_valid_o,
     input logic store_mem_wr_ready_i,
     output logic [ADDR_WIDTH-1:0] store_mem_wr_addr_o,
-    output logic [31:0] store_mem_wr_data_o
+    output logic [255:0] store_mem_wr_data_o
 );
     top_static #(
         .SA_WIDTH(8),
@@ -46,8 +46,8 @@ module static_debug_top #(
         .UOP_FIFO_DEPTH(UOP_FIFO_DEPTH),
         .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH),
         .GEMM_TRACK_DEPTH(GEMM_TRACK_DEPTH),
-        .LOAD_DATA_WIDTH(256),
-        .STORE_ROW_WRITE_BEATS(8)
+        .LOAD_DATA_WIDTH(1024),
+        .STORE_ROWS_PER_CYCLE(1)
     ) impl (.*);
 endmodule
 

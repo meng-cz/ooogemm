@@ -80,7 +80,11 @@ module new_static_uopparse #(
     localparam int A_GROUP = ABUF_SIZE / 2;
     localparam int B_GROUP = BBUF_SIZE / 2;
     localparam int ACC_GROUP = PACC_NUM / 2;
-    localparam int BLOCK_CAP = (A_GROUP < B_GROUP) ?
+    // A normal rectangular block consumes BM A slots, BN B slots, and
+    // BM*BN PACC slots.  Batch merge is different: every flattened tile
+    // consumes one slot from all three resources.
+    localparam int BLOCK_CAP = ACC_GROUP;
+    localparam int MERGE_CAP = (A_GROUP < B_GROUP) ?
         ((A_GROUP < ACC_GROUP) ? A_GROUP : ACC_GROUP) :
         ((B_GROUP < ACC_GROUP) ? B_GROUP : ACC_GROUP);
 
@@ -271,7 +275,7 @@ module new_static_uopparse #(
                 next_merge_base_comb = merge_base_q + merge_count_q;
                 next_merge_count_comb = min_count(
                     count_t'(batch_q) * tm_q * tn_q - merge_base_q - merge_count_q,
-                    BLOCK_CAP);
+                    MERGE_CAP);
             end
         end else if (block_n_base_q + bn_q < tn_q) begin
             next_exists_comb = 1'b1;
@@ -513,10 +517,10 @@ module new_static_uopparse #(
                                        ceil_div(cmd_n_i, SA_WIDTH));
                 batch_idx_q <= 0; block_m_base_q <= 0; block_n_base_q <= 0;
                 merge_mode_q <= ceil_div(cmd_m_i, SA_WIDTH) *
-                                ceil_div(cmd_n_i, SA_WIDTH) < count_t'(BLOCK_CAP);
+                                ceil_div(cmd_n_i, SA_WIDTH) < count_t'(MERGE_CAP);
                 merge_base_q <= 0;
                 merge_count_q <= min_count(count_t'(cmd_batch_i) *
-                    ceil_div(cmd_m_i, SA_WIDTH) * ceil_div(cmd_n_i, SA_WIDTH), BLOCK_CAP);
+                    ceil_div(cmd_m_i, SA_WIDTH) * ceil_div(cmd_n_i, SA_WIDTH), MERGE_CAP);
                 load_base_group_q <= 1'b0; acc_group_q <= 1'b0;
                 load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
                 load_active_q <= 1'b1; load_issue_done_q <= 1'b0; load_ready_q <= 1'b0;

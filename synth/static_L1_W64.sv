@@ -22,12 +22,12 @@ module L1_W64 (
     input  logic load_mem_rsp_valid_i,
     output logic load_mem_rsp_ready_o,
     input  logic [6:0] load_mem_rsp_id_i,
-    input  logic [255:0] load_mem_rsp_data_i,
+    input  logic [1023:0] load_mem_rsp_data_i,
 
     output logic store_mem_wr_valid_o,
     input  logic store_mem_wr_ready_i,
     output logic [31:0] store_mem_wr_addr_o,
-    output logic [31:0] store_mem_wr_data_o
+    output logic [2047:0] store_mem_wr_data_o
 );
 
     top_static #(
@@ -40,16 +40,16 @@ module L1_W64 (
         .ADDR_WIDTH(32),
         .DIM_WIDTH(16),
         .UOP_FIFO_DEPTH(32),
-        .STORE_ROW_WRITE_BEATS(64),
+        .STORE_ROWS_PER_CYCLE(1),
         .LANE_IDX_WIDTH(1),
         .ABUF_IDX_WIDTH(6),
         .BBUF_IDX_WIDTH(6),
         .PACC_IDX_WIDTH(4),
         .LOAD_BUS_ID_WIDTH(7),
         .ROW8_WIDTH(256),
-        .LOAD_DATA_WIDTH(256),
+        .LOAD_DATA_WIDTH(1024),
         .ROW32_WIDTH(2048),
-        .STORE_MEM_DATA_WIDTH(32),
+        .STORE_MEM_DATA_WIDTH(2048),
         .GEMM_INSTID_WIDTH(16),
         .GEMM_TRACK_DEPTH(256),
         .OUTPUT_TRACK_DEPTH(32)

@@ -1,6 +1,7 @@
 #include "Vstoreunit.h"
 #include "verilated.h"
 
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <iomanip>
@@ -22,27 +23,34 @@ namespace {
 #ifndef PACC_IDX_WIDTH_TEST
 #define PACC_IDX_WIDTH_TEST 3
 #endif
-#ifndef ROW_WRITE_BEATS_TEST
-#define ROW_WRITE_BEATS_TEST 2
+#ifndef ROWS_PER_CYCLE_TEST
+#define ROWS_PER_CYCLE_TEST 1
 #endif
 #ifndef MEM_DATA_WIDTH_TEST
-#define MEM_DATA_WIDTH_TEST ((SA_WIDTH_TEST * 32) / ROW_WRITE_BEATS_TEST)
+#define MEM_DATA_WIDTH_TEST (SA_WIDTH_TEST * 32 * ROWS_PER_CYCLE_TEST)
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
 constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccIdxMask = (1 << PACC_IDX_WIDTH_TEST) - 1;
-constexpr int kRowWriteBeats = ROW_WRITE_BEATS_TEST;
+constexpr int kRowsPerCycle = ROWS_PER_CYCLE_TEST;
+constexpr int kGroupsPerTile = kSaWidth / kRowsPerCycle;
 constexpr int kMemDataWidth = MEM_DATA_WIDTH_TEST;
+constexpr int kMemDataWords = (kMemDataWidth + 31) / 32;
 
 static_assert(kSaWidth >= 1, "SA_WIDTH_TEST must be positive");
-static_assert(kSaWidth <= 2, "this testbench expects ROW_DATA_WIDTH <= 64");
-static_assert(kRowWriteBeats >= 1, "ROW_WRITE_BEATS_TEST must be positive");
-static_assert((kRowWriteBeats & (kRowWriteBeats - 1)) == 0,
-              "ROW_WRITE_BEATS_TEST must be one or a power of two");
-static_assert((kSaWidth * 32) % kRowWriteBeats == 0,
-              "row data width must be divisible by ROW_WRITE_BEATS_TEST");
-static_assert(kMemDataWidth <= 64, "this testbench expects MEM_DATA_WIDTH <= 64");
+static_assert(kRowsPerCycle >= 1, "ROWS_PER_CYCLE_TEST must be positive");
+static_assert(kSaWidth % kRowsPerCycle == 0,
+              "SA_WIDTH_TEST must be divisible by ROWS_PER_CYCLE_TEST");
+static_assert(kMemDataWidth == kSaWidth * kRowsPerCycle * 32,
+              "MEM_DATA_WIDTH_TEST must match the SA row-group width");
+
+struct BeatData {
+    std::array<uint32_t, kMemDataWords> words{};
+
+    bool operator==(const BeatData& rhs) const { return words == rhs.words; }
+    bool operator!=(const BeatData& rhs) const { return !(*this == rhs); }
+};
 
 struct Uop {
     uint32_t addr = 0;
@@ -52,7 +60,7 @@ struct Uop {
 
 struct WriteBeat {
     uint32_t addr = 0;
-    uint64_t data = 0;
+    BeatData data;
     bool last_of_uop = false;
     std::string name;
 };
@@ -61,7 +69,7 @@ struct SaBurst {
     bool active = false;
     uint32_t base_addr = 0;
     uint32_t pacc = 0;
-    int row = 0;
+    int group = 0;
     int delay = 0;
     std::string name;
 };
@@ -76,29 +84,24 @@ std::string hex64(uint64_t value) {
     return os.str();
 }
 
-uint64_t low_mask(int width) {
-    return width >= 64 ? ~uint64_t{0} : ((uint64_t{1} << width) - 1u);
+uint32_t beat_addr(uint32_t tile_addr, int group) {
+    return tile_addr * static_cast<uint32_t>(kGroupsPerTile) +
+           static_cast<uint32_t>(group);
 }
 
-uint32_t beat_addr(uint32_t tile_addr, int row, int beat) {
-    return tile_addr * static_cast<uint32_t>(kSaWidth * kRowWriteBeats) +
-           static_cast<uint32_t>(row * kRowWriteBeats + beat);
-}
-
-uint64_t row_data(uint32_t pacc, int row) {
-    uint64_t data = 0;
-    for (int col = 0; col < kSaWidth; ++col) {
-        const uint32_t word = 0x3f800000u ^
-            (pacc * 0x00100100u) ^
-            (static_cast<uint32_t>(row) * 0x00010001u) ^
-            (static_cast<uint32_t>(col) * 0x01000001u);
-        data |= static_cast<uint64_t>(word) << (32 * col);
+BeatData group_data(uint32_t pacc, int group) {
+    BeatData data;
+    for (int slot = 0; slot < kRowsPerCycle; ++slot) {
+        const int row = group * kRowsPerCycle + slot;
+        for (int col = 0; col < kSaWidth; ++col) {
+            const uint32_t word = 0x3f800000u ^
+                (pacc * 0x00100100u) ^
+                (static_cast<uint32_t>(row) * 0x00010001u) ^
+                (static_cast<uint32_t>(col) * 0x01000001u);
+            data.words[static_cast<size_t>(slot * kSaWidth + col)] = word;
+        }
     }
     return data;
-}
-
-uint64_t beat_data(uint64_t row, int beat) {
-    return (row >> (beat * kMemDataWidth)) & low_mask(kMemDataWidth);
 }
 
 uint32_t parse_seed(int argc, char** argv) {
@@ -144,7 +147,7 @@ private:
     uint32_t getacc_hold_idx_ = 0;
     bool wr_hold_active_ = false;
     uint32_t wr_hold_addr_ = 0;
-    uint64_t wr_hold_data_ = 0;
+    BeatData wr_hold_data_;
 
     void clear_inputs() {
         dut_.uop_valid_i = 0;
@@ -152,8 +155,37 @@ private:
         dut_.uop_paccidx_i = 0;
         dut_.sa_getacc_ready_i = 0;
         dut_.sa_getacc_data_valid_i = 0;
-        dut_.sa_getacc_data_i = 0;
+        drive_sa_data(BeatData{});
         dut_.mem_wr_ready_i = 0;
+    }
+
+    void drive_sa_data(const BeatData& data) {
+#if MEM_DATA_WIDTH_TEST <= 32
+        dut_.sa_getacc_data_i = data.words[0];
+#elif MEM_DATA_WIDTH_TEST <= 64
+        dut_.sa_getacc_data_i =
+            static_cast<uint64_t>(data.words[0]) |
+            (static_cast<uint64_t>(data.words[1]) << 32);
+#else
+        for (int i = 0; i < kMemDataWords; ++i) {
+            dut_.sa_getacc_data_i[i] = data.words[static_cast<size_t>(i)];
+        }
+#endif
+    }
+
+    BeatData read_mem_data() const {
+        BeatData data;
+#if MEM_DATA_WIDTH_TEST <= 32
+        data.words[0] = dut_.mem_wr_data_o;
+#elif MEM_DATA_WIDTH_TEST <= 64
+        data.words[0] = static_cast<uint32_t>(dut_.mem_wr_data_o);
+        data.words[1] = static_cast<uint32_t>(dut_.mem_wr_data_o >> 32);
+#else
+        for (int i = 0; i < kMemDataWords; ++i) {
+            data.words[static_cast<size_t>(i)] = dut_.mem_wr_data_o[i];
+        }
+#endif
+        return data;
     }
 
     void reset() {
@@ -192,12 +224,12 @@ private:
     bool drive_sa_response() {
         if (!burst_.active || burst_.delay > 0) {
             dut_.sa_getacc_data_valid_i = 0;
-            dut_.sa_getacc_data_i = 0;
+            drive_sa_data(BeatData{});
             return false;
         }
 
         dut_.sa_getacc_data_valid_i = 1;
-        dut_.sa_getacc_data_i = row_data(burst_.pacc, burst_.row);
+        drive_sa_data(group_data(burst_.pacc, burst_.group));
         return true;
     }
 
@@ -227,23 +259,25 @@ private:
         }
 
         if (expected_writes_.empty()) {
+            const BeatData got = read_mem_data();
             std::ostringstream os;
             os << "unexpected write at cycle " << cycle_
                << ": addr=" << dut_.mem_wr_addr_o
-               << " data=" << hex64(dut_.mem_wr_data_o);
+               << " data[0]=" << hex64(got.words[0]);
             fail(os.str());
         }
 
         const WriteBeat& exp = expected_writes_.front();
+        const BeatData got = read_mem_data();
         if (dut_.mem_wr_addr_o != exp.addr ||
-            static_cast<uint64_t>(dut_.mem_wr_data_o) != exp.data) {
+            got != exp.data) {
             std::ostringstream os;
             os << "write mismatch at cycle " << cycle_
                << " for " << exp.name
                << ": got addr=" << dut_.mem_wr_addr_o
-               << " data=" << hex64(dut_.mem_wr_data_o)
+               << " data[0]=" << hex64(got.words[0])
                << ", expected addr=" << exp.addr
-               << " data=" << hex64(exp.data);
+               << " data[0]=" << hex64(exp.data.words[0]);
             fail(os.str());
         }
 
@@ -261,9 +295,9 @@ private:
             if (!wr_hold_active_) {
                 wr_hold_active_ = true;
                 wr_hold_addr_ = dut_.mem_wr_addr_o;
-                wr_hold_data_ = dut_.mem_wr_data_o;
+                wr_hold_data_ = got;
             } else if (wr_hold_addr_ != dut_.mem_wr_addr_o ||
-                       wr_hold_data_ != static_cast<uint64_t>(dut_.mem_wr_data_o)) {
+                       wr_hold_data_ != got) {
                 fail("write addr/data changed while write channel was stalled");
             }
         }
@@ -280,7 +314,7 @@ private:
         burst_.active = true;
         burst_.base_addr = uop.addr;
         burst_.pacc = uop.pacc & kPaccIdxMask;
-        burst_.row = 0;
+        burst_.group = 0;
         burst_.delay = delay_dist(rng_);
         burst_.name = uop.name;
     }
@@ -306,21 +340,17 @@ private:
         }
 
         if (rsp_fire) {
-            const uint64_t full_row = row_data(burst_.pacc, burst_.row);
-            for (int beat = 0; beat < kRowWriteBeats; ++beat) {
-                WriteBeat exp;
-                exp.addr = beat_addr(burst_.base_addr, burst_.row, beat);
-                exp.data = beat_data(full_row, beat);
-                exp.last_of_uop =
-                    (burst_.row == kSaWidth - 1) && (beat == kRowWriteBeats - 1);
-                exp.name = burst_.name;
-                expected_writes_.push_back(exp);
-            }
+            WriteBeat exp;
+            exp.addr = beat_addr(burst_.base_addr, burst_.group);
+            exp.data = group_data(burst_.pacc, burst_.group);
+            exp.last_of_uop = burst_.group == kGroupsPerTile - 1;
+            exp.name = burst_.name;
+            expected_writes_.push_back(exp);
 
-            if (burst_.row == kSaWidth - 1) {
+            if (burst_.group == kGroupsPerTile - 1) {
                 burst_ = SaBurst{};
             } else {
-                ++burst_.row;
+                ++burst_.group;
             }
         } else if (burst_.active && burst_.delay > 0) {
             --burst_.delay;

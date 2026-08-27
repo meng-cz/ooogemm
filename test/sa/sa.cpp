@@ -25,6 +25,9 @@ namespace {
 #ifndef LANE_NUM_TEST
 #define LANE_NUM_TEST 2
 #endif
+#ifndef GETACC_ROWS_PER_CYCLE_TEST
+#define GETACC_ROWS_PER_CYCLE_TEST 1
+#endif
 #ifndef PACC_NUM_TEST
 #define PACC_NUM_TEST 8
 #endif
@@ -41,6 +44,7 @@ namespace {
 constexpr int kSaWidth = SA_WIDTH_TEST;
 constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kLaneNum = LANE_NUM_TEST;
+constexpr int kGetaccRowsPerCycle = GETACC_ROWS_PER_CYCLE_TEST;
 constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
@@ -976,28 +980,34 @@ private:
         if (expected_rows_.empty()) {
             fail("unexpected getacc_data_valid");
         }
-        const ExpectedRow exp = expected_rows_.front();
-        expected_rows_.pop_front();
+        for (int slot = 0; slot < kGetaccRowsPerCycle; ++slot) {
+            if (expected_rows_.empty()) {
+                fail("incomplete expected row group");
+            }
+            const ExpectedRow exp = expected_rows_.front();
+            expected_rows_.pop_front();
 
-        for (int col = 0; col < kSaWidth; ++col) {
-            const uint32_t got = getacc_word(col);
-            if (got != exp.data[col]) {
-                std::ostringstream os;
-                os << "wrong getacc row " << exp.row << ", col " << col
-                   << " for " << exp.name
-                   << ": got " << hex32(got)
-                   << ", expected " << hex32(exp.data[col]);
-                fail(os.str());
+            for (int col = 0; col < kSaWidth; ++col) {
+                const uint32_t got = getacc_word(slot, col);
+                if (got != exp.data[col]) {
+                    std::ostringstream os;
+                    os << "wrong getacc row " << exp.row << ", col " << col
+                       << " for " << exp.name
+                       << ": got " << hex32(got)
+                       << ", expected " << hex32(exp.data[col]);
+                    fail(os.str());
+                }
             }
         }
     }
 
-    uint32_t getacc_word(int col) const {
-#if SA_WIDTH_TEST <= 2
+    uint32_t getacc_word(int slot, int col) const {
+        const int word = slot * kSaWidth + col;
+#if (SA_WIDTH_TEST * GETACC_ROWS_PER_CYCLE_TEST) <= 2
         const uint64_t packed = static_cast<uint64_t>(dut_.getacc_data);
-        return static_cast<uint32_t>((packed >> (32 * col)) & 0xffff'ffffull);
+        return static_cast<uint32_t>((packed >> (32 * word)) & 0xffff'ffffull);
 #else
-        return static_cast<uint32_t>(dut_.getacc_data[col]);
+        return static_cast<uint32_t>(dut_.getacc_data[word]);
 #endif
     }
 

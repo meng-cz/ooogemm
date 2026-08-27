@@ -27,8 +27,11 @@
 #ifndef PACC_NUM_TEST
 #define PACC_NUM_TEST 4
 #endif
-#ifndef STORE_ROW_WRITE_BEATS_TEST
-#define STORE_ROW_WRITE_BEATS_TEST 2
+#ifndef STORE_ROWS_PER_CYCLE_TEST
+#define STORE_ROWS_PER_CYCLE_TEST 1
+#endif
+#ifndef LOAD_DATA_WIDTH_TEST
+#define LOAD_DATA_WIDTH_TEST 1024
 #endif
 #ifndef TOP_NEW_STATIC_PERF_TEST
 #define TOP_NEW_STATIC_PERF_TEST 0
@@ -49,14 +52,28 @@
 namespace {
 struct Response { uint64_t due; uint32_t id; };
 
-void clear_load_data(VlWide<8>& data) {
-    for (unsigned i = 0; i < 8; ++i) data[i] = 0;
+template <typename T>
+void clear_load_data(T& data) {
+    data = 0;
 }
 
-void fill_load_data(VlWide<8>& data, uint8_t value) {
+template <std::size_t N>
+void clear_load_data(VlWide<N>& data) {
+    for (std::size_t i = 0; i < N; ++i) data[i] = 0;
+}
+
+template <typename T>
+void fill_load_data(T& data, uint8_t value) {
     const uint32_t word = uint32_t(value) | (uint32_t(value) << 8) |
                           (uint32_t(value) << 16) | (uint32_t(value) << 24);
-    for (unsigned i = 0; i < 8; ++i) data[i] = word;
+    data = static_cast<T>(word);
+}
+
+template <std::size_t N>
+void fill_load_data(VlWide<N>& data, uint8_t value) {
+    const uint32_t word = uint32_t(value) | (uint32_t(value) << 8) |
+                          (uint32_t(value) << 16) | (uint32_t(value) << 24);
+    for (std::size_t i = 0; i < N; ++i) data[i] = word;
 }
 
 template <typename T>
@@ -283,14 +300,15 @@ int main(int argc, char** argv) {
         // The performance dimensions may be overridden at run time so one
         // compiled RTL model can cover multiple GEMM command shapes.
         // Calculate bus transactions from tile dimensions and the fixed
-        // 256-bit load bus rather than hard-coding a small-test count.
+        // configured load bus rather than hard-coding a small-test count.
         const int tm = (perf_m + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
         const int tn = (perf_n + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
         const int tk = (perf_k + SUBTILE_K_TEST - 1) / SUBTILE_K_TEST;
         constexpr int a_group = ABUF_SIZE_TEST / 2;
         constexpr int b_group = BBUF_SIZE_TEST / 2;
         constexpr int acc_group = PACC_NUM_TEST / 2;
-        constexpr int block_cap = (a_group < b_group) ?
+        constexpr int block_cap = acc_group;
+        constexpr int merge_cap = (a_group < b_group) ?
             ((a_group < acc_group) ? a_group : acc_group) :
             ((b_group < acc_group) ? b_group : acc_group);
         const int block_m = choose_block_m(tm, tn, a_group, b_group, block_cap);
@@ -298,23 +316,33 @@ int main(int argc, char** argv) {
         const int blocks_m = (tm + block_m - 1) / block_m;
         const int blocks_n = (tn + block_n - 1) / block_n;
         constexpr int row_width_bytes = SUBTILE_K_TEST;
-        constexpr int rows_per_load_beat = 256 / (row_width_bytes * 8);
+        constexpr int load_row_bits = row_width_bytes * 8;
+        constexpr int rows_per_load_beat =
+            LOAD_DATA_WIDTH_TEST >= load_row_bits ?
+            (LOAD_DATA_WIDTH_TEST / load_row_bits) : 1;
+        constexpr int beats_per_load_row =
+            LOAD_DATA_WIDTH_TEST >= load_row_bits ?
+            1 : (load_row_bits / LOAD_DATA_WIDTH_TEST);
         constexpr int load_beats_per_tile =
-            (SA_WIDTH_TEST + rows_per_load_beat - 1) / rows_per_load_beat;
-        const bool merge_batch = tm * tn < block_cap;
+            ((SA_WIDTH_TEST + rows_per_load_beat - 1) / rows_per_load_beat) *
+            beats_per_load_row;
+        const bool merge_batch = tm * tn < merge_cap;
         const int expected_loads = merge_batch ?
             (2 * perf_batch * tm * tn * tk * load_beats_per_tile) :
             (perf_batch * blocks_m * blocks_n * tk *
              (block_m + block_n) * load_beats_per_tile);
         const int expected_stores = perf_batch * tm * tn *
-            SA_WIDTH_TEST * STORE_ROW_WRITE_BEATS_TEST;
+            (SA_WIDTH_TEST / STORE_ROWS_PER_CYCLE_TEST);
         run_case("perf_batched_gemm", perf_m, perf_n, perf_k, perf_batch, 0,
                  expected_loads, expected_stores, static_cast<float>(perf_k));
 #else
-        // SA_WIDTH=2, SUBTILE_K=2, LOAD_DATA_WIDTH=256: one tile is one bus beat.
-        run_case("one_wave", 2, 2, 2, 1, 3, 2, 4, 2.0f);
-        run_case("multi_k_wave", 4, 4, 8, 1, 9, 24, 16, 8.0f);
-        run_case("merged_batch", 2, 2, 2, 2, 5, 4, 8, 2.0f);
+        // The 1024-bit load bus covers each tiny operand tile in one beat.
+        run_case("one_wave", 2, 2, 2, 1, 3, 2,
+                 2 / STORE_ROWS_PER_CYCLE_TEST, 2.0f);
+        run_case("multi_k_wave", 4, 4, 8, 1, 9, 24,
+                 8 / STORE_ROWS_PER_CYCLE_TEST, 8.0f);
+        run_case("merged_batch", 2, 2, 2, 2, 5, 4,
+                 4 / STORE_ROWS_PER_CYCLE_TEST, 2.0f);
 #endif
         std::cout << "top_new_static tests passed\n";
     } catch (const std::exception& e) {

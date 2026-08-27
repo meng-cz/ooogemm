@@ -2,18 +2,18 @@
 `default_nettype none
 module top_dynamic #(
  parameter int SA_WIDTH=32, SUBTILE_K=32, LANE_NUM=4, ABUF_SIZE=64, BBUF_SIZE=64,
- parameter int PACC_NUM=24, ADDR_WIDTH=32, DIM_WIDTH=16, STORE_ROW_WRITE_BEATS=1,
+ parameter int PACC_NUM=24, ADDR_WIDTH=32, DIM_WIDTH=16, STORE_ROWS_PER_CYCLE=1,
  parameter int ABUF_LOGIC_SIZE=ABUF_SIZE/2, BBUF_LOGIC_SIZE=BBUF_SIZE/2,
  parameter int PACC_LOGIC_SIZE=16,
  parameter int LANE_IDX_WIDTH=(LANE_NUM<=1)?1:$clog2(LANE_NUM),
  parameter int ABUF_IDX_WIDTH=(ABUF_SIZE<=1)?1:$clog2(ABUF_SIZE),
  parameter int BBUF_IDX_WIDTH=(BBUF_SIZE<=1)?1:$clog2(BBUF_SIZE),
  parameter int PACC_IDX_WIDTH=(PACC_NUM<=1)?1:$clog2(PACC_NUM),
- parameter int ROW8_WIDTH=SUBTILE_K*8, LOAD_DATA_WIDTH=256,
+ parameter int ROW8_WIDTH=SUBTILE_K*8, LOAD_DATA_WIDTH=1024,
  parameter int LOAD_BUS_ID_WIDTH=((SA_WIDTH*((ROW8_WIDTH>=LOAD_DATA_WIDTH)?(ROW8_WIDTH/LOAD_DATA_WIDTH):1))<=1)?1:$clog2(SA_WIDTH*((ROW8_WIDTH>=LOAD_DATA_WIDTH)?(ROW8_WIDTH/LOAD_DATA_WIDTH):1)),
  parameter int ROW32_WIDTH=SA_WIDTH*32,
  parameter int LOAD_ROWS_WIDTH=(SA_WIDTH<=1)?1:$clog2(SA_WIDTH+1),
- parameter int STORE_MEM_DATA_WIDTH=ROW32_WIDTH/STORE_ROW_WRITE_BEATS
+ parameter int STORE_MEM_DATA_WIDTH=ROW32_WIDTH*STORE_ROWS_PER_CYCLE
 ) (
  input logic clk,rst_n, input logic cmd_valid_i, output logic cmd_ready_o,
  input logic [ADDR_WIDTH-1:0] cmd_a_base_i,cmd_b_base_i,cmd_c_base_i,
@@ -45,12 +45,12 @@ module top_dynamic #(
  logic arv,brv,aru,bru; logic [ABUF_IDX_WIDTH-1:0] ari; logic [BBUF_IDX_WIDTH-1:0] bri; logic [ROW8_WIDTH-1:0] ard[SA_WIDTH],brd[SA_WIDTH];
  oprandbuf #(.BUF_SIZE(ABUF_SIZE),.SA_WIDTH(SA_WIDTH),.SUBTILE_K(SUBTILE_K),.BUF_IDX_WIDTH(ABUF_IDX_WIDTH),.BANK_DATA_WIDTH(ROW8_WIDTH)) ab(.clk,.rst_n,.wr_valid_i(awv),.wr_idx_i(awi),.wr_bank_en_i(awen),.wr_data_i(awd),.rd_valid_i(arv),.rd_idx_i(ari),.rd_valid_o(aru),.rd_data_o(ard));
  oprandbuf #(.BUF_SIZE(BBUF_SIZE),.SA_WIDTH(SA_WIDTH),.SUBTILE_K(SUBTILE_K),.BUF_IDX_WIDTH(BBUF_IDX_WIDTH),.BANK_DATA_WIDTH(ROW8_WIDTH)) bb(.clk,.rst_n,.wr_valid_i(bwv),.wr_idx_i(bwi),.wr_bank_en_i(bwen),.wr_data_i(bwd),.rd_valid_i(brv),.rd_idx_i(bri),.rd_valid_o(bru),.rd_data_o(brd));
- logic sav,sbv,sgv,sgr,sfin; logic [LANE_IDX_WIDTH-1:0] slane,salane,sblane; logic [PACC_IDX_WIDTH-1:0] sgpc,sfinid; logic sgacc; logic sgetv,sgetr,sdatv; logic [PACC_IDX_WIDTH-1:0] sgeti; logic [ROW32_WIDTH-1:0] sdat;
- sa #(.SA_WIDTH(SA_WIDTH),.SUBTILE_K(SUBTILE_K),.LANE_NUM(LANE_NUM),.LANE_IDX_WIDTH(LANE_IDX_WIDTH),.PACC_NUM(PACC_NUM),.PACC_IDX_WIDTH(PACC_IDX_WIDTH),.GEMM_INSTID_WIDTH(PACC_IDX_WIDTH)) array(.clk,.rst_n,.ain_valid(sav),.ain_data(ard),.ain_laneidx(salane),.bin_valid(sbv),.bin_data(brd),.bin_laneidx(sblane),.gemm_valid(sgv),.gemm_ready(sgr),.gemm_alloc_lane(slane),.gemm_instid(sgpc),.gemm_paccidx(sgpc),.gemm_accum(sgacc),.gemm_finish(sfin),.gemm_finish_instid(sfinid),.getacc_valid(sgetv),.getacc_ready(sgetr),.getacc_idx(sgeti),.getacc_data_valid(sdatv),.getacc_data(sdat));
+ logic sav,sbv,sgv,sgr,sfin; logic [LANE_IDX_WIDTH-1:0] slane,salane,sblane; logic [PACC_IDX_WIDTH-1:0] sgpc,sfinid; logic sgacc; logic sgetv,sgetr,sdatv; logic [PACC_IDX_WIDTH-1:0] sgeti; logic [STORE_MEM_DATA_WIDTH-1:0] sdat;
+ sa #(.SA_WIDTH(SA_WIDTH),.SUBTILE_K(SUBTILE_K),.LANE_NUM(LANE_NUM),.LANE_IDX_WIDTH(LANE_IDX_WIDTH),.PACC_NUM(PACC_NUM),.PACC_IDX_WIDTH(PACC_IDX_WIDTH),.GEMM_INSTID_WIDTH(PACC_IDX_WIDTH),.GETACC_ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE)) array(.clk,.rst_n,.ain_valid(sav),.ain_data(ard),.ain_laneidx(salane),.bin_valid(sbv),.bin_data(brd),.bin_laneidx(sblane),.gemm_valid(sgv),.gemm_ready(sgr),.gemm_alloc_lane(slane),.gemm_instid(sgpc),.gemm_paccidx(sgpc),.gemm_accum(sgacc),.gemm_finish(sfin),.gemm_finish_instid(sfinid),.getacc_valid(sgetv),.getacc_ready(sgetr),.getacc_idx(sgeti),.getacc_data_valid(sdatv),.getacc_data(sdat));
  typedef enum logic[1:0]{IDLE,READ,WRITE} st_t; st_t st; logic [LANE_IDX_WIDTH-1:0] pl; logic [ABUF_IDX_WIDTH-1:0] pabq; logic [BBUF_IDX_WIDTH-1:0] pbbq; logic [PACC_IDX_WIDTH-1:0] ppq;
  assign gr=(st==IDLE)&&sgr; assign sgv=gv&&gr; assign sgpc=gpc; assign sgacc=gacc; assign arv=st==READ; assign brv=st==READ; assign ari=pabq; assign bri=pbbq; assign sav=st==WRITE; assign sbv=st==WRITE; assign salane=pl; assign sblane=pl; assign ga_done=sfin; assign ga_done_idx=sfinid; assign ab_done=(st==WRITE); assign ab_done_idx=pabq; assign bb_done=(st==WRITE); assign bb_done_idx=pbbq;
  logic sv; logic [PACC_IDX_WIDTH-1:0] sp; logic [ADDR_WIDTH-1:0] saq; logic sdone;
- storeunit #(.SA_WIDTH(SA_WIDTH),.PACC_NUM(PACC_NUM),.ADDR_WIDTH(ADDR_WIDTH),.PACC_IDX_WIDTH(PACC_IDX_WIDTH),.ROW_DATA_WIDTH(ROW32_WIDTH),.ROW_WRITE_BEATS(STORE_ROW_WRITE_BEATS),.MEM_DATA_WIDTH(STORE_MEM_DATA_WIDTH)) su(.clk,.rst_n,.uop_valid_i(ov),.uop_ready_o(orr),.uop_addr_i(oa),.uop_paccidx_i(opc),.sa_getacc_valid_o(sgetv),.sa_getacc_ready_i(sgetr),.sa_getacc_idx_o(sgeti),.sa_getacc_data_valid_i(sdatv),.sa_getacc_data_i(sdat),.mem_wr_valid_o(store_mem_wr_valid_o),.mem_wr_ready_i(store_mem_wr_ready_i),.mem_wr_addr_o(store_mem_wr_addr_o),.mem_wr_data_o(store_mem_wr_data_o),.done_valid_o(sdone));
+ storeunit #(.SA_WIDTH(SA_WIDTH),.PACC_NUM(PACC_NUM),.ADDR_WIDTH(ADDR_WIDTH),.PACC_IDX_WIDTH(PACC_IDX_WIDTH),.ROW_DATA_WIDTH(ROW32_WIDTH),.ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE),.MEM_DATA_WIDTH(STORE_MEM_DATA_WIDTH),.UOP_FIFO_DEPTH(1)) su(.clk,.rst_n,.uop_valid_i(ov),.uop_ready_o(orr),.uop_addr_i(oa),.uop_paccidx_i(opc),.sa_getacc_valid_o(sgetv),.sa_getacc_ready_i(sgetr),.sa_getacc_idx_o(sgeti),.sa_getacc_data_valid_i(sdatv),.sa_getacc_data_i(sdat),.mem_wr_valid_o(store_mem_wr_valid_o),.mem_wr_ready_i(store_mem_wr_ready_i),.mem_wr_addr_o(store_mem_wr_addr_o),.mem_wr_data_o(store_mem_wr_data_o),.done_valid_o(sdone));
  always_ff @(posedge clk or negedge rst_n) if(!rst_n) begin st<=IDLE;pl<='0;pabq<='0;pbbq<='0;ppq<='0;sp<='0; end else begin if(sgv) begin st<=READ;pl<=slane;pabq<=gab;pbbq<=gbb;ppq<=gpc;end else if(st==READ)st<=WRITE;else if(st==WRITE)st<=IDLE; if(ov&&orr)sp<=opc; end
  assign so_done=sdone; assign so_done_idx=sp; assign acc_done=sdone; assign acc_done_idx=sp;
 endmodule

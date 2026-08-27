@@ -1,7 +1,7 @@
 // Top-level integration for new_static_uopparse.
 // The parser has independent LOAD/GEMM/OUTPUT streams; this top connects
-// each stream directly to its execution unit.  GEMM retains the two-cycle
-// operand-buffer read path used by top_static.
+// each stream directly to its execution unit.  GEMM uses a fully pipelined
+// parser-capture / SA-allocation-and-buffer-read / operand-submit path.
 `default_nettype none
 
 module top_new_static #(
@@ -13,8 +13,8 @@ module top_new_static #(
     parameter int PACC_NUM = 16,
     parameter int ADDR_WIDTH = 32,
     parameter int DIM_WIDTH = 16,
-    parameter int STORE_ROW_WRITE_BEATS = 1,
-    parameter int LOAD_DATA_WIDTH = 256,
+    parameter int STORE_ROWS_PER_CYCLE = 1,
+    parameter int LOAD_DATA_WIDTH = 1024,
     parameter int LANE_IDX_WIDTH = (LANE_NUM <= 1) ? 1 : $clog2(LANE_NUM),
     parameter int ABUF_IDX_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
@@ -27,7 +27,8 @@ module top_new_static #(
           (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)),
     parameter int ROW32_WIDTH = SA_WIDTH * 32,
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
-    parameter int STORE_MEM_DATA_WIDTH = ROW32_WIDTH / STORE_ROW_WRITE_BEATS,
+    parameter int STORE_MEM_DATA_WIDTH =
+        ROW32_WIDTH * STORE_ROWS_PER_CYCLE,
     parameter int GEMM_INSTID_WIDTH = 16,
     parameter int COUNT_WIDTH = 16
 ) (
@@ -57,6 +58,20 @@ module top_new_static #(
     output logic cmd_done_valid_o
 );
     import uopparse_pkg::*;
+
+    initial begin
+        if (STORE_ROWS_PER_CYCLE <= 0 ||
+            STORE_ROWS_PER_CYCLE > SA_WIDTH) begin
+            $error("STORE_ROWS_PER_CYCLE must be in [1, SA_WIDTH]");
+        end
+        if ((SA_WIDTH % STORE_ROWS_PER_CYCLE) != 0) begin
+            $error("SA_WIDTH must be divisible by STORE_ROWS_PER_CYCLE");
+        end
+        if (LOAD_DATA_WIDTH <= 0 ||
+            (LOAD_DATA_WIDTH & (LOAD_DATA_WIDTH - 1)) != 0) begin
+            $error("LOAD_DATA_WIDTH must be a positive power of two");
+        end
+    end
 
     logic load_valid, load_ready, load_is_b, load_group;
     logic [ADDR_WIDTH-1:0] load_addr;
@@ -142,6 +157,7 @@ module top_new_static #(
     logic abuf_rd_valid, bbuf_rd_valid;
     logic [ABUF_IDX_WIDTH-1:0] abuf_rd_idx;
     logic [BBUF_IDX_WIDTH-1:0] bbuf_rd_idx;
+    logic abuf_rd_data_valid, bbuf_rd_data_valid;
     logic [ROW8_WIDTH-1:0] abuf_rd_data [SA_WIDTH];
     logic [ROW8_WIDTH-1:0] bbuf_rd_data [SA_WIDTH];
 
@@ -149,20 +165,29 @@ module top_new_static #(
         .BUF_IDX_WIDTH(ABUF_IDX_WIDTH), .BANK_DATA_WIDTH(ROW8_WIDTH)) abuf (
         .clk(clk), .rst_n(rst_n), .wr_valid_i(abuf_wr_valid), .wr_idx_i(abuf_wr_idx),
         .wr_bank_en_i(abuf_wr_bank_en), .wr_data_i(abuf_wr_data),
-        .rd_valid_i(abuf_rd_valid), .rd_idx_i(abuf_rd_idx), .rd_valid_o(),
+        .rd_valid_i(abuf_rd_valid), .rd_idx_i(abuf_rd_idx),
+        .rd_valid_o(abuf_rd_data_valid),
         .rd_data_o(abuf_rd_data));
     oprandbuf #(.BUF_SIZE(BBUF_SIZE), .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K),
         .BUF_IDX_WIDTH(BBUF_IDX_WIDTH), .BANK_DATA_WIDTH(ROW8_WIDTH)) bbuf (
         .clk(clk), .rst_n(rst_n), .wr_valid_i(bbuf_wr_valid), .wr_idx_i(bbuf_wr_idx),
         .wr_bank_en_i(bbuf_wr_bank_en), .wr_data_i(bbuf_wr_data),
-        .rd_valid_i(bbuf_rd_valid), .rd_idx_i(bbuf_rd_idx), .rd_valid_o(),
+        .rd_valid_i(bbuf_rd_valid), .rd_idx_i(bbuf_rd_idx),
+        .rd_valid_o(bbuf_rd_data_valid),
         .rd_data_o(bbuf_rd_data));
 
-    logic gemm_pipe_read_q, gemm_pipe_write_q;
-    logic [LANE_IDX_WIDTH-1:0] gemm_lane_q;
-    logic [ABUF_IDX_WIDTH-1:0] gemm_abuf_q;
-    logic [BBUF_IDX_WIDTH-1:0] gemm_bbuf_q;
-    logic [GEMM_INSTID_WIDTH-1:0] gemm_instid_q;
+    // GEMM issue pipeline:
+    //   S1 captures one parser uop and isolates parser ready from SA ready.
+    //   S2 handshakes with SA, allocates a lane, and starts synchronous A/B reads.
+    //   S3 submits the returned A/B matrices to the allocated SA lane.
+    logic gemm_s1_valid_q;
+    logic [ABUF_IDX_WIDTH-1:0] gemm_s1_abuf_q;
+    logic [BBUF_IDX_WIDTH-1:0] gemm_s1_bbuf_q;
+    logic [PACC_IDX_WIDTH-1:0] gemm_s1_pacc_q;
+    logic gemm_s1_accum_q;
+    logic gemm_s3_valid_q;
+    logic [LANE_IDX_WIDTH-1:0] gemm_s3_lane_q;
+    logic [GEMM_INSTID_WIDTH-1:0] gemm_next_instid_q;
     logic sa_gemm_valid, sa_gemm_ready;
     logic [LANE_IDX_WIDTH-1:0] sa_alloc_lane;
     logic [GEMM_INSTID_WIDTH-1:0] sa_finish_id;
@@ -170,18 +195,18 @@ module top_new_static #(
     logic sa_ain_valid, sa_bin_valid;
     logic [ROW8_WIDTH-1:0] sa_ain_data [SA_WIDTH];
     logic [ROW8_WIDTH-1:0] sa_bin_data [SA_WIDTH];
-    logic [PACC_IDX_WIDTH-1:0] sa_getacc_idx;
-    logic sa_getacc_valid, sa_getacc_ready, sa_getacc_data_valid;
-    logic [ROW32_WIDTH-1:0] sa_getacc_data;
+    logic sa_getacc_ready, sa_getacc_data_valid;
+    logic [STORE_MEM_DATA_WIDTH-1:0] sa_getacc_data;
 
-    assign gemm_ready = !gemm_pipe_read_q && !gemm_pipe_write_q && sa_gemm_ready;
-    assign sa_gemm_valid = gemm_valid && gemm_ready;
-    assign sa_ain_valid = gemm_pipe_write_q;
-    assign sa_bin_valid = gemm_pipe_write_q;
-    assign abuf_rd_valid = gemm_pipe_read_q;
-    assign bbuf_rd_valid = gemm_pipe_read_q;
-    assign abuf_rd_idx = gemm_abuf_q;
-    assign bbuf_rd_idx = gemm_bbuf_q;
+    wire sa_gemm_fire = sa_gemm_valid && sa_gemm_ready;
+    assign gemm_ready = !gemm_s1_valid_q || sa_gemm_ready;
+    assign sa_gemm_valid = gemm_s1_valid_q;
+    assign sa_ain_valid = gemm_s3_valid_q && abuf_rd_data_valid;
+    assign sa_bin_valid = gemm_s3_valid_q && bbuf_rd_data_valid;
+    assign abuf_rd_valid = sa_gemm_fire;
+    assign bbuf_rd_valid = sa_gemm_fire;
+    assign abuf_rd_idx = gemm_s1_abuf_q;
+    assign bbuf_rd_idx = gemm_s1_bbuf_q;
     assign gemm_done = sa_finish_valid;
 
     always_comb begin
@@ -193,30 +218,39 @@ module top_new_static #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            gemm_pipe_read_q <= 1'b0;
-            gemm_pipe_write_q <= 1'b0;
-            gemm_lane_q <= '0;
-            gemm_abuf_q <= '0;
-            gemm_bbuf_q <= '0;
-            gemm_instid_q <= '0;
+            gemm_s1_valid_q <= 1'b0;
+            gemm_s1_abuf_q <= '0;
+            gemm_s1_bbuf_q <= '0;
+            gemm_s1_pacc_q <= '0;
+            gemm_s1_accum_q <= 1'b0;
+            gemm_s3_valid_q <= 1'b0;
+            gemm_s3_lane_q <= '0;
+            gemm_next_instid_q <= '0;
         end else begin
-            gemm_pipe_read_q <= sa_gemm_valid;
-            gemm_pipe_write_q <= gemm_pipe_read_q;
-            if (sa_gemm_valid) begin
-                gemm_lane_q <= sa_alloc_lane;
-                gemm_abuf_q <= gemm_abufidx;
-                gemm_bbuf_q <= gemm_bbufidx;
-                gemm_instid_q <= gemm_instid_q + 1'b1;
+            gemm_s3_valid_q <= sa_gemm_fire;
+            if (sa_gemm_fire) begin
+                gemm_s3_lane_q <= sa_alloc_lane;
+                gemm_next_instid_q <= gemm_next_instid_q + 1'b1;
+            end
+
+            if (gemm_ready) begin
+                gemm_s1_valid_q <= gemm_valid;
+                if (gemm_valid) begin
+                    gemm_s1_abuf_q <= gemm_abufidx;
+                    gemm_s1_bbuf_q <= gemm_bbufidx;
+                    gemm_s1_pacc_q <= gemm_paccidx;
+                    gemm_s1_accum_q <= gemm_accum;
+                end
             end
         end
     end
 
-    logic store_getacc_valid, store_getacc_ready, store_getacc_data_valid;
+    logic store_getacc_valid;
     logic [PACC_IDX_WIDTH-1:0] store_getacc_idx;
-    logic [ROW32_WIDTH-1:0] store_getacc_data;
     storeunit #(.SA_WIDTH(SA_WIDTH), .PACC_NUM(PACC_NUM), .ADDR_WIDTH(ADDR_WIDTH),
         .PACC_IDX_WIDTH(PACC_IDX_WIDTH), .ROW_DATA_WIDTH(ROW32_WIDTH),
-        .ROW_WRITE_BEATS(STORE_ROW_WRITE_BEATS), .MEM_DATA_WIDTH(STORE_MEM_DATA_WIDTH)) store_unit (
+        .ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE),
+        .MEM_DATA_WIDTH(STORE_MEM_DATA_WIDTH)) store_unit (
         .clk(clk), .rst_n(rst_n), .uop_valid_i(output_valid), .uop_ready_o(output_ready),
         .uop_addr_i(output_addr), .uop_paccidx_i(output_paccidx),
         .sa_getacc_valid_o(store_getacc_valid), .sa_getacc_ready_i(sa_getacc_ready),
@@ -225,19 +259,16 @@ module top_new_static #(
         .mem_wr_ready_i(store_mem_wr_ready_i), .mem_wr_addr_o(store_mem_wr_addr_o),
         .mem_wr_data_o(store_mem_wr_data_o), .done_valid_o(output_done));
 
-    logic [PACC_IDX_WIDTH-1:0] sa_paccidx;
-    logic sa_accum;
-    assign sa_paccidx = gemm_paccidx;
-    assign sa_accum = gemm_accum;
     sa #(.SA_WIDTH(SA_WIDTH), .LANE_NUM(LANE_NUM), .SUBTILE_K(SUBTILE_K),
         .PACC_NUM(PACC_NUM), .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
-        .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH)) sa_impl (
+        .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH),
+        .GETACC_ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE)) sa_impl (
         .clk(clk), .rst_n(rst_n),
-        .ain_valid(sa_ain_valid), .ain_data(sa_ain_data), .ain_laneidx(gemm_lane_q),
-        .bin_valid(sa_bin_valid), .bin_data(sa_bin_data), .bin_laneidx(gemm_lane_q),
+        .ain_valid(sa_ain_valid), .ain_data(sa_ain_data), .ain_laneidx(gemm_s3_lane_q),
+        .bin_valid(sa_bin_valid), .bin_data(sa_bin_data), .bin_laneidx(gemm_s3_lane_q),
         .gemm_valid(sa_gemm_valid), .gemm_ready(sa_gemm_ready),
-        .gemm_alloc_lane(sa_alloc_lane), .gemm_instid(gemm_instid_q),
-        .gemm_paccidx(sa_paccidx), .gemm_accum(sa_accum),
+        .gemm_alloc_lane(sa_alloc_lane), .gemm_instid(gemm_next_instid_q),
+        .gemm_paccidx(gemm_s1_pacc_q), .gemm_accum(gemm_s1_accum_q),
         .gemm_finish(sa_finish_valid), .gemm_finish_instid(sa_finish_id),
         .getacc_valid(store_getacc_valid), .getacc_ready(sa_getacc_ready),
         .getacc_idx(store_getacc_idx), .getacc_data_valid(sa_getacc_data_valid),

@@ -44,8 +44,8 @@ namespace {
 #ifndef PACC_SIG_WIDTH_TEST
 #define PACC_SIG_WIDTH_TEST 40
 #endif
-#ifndef STORE_ROW_WRITE_BEATS_TEST
-#define STORE_ROW_WRITE_BEATS_TEST 2
+#ifndef STORE_ROWS_PER_CYCLE_TEST
+#define STORE_ROWS_PER_CYCLE_TEST 1
 #endif
 #ifndef TOP_STATIC_BIG_TEST
 #define TOP_STATIC_BIG_TEST 0
@@ -62,7 +62,10 @@ constexpr int kBBufSize = BBUF_SIZE_TEST;
 constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
-constexpr int kRowWriteBeats = STORE_ROW_WRITE_BEATS_TEST;
+constexpr int kStoreRowsPerCycle = STORE_ROWS_PER_CYCLE_TEST;
+constexpr int kStoreGroupsPerTile = kSaWidth / kStoreRowsPerCycle;
+constexpr int kStoreDataWords =
+    (kSaWidth * kStoreRowsPerCycle * 32 + 31) / 32;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 constexpr int kLoadRowBits = kSubtileK * 8;
 constexpr int kLoadRowWords = (kLoadRowBits + 31) / 32;
@@ -139,8 +142,9 @@ constexpr int kParserMergeBlockTiles = std::min(
 static_assert(kLaneNum >= 1, "top_dynamic testbench expects at least one lane");
 static_assert(kABufSize >= 4 && kBBufSize >= 4, "operand buffers must have ping-pong halves");
 static_assert(kPaccNum >= 4, "top_dynamic testbench expects at least four PACC registers");
-static_assert(kRowWriteBeats == kSaWidth,
-              "top_dynamic testbench expects one FP32 word per store beat");
+static_assert(kStoreRowsPerCycle >= 1 &&
+              (kSaWidth % kStoreRowsPerCycle) == 0,
+              "SA_WIDTH_TEST must be divisible by STORE_ROWS_PER_CYCLE_TEST");
 static_assert(kLoadRowWords >= 1, "load row must have at least one word");
 static_assert((kSubtileK & (kSubtileK - 1)) == 0,
               "SUBTILE_K_TEST must be a power of two");
@@ -183,6 +187,17 @@ struct RowData {
 
 struct LoadBeatData {
     std::array<uint32_t, kLoadBeatWords> words{};
+};
+
+struct StoreBeatData {
+    std::array<uint32_t, kStoreDataWords> words{};
+
+    bool operator==(const StoreBeatData& rhs) const {
+        return words == rhs.words;
+    }
+    bool operator!=(const StoreBeatData& rhs) const {
+        return !(*this == rhs);
+    }
 };
 
 struct Rsp {
@@ -449,7 +464,7 @@ private:
     std::mt19937 rng_;
     std::vector<Cmd> commands_;
     std::unordered_map<uint32_t, LoadBeatData> load_beats_;
-    std::unordered_map<uint32_t, uint32_t> expected_writes_;
+    std::unordered_map<uint32_t, StoreBeatData> expected_writes_;
     std::unordered_set<uint32_t> seen_writes_;
     std::deque<Rsp> pending_rsp_;
     size_t cmd_index_ = 0;
@@ -462,7 +477,7 @@ private:
 
     bool wr_hold_active_ = false;
     uint32_t wr_hold_addr_ = 0;
-    uint32_t wr_hold_data_ = 0;
+    StoreBeatData wr_hold_data_;
 
     void clear_inputs() {
         dut_.cmd_valid_i = 0;
@@ -488,6 +503,21 @@ private:
             dut_.load_mem_rsp_data_i[i] = data.words[static_cast<size_t>(i)];
         }
 #endif
+    }
+
+    StoreBeatData read_store_data() const {
+        StoreBeatData data;
+#if (SA_WIDTH_TEST * STORE_ROWS_PER_CYCLE_TEST * 32) <= 32
+        data.words[0] = dut_.store_mem_wr_data_o;
+#elif (SA_WIDTH_TEST * STORE_ROWS_PER_CYCLE_TEST * 32) <= 64
+        data.words[0] = static_cast<uint32_t>(dut_.store_mem_wr_data_o);
+        data.words[1] = static_cast<uint32_t>(dut_.store_mem_wr_data_o >> 32);
+#else
+        for (int i = 0; i < kStoreDataWords; ++i) {
+            data.words[static_cast<size_t>(i)] = dut_.store_mem_wr_data_o[i];
+        }
+#endif
+        return data;
     }
 
     void reset() {
@@ -869,14 +899,19 @@ private:
 
                 const uint32_t tile_addr =
                     cmd.c_base + static_cast<uint32_t>(tile_m * tn + tile_n);
-                for (int row = 0; row < kSaWidth; ++row) {
-                    for (int col = 0; col < kSaWidth; ++col) {
-                        const uint32_t wr_addr =
-                            tile_addr * static_cast<uint32_t>(kSaWidth * kRowWriteBeats) +
-                            static_cast<uint32_t>(row * kRowWriteBeats + col);
-                        const uint32_t data = pseudo_to_fp32_bits(pacc[row][col]);
-                        expected_writes_[wr_addr] = data;
+                for (int group = 0; group < kStoreGroupsPerTile; ++group) {
+                    StoreBeatData beat;
+                    for (int slot = 0; slot < kStoreRowsPerCycle; ++slot) {
+                        const int row = group * kStoreRowsPerCycle + slot;
+                        for (int col = 0; col < kSaWidth; ++col) {
+                            beat.words[static_cast<size_t>(slot * kSaWidth + col)] =
+                                pseudo_to_fp32_bits(pacc[row][col]);
+                        }
                     }
+                    const uint32_t wr_addr =
+                        tile_addr * static_cast<uint32_t>(kStoreGroupsPerTile) +
+                        static_cast<uint32_t>(group);
+                    expected_writes_[wr_addr] = beat;
                 }
             }
         }
@@ -1020,21 +1055,21 @@ private:
 
     void check_store_write(bool fire) {
         const uint32_t addr = static_cast<uint32_t>(dut_.store_mem_wr_addr_o);
-        const uint32_t data = static_cast<uint32_t>(dut_.store_mem_wr_data_o);
+        const StoreBeatData data = read_store_data();
 
         auto it = expected_writes_.find(addr);
         if (it == expected_writes_.end()) {
             std::ostringstream os;
             os << "unexpected store write addr=" << hex32(addr)
-               << " data=" << hex32(data)
+               << " data[0]=" << hex32(data.words[0])
                << " at cycle " << cycle_;
             fail(os.str());
         }
         if (it->second != data) {
             std::ostringstream os;
             os << "store data mismatch at addr=" << hex32(addr)
-               << " got=" << hex32(data)
-               << " expected=" << hex32(it->second)
+               << " got[0]=" << hex32(data.words[0])
+               << " expected[0]=" << hex32(it->second.words[0])
                << " at cycle " << cycle_;
             fail(os.str());
         }

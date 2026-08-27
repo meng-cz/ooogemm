@@ -12,17 +12,17 @@ BUILD_DIR="${BUILD_DIR:-/tmp/ooogemm_debug_static_L1_W8}"
 
 mkdir -p "${LOG_DIR}"
 
-echo "static_debug: configuration L1_W8 SUBTILE_K=16 LOAD_DATA_WIDTH=256"
+echo "static_debug: configuration L1_W8 SUBTILE_K=16 LOAD_DATA_WIDTH=1024"
 echo "static_debug: command B=1 M=64 N=64 K=64 Count=1"
 
 env \
   REBUILD="${REBUILD:-1}" \
   SUBTILE_K=16 \
-  LOAD_DATA_WIDTH=256 \
+  LOAD_DATA_WIDTH=1024 \
   ABUF_SIZE=4 \
   BBUF_SIZE=4 \
   PACC_NUM=4 \
-  STORE_ROW_WRITE_BEATS=8 \
+  STORE_ROWS_PER_CYCLE=1 \
   BUILD_DIR="${BUILD_DIR}" \
   VERILATOR_JOBS="${VERILATOR_JOBS:-1}" \
   bash "${ROOT_DIR}/lab/static/static.sh" \
