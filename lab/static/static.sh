@@ -92,7 +92,7 @@ BUILD_KEY="$({
   done
 } | sha256sum | cut -d' ' -f1)"
 
-echo "static_lab: build/run CONFIG=${CONFIG_TAG} MNK=${M_SIZE}x${N_SIZE}x${K_SIZE} COUNT=${COUNT}"
+echo "static_lab: build/run CONFIG=${CONFIG_TAG} MNK=${M_SIZE}x${N_SIZE}x${K_SIZE} COUNT=${COUNT} LOAD_DATA_WIDTH=${LOAD_DATA_WIDTH} STORE_ROWS_PER_CYCLE=${STORE_ROWS_PER_CYCLE}"
 
 if [[ "${REBUILD:-0}" == "1" || ! -x "${EXE}" || ! -f "${BUILD_STAMP}" || "$(cat "${BUILD_STAMP}")" != "${BUILD_KEY}" ]]; then
   echo "static_lab: compile CONFIG=${CONFIG_TAG}"

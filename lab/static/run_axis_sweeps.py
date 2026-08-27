@@ -21,6 +21,7 @@ class Hardware:
     abuf_size: int
     bbuf_size: int
     pacc_num: int
+    store_rows_per_cycle: int
 
 
 @dataclass(frozen=True)
@@ -63,25 +64,49 @@ def parse_hardware_configs(value: str, default: list[Hardware]) -> list[Hardware
     if value is None or value.strip() == "":
         return default
     configs: list[Hardware] = []
+
+    def default_store_rows(width: int) -> int:
+        return {64: 1, 32: 2, 16: 4}.get(width, 1)
+
     for part in value.replace(",", " ").split():
         fields = part.split(":")
         if len(fields) == 2:
             lane, width = fields
             lane_i = int(lane)
+            width_i = int(width)
             defaults = {
                 1: (8, 8, 8),
                 4: (16, 16, 32),
                 16: (32, 32, 128),
             }
             abuf_size, bbuf_size, pacc_num = defaults.get(lane_i, (16, 16, 16))
-            configs.append(Hardware(lane_i, int(width), abuf_size, bbuf_size, pacc_num))
+            configs.append(Hardware(
+                lane_i, width_i, abuf_size, bbuf_size, pacc_num,
+                default_store_rows(width_i),
+            ))
         elif len(fields) == 5:
             lane, width, abuf_size, bbuf_size, pacc_num = fields
-            configs.append(Hardware(int(lane), int(width), int(abuf_size), int(bbuf_size), int(pacc_num)))
+            width_i = int(width)
+            configs.append(Hardware(
+                int(lane), width_i, int(abuf_size), int(bbuf_size),
+                int(pacc_num), default_store_rows(width_i),
+            ))
+        elif len(fields) == 6:
+            lane, width, abuf_size, bbuf_size, pacc_num, store_rows = fields
+            configs.append(Hardware(
+                int(lane), int(width), int(abuf_size), int(bbuf_size),
+                int(pacc_num), int(store_rows),
+            ))
         else:
             raise ValueError(
-                "hardware config must be lane:width or lane:width:abuf:bbuf:pacc"
+                "hardware config must be lane:width, lane:width:abuf:bbuf:pacc, "
+                "or lane:width:abuf:bbuf:pacc:store_rows"
             )
+    for config in configs:
+        if config.store_rows_per_cycle <= 0:
+            raise ValueError("store_rows must be positive")
+        if config.width % config.store_rows_per_cycle != 0:
+            raise ValueError("hardware width must be divisible by store_rows")
     return configs
 
 
@@ -103,7 +128,8 @@ def log_filename(axis: str, hw: Hardware, m: int, n: int, k: int, count: int) ->
 def task_label(task: Task) -> str:
     return (
         f"{task.axis} {hardware_tag(task.hw)} "
-        f"MNK={task.m}x{task.n}x{task.k}"
+        f"MNK={task.m}x{task.n}x{task.k} "
+        f"STORE_ROWS_PER_CYCLE={task.hw.store_rows_per_cycle}"
     )
 
 
@@ -135,8 +161,8 @@ def make_parser() -> argparse.ArgumentParser:
             # The first three configurations normalize total operand/PACC
             # storage; the final three (including L16_W16 once) normalize the
             # per-buffer entry counts.
-            "1:64:8:8:8 4:32:16:16:32 16:16:32:32:128 "
-            "1:64:32:32:128 4:32:32:32:128",
+            "1:64:8:8:8:1 4:32:16:16:32:2 16:16:32:32:128:4 "
+            "1:64:32:32:128:1 4:32:32:32:128:2",
         ),
     )
     parser.add_argument("--data-root", type=Path, default=Path(os.environ.get("DATA_ROOT", ROOT_DIR / "data/static")))
@@ -155,11 +181,11 @@ def build_all_tasks(args: argparse.Namespace) -> list[Task]:
     hardware = parse_hardware_configs(
         args.hardware_configs,
         [
-            Hardware(1, 64, 8, 8, 8),
-            Hardware(4, 32, 16, 16, 32),
-            Hardware(16, 16, 32, 32, 128),
-            Hardware(1, 64, 32, 32, 128),
-            Hardware(4, 32, 32, 32, 128),
+            Hardware(1, 64, 8, 8, 8, 1),
+            Hardware(4, 32, 16, 16, 32, 2),
+            Hardware(16, 16, 32, 32, 128, 4),
+            Hardware(1, 64, 32, 32, 128, 1),
+            Hardware(4, 32, 32, 32, 128, 2),
         ],
     )
 
@@ -213,6 +239,7 @@ def hardware_env(hw: Hardware) -> dict[str, str]:
         "ABUF_SIZE": str(hw.abuf_size),
         "BBUF_SIZE": str(hw.bbuf_size),
         "PACC_NUM": str(hw.pacc_num),
+        "STORE_ROWS_PER_CYCLE": str(hw.store_rows_per_cycle),
     }
 
 
