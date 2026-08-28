@@ -13,6 +13,25 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
 
+# Self-contained experiment defaults.  Command-line options and environment
+# variables remain available for server-specific overrides, but a checkout can
+# run the complete default sweep without any external configuration.
+DEFAULT_JOBS = 12
+DEFAULT_COUNT = 100
+DEFAULT_M_DEFAULT = 16
+DEFAULT_N_DEFAULT = 1024
+DEFAULT_K_DEFAULT = 1024
+DEFAULT_M_VALUES = "1 4 16 32 64 128 256 512"
+DEFAULT_N_VALUES = "32 64 128 256 512"
+DEFAULT_K_VALUES = "32 64 128 256 512"
+DEFAULT_HARDWARE_CONFIGS = (
+    "1:64:6:8:6:8:1 4:32:12:16:24:32:2 "
+    "16:16:24:32:96:128:4 1:64:24:32:96:128:1 "
+    "4:32:24:32:96:128:2"
+)
+DEFAULT_DATA_ROOT = ROOT_DIR / "data/dynamic"
+DEFAULT_LOG_DIR = DEFAULT_DATA_ROOT / "log"
+
 
 @dataclass(frozen=True)
 class Hardware:
@@ -160,26 +179,24 @@ def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run dynamic GEMM axis-sweep experiments with a Python worker pool."
     )
-    parser.add_argument("--jobs", type=int, default=int(os.environ.get("JOBS", "1")))
-    parser.add_argument("--count", type=int, default=int(os.environ.get("COUNT", "100")))
-    parser.add_argument("--m-default", type=int, default=int(os.environ.get("M_DEFAULT", "16")))
-    parser.add_argument("--n-default", type=int, default=int(os.environ.get("N_DEFAULT", "1024")))
-    parser.add_argument("--k-default", type=int, default=int(os.environ.get("K_DEFAULT", "1024")))
-    parser.add_argument("--m-values", default=os.environ.get("M_VALUES", "1 4 16 32 64 128 256 512"))
-    parser.add_argument("--n-values", default=os.environ.get("N_VALUES", "32 64 128 256 512"))
-    parser.add_argument("--k-values", default=os.environ.get("K_VALUES", "32 64 128 256 512"))
+    parser.add_argument("--jobs", type=int, default=int(os.environ.get("JOBS", str(DEFAULT_JOBS))))
+    parser.add_argument("--count", type=int, default=int(os.environ.get("COUNT", str(DEFAULT_COUNT))))
+    parser.add_argument("--m-default", type=int, default=int(os.environ.get("M_DEFAULT", str(DEFAULT_M_DEFAULT))))
+    parser.add_argument("--n-default", type=int, default=int(os.environ.get("N_DEFAULT", str(DEFAULT_N_DEFAULT))))
+    parser.add_argument("--k-default", type=int, default=int(os.environ.get("K_DEFAULT", str(DEFAULT_K_DEFAULT))))
+    parser.add_argument("--m-values", default=os.environ.get("M_VALUES", DEFAULT_M_VALUES))
+    parser.add_argument("--n-values", default=os.environ.get("N_VALUES", DEFAULT_N_VALUES))
+    parser.add_argument("--k-values", default=os.environ.get("K_VALUES", DEFAULT_K_VALUES))
     parser.add_argument(
         "--hardware-configs",
         default=os.environ.get(
             "HARDWARE_CONFIGS",
             # lane:width:ABufLogical:ABufPhysical:PACCLogical:PACCPhysical:store_rows
-            "1:64:6:8:6:8:1 4:32:12:16:24:32:2 "
-            "16:16:24:32:96:128:4 1:64:24:32:96:128:1 "
-            "4:32:24:32:96:128:2",
+            DEFAULT_HARDWARE_CONFIGS,
         ),
     )
-    parser.add_argument("--data-root", type=Path, default=Path(os.environ.get("DATA_ROOT", ROOT_DIR / "data/dynamic")))
-    parser.add_argument("--log-dir", type=Path, default=Path(os.environ.get("LOG_DIR", ROOT_DIR / "data/dynamic/log")))
+    parser.add_argument("--data-root", type=Path, default=Path(os.environ.get("DATA_ROOT", DEFAULT_DATA_ROOT)))
+    parser.add_argument("--log-dir", type=Path, default=Path(os.environ.get("LOG_DIR", DEFAULT_LOG_DIR)))
     parser.add_argument("--force", action="store_true", default=env_flag("FORCE", False))
     parser.add_argument("--dry-run", action="store_true", default=env_flag("DRY_RUN", False))
     parser.add_argument("--rebuild", action="store_true", default=env_flag("REBUILD", False))
@@ -188,9 +205,9 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 def build_all_tasks(args: argparse.Namespace) -> list[Task]:
-    m_values = parse_int_list(args.m_values, [1, 4, 16, 32, 64, 128, 256, 512])
-    n_values = parse_int_list(args.n_values, [32, 64, 128, 256, 512])
-    k_values = parse_int_list(args.k_values, [32, 64, 128, 256, 512])
+    m_values = parse_int_list(args.m_values, [int(v) for v in DEFAULT_M_VALUES.split()])
+    n_values = parse_int_list(args.n_values, [int(v) for v in DEFAULT_N_VALUES.split()])
+    k_values = parse_int_list(args.k_values, [int(v) for v in DEFAULT_K_VALUES.split()])
     hardware = parse_hardware_configs(
         args.hardware_configs,
         [

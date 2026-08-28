@@ -12,10 +12,10 @@ M_SIZE="$3"
 N_SIZE="$4"
 K_SIZE="$5"
 COUNT="$6"
-OUT_DIR="${7:-${OUT_DIR:-./data}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+OUT_DIR="${7:-${OUT_DIR:-${ROOT_DIR}/data/dynamic}}"
 
 SUBTILE_K="${SUBTILE_K:-32}"
 LOAD_DATA_WIDTH="${LOAD_DATA_WIDTH:-1024}"
