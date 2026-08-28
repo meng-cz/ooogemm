@@ -97,19 +97,24 @@ bool store_data_matches(const VlWide<N>& data, uint32_t expected) {
 
 constexpr int choose_block_m(int remaining_m, int remaining_n,
                              int a_group, int b_group, int block_cap) {
-    int best_m = 1, best_area = 0, best_balance = 1 << 30;
-    for (int cm = 1; cm <= a_group; ++cm) {
-        for (int cn = 1; cn <= b_group; ++cn) {
-            if (cm > remaining_m || cn > remaining_n || cm * cn > block_cap) continue;
-            const int area = cm * cn;
-            const int balance = cm >= cn ? cm - cn : cn - cm;
-            if (area > best_area ||
-                (area == best_area && balance < best_balance) ||
-                (area == best_area && balance == best_balance && cm > best_m)) {
-                best_m = cm;
-                best_area = area;
-                best_balance = balance;
-            }
+    int best_m = 1, best_cost = 1 << 30, best_area = 0;
+    int best_balance = 1 << 30;
+    const int a_max = std::min(remaining_m, a_group);
+    const int b_max = std::min(remaining_n, b_group);
+    for (int cm = 1; cm <= a_max; ++cm) {
+        const int cn = std::min(b_max, block_cap / cm);
+        if (cn < 1) continue;
+        const int cost = remaining_m * ((remaining_n + cn - 1) / cn) +
+                         remaining_n * ((remaining_m + cm - 1) / cm);
+        const int area = cm * cn;
+        const int balance = cm >= cn ? cm - cn : cn - cm;
+        if (cost < best_cost ||
+            (cost == best_cost && area > best_area) ||
+            (cost == best_cost && area == best_area && balance < best_balance)) {
+            best_m = cm;
+            best_cost = cost;
+            best_area = area;
+            best_balance = balance;
         }
     }
     return best_m;
@@ -117,20 +122,24 @@ constexpr int choose_block_m(int remaining_m, int remaining_n,
 
 constexpr int choose_block_n(int remaining_m, int remaining_n,
                              int a_group, int b_group, int block_cap) {
-    int best_m = 1, best_n = 1, best_area = 0, best_balance = 1 << 30;
-    for (int cm = 1; cm <= a_group; ++cm) {
-        for (int cn = 1; cn <= b_group; ++cn) {
-            if (cm > remaining_m || cn > remaining_n || cm * cn > block_cap) continue;
-            const int area = cm * cn;
-            const int balance = cm >= cn ? cm - cn : cn - cm;
-            if (area > best_area ||
-                (area == best_area && balance < best_balance) ||
-                (area == best_area && balance == best_balance && cm > best_m)) {
-                best_m = cm;
-                best_n = cn;
-                best_area = area;
-                best_balance = balance;
-            }
+    int best_n = 1, best_cost = 1 << 30, best_area = 0;
+    int best_balance = 1 << 30;
+    const int a_max = std::min(remaining_m, a_group);
+    const int b_max = std::min(remaining_n, b_group);
+    for (int cm = 1; cm <= a_max; ++cm) {
+        const int cn = std::min(b_max, block_cap / cm);
+        if (cn < 1) continue;
+        const int cost = remaining_m * ((remaining_n + cn - 1) / cn) +
+                         remaining_n * ((remaining_m + cm - 1) / cm);
+        const int area = cm * cn;
+        const int balance = cm >= cn ? cm - cn : cn - cm;
+        if (cost < best_cost ||
+            (cost == best_cost && area > best_area) ||
+            (cost == best_cost && area == best_area && balance < best_balance)) {
+            best_n = cn;
+            best_cost = cost;
+            best_area = area;
+            best_balance = balance;
         }
     }
     return best_n;
@@ -313,6 +322,9 @@ int main(int argc, char** argv) {
             ((b_group < acc_group) ? b_group : acc_group);
         const int block_m = choose_block_m(tm, tn, a_group, b_group, block_cap);
         const int block_n = choose_block_n(tm, tn, a_group, b_group, block_cap);
+        std::cout << "perf_batched_gemm: selector_block=" << block_m
+                  << "x" << block_n << " (TM=" << tm << " TN=" << tn
+                  << ")\n";
         const int blocks_m = (tm + block_m - 1) / block_m;
         const int blocks_n = (tn + block_n - 1) / block_n;
         constexpr int row_width_bytes = SUBTILE_K_TEST;

@@ -17,6 +17,12 @@
 #ifndef PACC_GROUP_SIZE_TEST
 #define PACC_GROUP_SIZE_TEST 4
 #endif
+#ifndef BLOCK_M_TEST
+#define BLOCK_M_TEST 2
+#endif
+#ifndef BLOCK_N_TEST
+#define BLOCK_N_TEST 2
+#endif
 
 namespace {
 
@@ -75,6 +81,8 @@ int main(int argc, char** argv) {
     dut.cmd_n_i = n;
     dut.cmd_k_i = k;
     dut.cmd_batch_i = batch;
+    dut.block_m_i = env_positive("UOP_BLOCK_M", BLOCK_M_TEST);
+    dut.block_n_i = env_positive("UOP_BLOCK_N", BLOCK_N_TEST);
     dut.eval();
     for (int i = 0; i < 3; ++i) tick(dut, cycle);
     dut.rst_n = 1;

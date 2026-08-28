@@ -34,6 +34,8 @@ module new_static_uopparse #(
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int BLOCK_M_WIDTH = ((ABUF_SIZE / 2) <= 1) ? 1 : $clog2((ABUF_SIZE / 2) + 1),
+    parameter int BLOCK_N_WIDTH = ((BBUF_SIZE / 2) <= 1) ? 1 : $clog2((BBUF_SIZE / 2) + 1),
     parameter int COUNT_WIDTH = 16
 ) (
     input logic clk,
@@ -47,6 +49,8 @@ module new_static_uopparse #(
     input logic [DIM_WIDTH-1:0] cmd_n_i,
     input logic [DIM_WIDTH-1:0] cmd_k_i,
     input logic [DIM_WIDTH-1:0] cmd_batch_i,
+    input logic [BLOCK_M_WIDTH-1:0] block_m_i,
+    input logic [BLOCK_N_WIDTH-1:0] block_n_i,
 
     output logic load_valid_o,
     input logic load_ready_i,
@@ -80,10 +84,8 @@ module new_static_uopparse #(
     localparam int A_GROUP = ABUF_SIZE / 2;
     localparam int B_GROUP = BBUF_SIZE / 2;
     localparam int ACC_GROUP = PACC_NUM / 2;
-    // A normal rectangular block consumes BM A slots, BN B slots, and
-    // BM*BN PACC slots.  Batch merge is different: every flattened tile
-    // consumes one slot from all three resources.
-    localparam int BLOCK_CAP = ACC_GROUP;
+    // Batch merge is different from a rectangular block: every flattened
+    // tile consumes one slot from all three resource groups.
     localparam int MERGE_CAP = (A_GROUP < B_GROUP) ?
         ((A_GROUP < ACC_GROUP) ? A_GROUP : ACC_GROUP) :
         ((B_GROUP < ACC_GROUP) ? B_GROUP : ACC_GROUP);
@@ -98,6 +100,7 @@ module new_static_uopparse #(
     count_t tm_q, tn_q, tk_q;
 
     count_t bm_q, bn_q, batch_idx_q;
+    count_t bm_limit_q, bn_limit_q;
     count_t block_m_base_q, block_n_base_q;
     logic merge_mode_q;
     count_t merge_base_q, merge_count_q;
@@ -135,8 +138,8 @@ module new_static_uopparse #(
         return (count_t'(v) + count_t'(d - 1)) / count_t'(d);
     endfunction
 
-    function automatic count_t min_count(input count_t v, input int limit);
-        if (v > count_t'(limit)) return count_t'(limit);
+    function automatic count_t min_count(input count_t v, input count_t limit);
+        if (v > limit) return limit;
         return v;
     endfunction
 
@@ -145,56 +148,6 @@ module new_static_uopparse #(
     // ADDR_WIDTH-wide memory address.
     function automatic logic [ADDR_WIDTH-1:0] addr_count(input count_t v);
         return ADDR_WIDTH'(v);
-    endfunction
-
-    function automatic count_t choose_block_m(input count_t remaining_m,
-                                               input count_t remaining_n);
-        int best_m, best_n, best_area, best_balance, area, balance;
-        begin
-            best_m = 1; best_n = 1; best_area = 0; best_balance = 1 << 30;
-            for (int cm = 1; cm <= A_GROUP; cm++) begin
-                for (int cn = 1; cn <= B_GROUP; cn++) begin
-                    if ((cm <= int'(remaining_m)) && (cn <= int'(remaining_n))) begin
-                        area = cm * cn;
-                        balance = (cm >= cn) ? cm - cn : cn - cm;
-                        if ((area <= BLOCK_CAP) &&
-                            ((area > best_area) ||
-                             ((area == best_area) && (balance < best_balance)) ||
-                             ((area == best_area) && (balance == best_balance) &&
-                              (cm > best_m)))) begin
-                            best_m = cm; best_n = cn; best_area = area;
-                            best_balance = balance;
-                        end
-                    end
-                end
-            end
-            return count_t'(best_m);
-        end
-    endfunction
-
-    function automatic count_t choose_block_n(input count_t remaining_m,
-                                               input count_t remaining_n);
-        int best_m, best_n, best_area, best_balance, area, balance;
-        begin
-            best_m = 1; best_n = 1; best_area = 0; best_balance = 1 << 30;
-            for (int cm = 1; cm <= A_GROUP; cm++) begin
-                for (int cn = 1; cn <= B_GROUP; cn++) begin
-                    if ((cm <= int'(remaining_m)) && (cn <= int'(remaining_n))) begin
-                        area = cm * cn;
-                        balance = (cm >= cn) ? cm - cn : cn - cm;
-                        if ((area <= BLOCK_CAP) &&
-                            ((area > best_area) ||
-                             ((area == best_area) && (balance < best_balance)) ||
-                             ((area == best_area) && (balance == best_balance) &&
-                              (cm > best_m)))) begin
-                            best_m = cm; best_n = cn; best_area = area;
-                            best_balance = balance;
-                        end
-                    end
-                end
-            end
-            return count_t'(best_n);
-        end
     endfunction
 
     function automatic logic [ABUF_IDX_WIDTH-1:0] abuf_slot(
@@ -275,26 +228,25 @@ module new_static_uopparse #(
                 next_merge_base_comb = merge_base_q + merge_count_q;
                 next_merge_count_comb = min_count(
                     count_t'(batch_q) * tm_q * tn_q - merge_base_q - merge_count_q,
-                    MERGE_CAP);
+                    count_t'(MERGE_CAP));
             end
         end else if (block_n_base_q + bn_q < tn_q) begin
             next_exists_comb = 1'b1;
             next_nbase_comb = block_n_base_q + bn_q;
-            next_bn_comb = choose_block_n(tm_q - block_m_base_q,
-                                          tn_q - next_nbase_comb);
+            next_bn_comb = min_count(tn_q - next_nbase_comb, bn_limit_q);
         end else if (block_m_base_q + bm_q < tm_q) begin
             next_exists_comb = 1'b1;
             next_mbase_comb = block_m_base_q + bm_q;
             next_nbase_comb = 0;
-            next_bm_comb = choose_block_m(tm_q - next_mbase_comb, tn_q);
-            next_bn_comb = choose_block_n(tm_q - next_mbase_comb, tn_q);
+            next_bm_comb = min_count(tm_q - next_mbase_comb, bm_limit_q);
+            next_bn_comb = min_count(tn_q, bn_limit_q);
         end else if (batch_idx_q + 1 < batch_q) begin
             next_exists_comb = 1'b1;
             next_batch_idx_comb = batch_idx_q + 1'b1;
             next_mbase_comb = 0;
             next_nbase_comb = 0;
-            next_bm_comb = choose_block_m(tm_q, tn_q);
-            next_bn_comb = choose_block_n(tm_q, tn_q);
+            next_bm_comb = min_count(tm_q, bm_limit_q);
+            next_bn_comb = min_count(tn_q, bn_limit_q);
         end
     end
 
@@ -474,6 +426,8 @@ module new_static_uopparse #(
             output_merge_base_q <= '0; output_merge_count_q <= '0;
             output_acc_group_q <= 1'b0;
             next_exists_q <= 1'b0;
+            bm_limit_q <= '0;
+            bn_limit_q <= '0;
             end else begin
                 // All three counters use net updates, so a completion and a new
             // issue in one cycle do not overwrite one another.
@@ -511,16 +465,23 @@ module new_static_uopparse #(
                 tm_q <= ceil_div(cmd_m_i, SA_WIDTH);
                 tn_q <= ceil_div(cmd_n_i, SA_WIDTH);
                 tk_q <= ceil_div(cmd_k_i, SUBTILE_K);
-                bm_q <= choose_block_m(ceil_div(cmd_m_i, SA_WIDTH),
-                                       ceil_div(cmd_n_i, SA_WIDTH));
-                bn_q <= choose_block_n(ceil_div(cmd_m_i, SA_WIDTH),
-                                       ceil_div(cmd_n_i, SA_WIDTH));
+                // The selector's block is a resource upper bound; clip edge
+                // blocks to the actual tile shape before emitting any uops.
+                bm_q <= min_count(ceil_div(cmd_m_i, SA_WIDTH),
+                                  count_t'(block_m_i));
+                bn_q <= min_count(ceil_div(cmd_n_i, SA_WIDTH),
+                                  count_t'(block_n_i));
+                bm_limit_q <= min_count(ceil_div(cmd_m_i, SA_WIDTH),
+                                        count_t'(block_m_i));
+                bn_limit_q <= min_count(ceil_div(cmd_n_i, SA_WIDTH),
+                                        count_t'(block_n_i));
                 batch_idx_q <= 0; block_m_base_q <= 0; block_n_base_q <= 0;
                 merge_mode_q <= ceil_div(cmd_m_i, SA_WIDTH) *
                                 ceil_div(cmd_n_i, SA_WIDTH) < count_t'(MERGE_CAP);
                 merge_base_q <= 0;
                 merge_count_q <= min_count(count_t'(cmd_batch_i) *
-                    ceil_div(cmd_m_i, SA_WIDTH) * ceil_div(cmd_n_i, SA_WIDTH), MERGE_CAP);
+                    ceil_div(cmd_m_i, SA_WIDTH) * ceil_div(cmd_n_i, SA_WIDTH),
+                    count_t'(MERGE_CAP));
                 load_base_group_q <= 1'b0; acc_group_q <= 1'b0;
                 load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
                 load_active_q <= 1'b1; load_issue_done_q <= 1'b0; load_ready_q <= 1'b0;

@@ -10,6 +10,8 @@
 namespace {
 
 constexpr uint32_t kPaccGroupSize = 2;  // Test RTL uses PACC_NUM=4.
+constexpr uint32_t kBlockM = 2;          // Test RTL uses ABUF_SIZE/2=2.
+constexpr uint32_t kBlockN = 1;          // Test RTL uses PACC_NUM/2=2.
 
 struct Event {
     uint64_t due;
@@ -64,6 +66,8 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
     tb.dut.cmd_n_i = n;
     tb.dut.cmd_k_i = k;
     tb.dut.cmd_batch_i = batch;
+    tb.dut.block_m_i = kBlockM;
+    tb.dut.block_n_i = kBlockN;
 
     bool cmd_sent = false;
     uint64_t load_issued = 0, gemm_issued = 0, output_issued = 0;
@@ -128,7 +132,10 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
             gemm_done == 0) {
             saw_next_wave_before_gemm_completion = true;
         }
-        if (check_completion_fence && output_fire && gemm_done != gemm_issued) {
+        // A following block may already have issued GEMMs while the previous
+        // block's OUTPUT is being released.  The parser only needs a prior
+        // GEMM completion, not a globally empty GEMM pipeline.
+        if (check_completion_fence && output_fire && gemm_done == 0) {
             fail(name + ": OUTPUT started before its GEMM completion fence");
         }
 

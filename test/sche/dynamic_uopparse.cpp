@@ -278,6 +278,7 @@ public:
 };
 
 void drive_cmd(Vuopparse& dut, const Cmd& cmd) {
+    const std::pair<int, int> block = choose_block();
     dut.cmd_a_base_i = cmd.a_base;
     dut.cmd_b_base_i = cmd.b_base;
     dut.cmd_c_base_i = cmd.c_base;
@@ -285,6 +286,8 @@ void drive_cmd(Vuopparse& dut, const Cmd& cmd) {
     dut.cmd_n_i = cmd.n;
     dut.cmd_k_i = cmd.k;
     dut.cmd_batch_i = cmd.batch;
+    dut.block_m_i = block.first;
+    dut.block_n_i = block.second;
 }
 
 Uop read_uop(const Vuopparse& dut) {

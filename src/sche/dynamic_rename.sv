@@ -67,7 +67,9 @@ module dynamic_rename #(
     input  logic bbuf_read_done_valid_i,
     input  logic [BBUF_PHYS_IDX_WIDTH-1:0] bbuf_read_done_phys_i,
     input  logic acc_read_done_valid_i,
-    input  logic [ACC_PHYS_IDX_WIDTH-1:0] acc_read_done_phys_i
+    input  logic [ACC_PHYS_IDX_WIDTH-1:0] acc_read_done_phys_i,
+    input logic acc_gemm_done_valid_i,
+    input logic [ACC_PHYS_IDX_WIDTH-1:0] acc_gemm_done_phys_i
 );
 
     import uopparse_pkg::*;
@@ -234,6 +236,12 @@ module dynamic_rename #(
             (acc_ref_q[int'(acc_read_done_phys_i)] != '0)) begin
             acc_ref_d[int'(acc_read_done_phys_i)] =
                 acc_ref_q[int'(acc_read_done_phys_i)] - 1'b1;
+        end
+        if (acc_gemm_done_valid_i &&
+            (int'(acc_gemm_done_phys_i) < ACC_PHYS_SIZE) &&
+            (acc_ref_d[int'(acc_gemm_done_phys_i)] != '0)) begin
+            acc_ref_d[int'(acc_gemm_done_phys_i)] =
+                acc_ref_d[int'(acc_gemm_done_phys_i)] - 1'b1;
         end
 
         if (uop_fire) begin

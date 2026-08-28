@@ -393,6 +393,42 @@ module dynamic_sche #(
         end
     end
 
+`ifdef DYNAMIC_DEBUG
+    integer debug_cycle;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            debug_cycle <= 0;
+        end else begin
+            debug_cycle <= debug_cycle + 1;
+            if (input_fire && (uop_type_i == UOP_GEMM)) begin
+                $display("DDBG in_gemm t=%0d pacc=%0d accum=%0d", debug_cycle,
+                         uop_paccidx_i, uop_accum_i);
+            end
+            if (gemm_fire) begin
+                $display("DDBG fire_gemm t=%0d pacc=%0d slot=%0d", debug_cycle,
+                         selected_gemm.pacc, selected_gemm_slot);
+            end
+            if (gemm_done_valid_i) begin
+                $display("DDBG done_gemm t=%0d pacc=%0d use=%0d", debug_cycle,
+                         gemm_done_paccidx_i,
+                         acc_use_count_q[int'(gemm_done_paccidx_i)]);
+            end
+            if (input_fire && (uop_type_i == UOP_OUTPUT)) begin
+                $display("DDBG in_output t=%0d pacc=%0d", debug_cycle,
+                         uop_paccidx_i);
+            end
+            if (output_fire) begin
+                $display("DDBG fire_output t=%0d pacc=%0d", debug_cycle,
+                         selected_output_pacc);
+            end
+            if (output_done_valid_i) begin
+                $display("DDBG done_output t=%0d pacc=%0d", debug_cycle,
+                         output_done_paccidx_i);
+            end
+        end
+    end
+`endif
+
 endmodule
 
 `default_nettype wire

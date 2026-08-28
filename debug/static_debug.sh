@@ -32,8 +32,9 @@ env \
 
 echo "static_debug: result: ${OUT_DIR}/L1_W8_64X64X64_Cnt1.txt"
 
-# Export the exact parser stream used by this parameter configuration for
-# cycle-by-cycle inspection.  OUTPUT should appear only after all K-waves of
-# each PACC block have completed.
-bash "${SCRIPT_DIR}/export_uops.sh" \
-  "${OUT_DIR}/static_uops_64x64x64.txt"
+# Export the exact new parser stream used by this parameter configuration for
+# cycle-by-cycle inspection.  The selector is supplied through the debug
+# exporter and OUTPUT is emitted only after the corresponding K-waves.
+UOP_M=64 UOP_N=64 UOP_K=64 UOP_BATCH=1 \
+  bash "${SCRIPT_DIR}/export_new_static_uops.sh" \
+  "${OUT_DIR}/static_uops_64x64x64_new.txt"

@@ -30,7 +30,10 @@ module top_new_static #(
     parameter int STORE_MEM_DATA_WIDTH =
         ROW32_WIDTH * STORE_ROWS_PER_CYCLE,
     parameter int GEMM_INSTID_WIDTH = 16,
-    parameter int COUNT_WIDTH = 16
+    parameter int COUNT_WIDTH = 16,
+    parameter int BLOCKSEL_UNROLL_NUM = 1,
+    parameter int BLOCK_M_WIDTH = ((ABUF_SIZE / 2) <= 1) ? 1 : $clog2((ABUF_SIZE / 2) + 1),
+    parameter int BLOCK_N_WIDTH = ((BBUF_SIZE / 2) <= 1) ? 1 : $clog2((BBUF_SIZE / 2) + 1)
 ) (
     input logic clk,
     input logic rst_n,
@@ -73,6 +76,37 @@ module top_new_static #(
         end
     end
 
+    logic blocksel_cmd_ready, blocksel_gemm_valid, blocksel_gemm_ready;
+    logic [BLOCK_M_WIDTH-1:0] blocksel_block_m;
+    logic [BLOCK_N_WIDTH-1:0] blocksel_block_n;
+    logic [ADDR_WIDTH-1:0] blocksel_a_base, blocksel_b_base, blocksel_c_base;
+    logic [DIM_WIDTH-1:0] blocksel_m, blocksel_n, blocksel_k, blocksel_batch;
+    logic parser_cmd_ready;
+
+    blocksel #(
+        .SA_WIDTH(SA_WIDTH),
+        .LOGIC_ABUF_SIZE(ABUF_SIZE / 2),
+        .LOGIC_BBUF_SIZE(BBUF_SIZE / 2),
+        .LOGIC_ACC_NUM(PACC_NUM / 2),
+        .ADDR_WIDTH(ADDR_WIDTH), .DIM_WIDTH(DIM_WIDTH),
+        .UNROLL_NUM(BLOCKSEL_UNROLL_NUM),
+        .BLOCK_M_WIDTH(BLOCK_M_WIDTH), .BLOCK_N_WIDTH(BLOCK_N_WIDTH)
+    ) block_selector (
+        .clk(clk), .rst_n(rst_n),
+        .cmd_valid_i(cmd_valid_i), .cmd_ready_o(blocksel_cmd_ready),
+        .cmd_a_base_i(cmd_a_base_i), .cmd_b_base_i(cmd_b_base_i),
+        .cmd_c_base_i(cmd_c_base_i), .cmd_m_i(cmd_m_i), .cmd_n_i(cmd_n_i),
+        .cmd_k_i(cmd_k_i), .cmd_batch_i(cmd_batch_i),
+        .gemm_valid_o(blocksel_gemm_valid), .gemm_ready_i(blocksel_gemm_ready),
+        .gemm_a_base_o(blocksel_a_base), .gemm_b_base_o(blocksel_b_base),
+        .gemm_c_base_o(blocksel_c_base), .gemm_m_o(blocksel_m),
+        .gemm_n_o(blocksel_n), .gemm_k_o(blocksel_k),
+        .gemm_batch_o(blocksel_batch), .block_m_o(blocksel_block_m),
+        .block_n_o(blocksel_block_n)
+    );
+
+    assign cmd_ready_o = blocksel_cmd_ready;
+
     logic load_valid, load_ready, load_is_b, load_group;
     logic [ADDR_WIDTH-1:0] load_addr;
     logic [ABUF_IDX_WIDTH-1:0] load_abufidx;
@@ -97,13 +131,15 @@ module top_new_static #(
         .BBUF_SIZE(BBUF_SIZE), .PACC_NUM(PACC_NUM), .ADDR_WIDTH(ADDR_WIDTH),
         .DIM_WIDTH(DIM_WIDTH), .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH),
         .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH), .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
-        .LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH), .COUNT_WIDTH(COUNT_WIDTH)
+        .LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH), .BLOCK_M_WIDTH(BLOCK_M_WIDTH),
+        .BLOCK_N_WIDTH(BLOCK_N_WIDTH), .COUNT_WIDTH(COUNT_WIDTH)
     ) parser (
         .clk(clk), .rst_n(rst_n),
-        .cmd_valid_i(cmd_valid_i), .cmd_ready_o(cmd_ready_o),
-        .cmd_a_base_i(cmd_a_base_i), .cmd_b_base_i(cmd_b_base_i),
-        .cmd_c_base_i(cmd_c_base_i), .cmd_m_i(cmd_m_i), .cmd_n_i(cmd_n_i),
-        .cmd_k_i(cmd_k_i), .cmd_batch_i(cmd_batch_i),
+        .cmd_valid_i(blocksel_gemm_valid), .cmd_ready_o(parser_cmd_ready),
+        .cmd_a_base_i(blocksel_a_base), .cmd_b_base_i(blocksel_b_base),
+        .cmd_c_base_i(blocksel_c_base), .cmd_m_i(blocksel_m), .cmd_n_i(blocksel_n),
+        .cmd_k_i(blocksel_k), .cmd_batch_i(blocksel_batch),
+        .block_m_i(blocksel_block_m), .block_n_i(blocksel_block_n),
         .load_valid_o(load_valid), .load_ready_i(load_ready),
         .load_is_b_o(load_is_b), .load_group_o(load_group),
         .load_addr_o(load_addr), .load_abufidx_o(load_abufidx),
@@ -118,6 +154,7 @@ module top_new_static #(
         .load_done_valid_i(load_done), .gemm_done_valid_i(gemm_done),
         .output_done_valid_i(output_done), .cmd_done_valid_o(cmd_done_valid_o)
     );
+    assign blocksel_gemm_ready = parser_cmd_ready;
 
     logic abuf_wr_valid, bbuf_wr_valid;
     logic [ABUF_IDX_WIDTH-1:0] abuf_wr_idx;

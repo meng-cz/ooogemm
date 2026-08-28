@@ -18,9 +18,8 @@
 // Cartesian product GEMM uops.  After all K waves complete, it emits OUTPUT
 // uops for the block and advances to the next output block.
 //
-// Default block selection maximizes BLOCK_M * BLOCK_N first, then chooses the
-// most balanced shape among equal-area candidates.  For example, with large
-// A/B buffers and PACC_NUM=16, the default block is 4x4 instead of 16x1.
+// BlockM/BlockN are selected by blocksel upstream.  This module only expands
+// the supplied block into LOAD/GEMM/OUTPUT uops.
 
 `default_nettype none
 
@@ -36,8 +35,8 @@ module dynamic_uopparse_core #(
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
-    parameter int BLOCK_M        = choose_block_m(ABUF_SIZE, BBUF_SIZE, PACC_NUM),
-    parameter int BLOCK_N        = choose_block_n(ABUF_SIZE, BBUF_SIZE, PACC_NUM),
+    parameter int BLOCK_M_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE + 1),
+    parameter int BLOCK_N_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE + 1),
     parameter int TILE_COUNT_WIDTH = DIM_WIDTH + 1
 ) (
     input  logic clk,
@@ -52,6 +51,8 @@ module dynamic_uopparse_core #(
     input  logic [DIM_WIDTH-1:0] cmd_n_i,
     input  logic [DIM_WIDTH-1:0] cmd_k_i,
     input  logic [DIM_WIDTH-1:0] cmd_batch_i,
+    input  logic [BLOCK_M_WIDTH-1:0] block_m_i,
+    input  logic [BLOCK_N_WIDTH-1:0] block_n_i,
 
     output logic uop_valid_o,
     input  logic uop_ready_i,
@@ -65,80 +66,6 @@ module dynamic_uopparse_core #(
 );
 
     import uopparse_pkg::*;
-
-    function automatic int choose_block_m(
-        input int abuf_size,
-        input int bbuf_size,
-        input int pacc_num
-    );
-        int best_m;
-        int best_n;
-        int best_area;
-        int best_balance;
-        int area;
-        int balance;
-        begin
-            best_m = 1;
-            best_n = 1;
-            best_area = 1;
-            best_balance = 0;
-            for (int bm = 1; bm <= abuf_size; bm++) begin
-                for (int bn = 1; bn <= bbuf_size; bn++) begin
-                    area = bm * bn;
-                    balance = (bm >= bn) ? (bm - bn) : (bn - bm);
-                    if ((area <= pacc_num) &&
-                        ((area > best_area) ||
-                         ((area == best_area) && (balance < best_balance)) ||
-                         ((area == best_area) && (balance == best_balance) && (bm > best_m)) ||
-                         ((area == best_area) && (balance == best_balance) && (bm == best_m) &&
-                          (bn > best_n)))) begin
-                        best_m = bm;
-                        best_n = bn;
-                        best_area = area;
-                        best_balance = balance;
-                    end
-                end
-            end
-            return best_m;
-        end
-    endfunction
-
-    function automatic int choose_block_n(
-        input int abuf_size,
-        input int bbuf_size,
-        input int pacc_num
-    );
-        int best_m;
-        int best_n;
-        int best_area;
-        int best_balance;
-        int area;
-        int balance;
-        begin
-            best_m = 1;
-            best_n = 1;
-            best_area = 1;
-            best_balance = 0;
-            for (int bm = 1; bm <= abuf_size; bm++) begin
-                for (int bn = 1; bn <= bbuf_size; bn++) begin
-                    area = bm * bn;
-                    balance = (bm >= bn) ? (bm - bn) : (bn - bm);
-                    if ((area <= pacc_num) &&
-                        ((area > best_area) ||
-                         ((area == best_area) && (balance < best_balance)) ||
-                         ((area == best_area) && (balance == best_balance) && (bm > best_m)) ||
-                         ((area == best_area) && (balance == best_balance) && (bm == best_m) &&
-                          (bn > best_n)))) begin
-                        best_m = bm;
-                        best_n = bn;
-                        best_area = area;
-                        best_balance = balance;
-                    end
-                end
-            end
-            return best_n;
-        end
-    endfunction
 
     initial begin
         if (SA_WIDTH <= 0) begin
@@ -161,15 +88,6 @@ module dynamic_uopparse_core #(
         end
         if (DIM_WIDTH <= 0) begin
             $error("DIM_WIDTH must be positive");
-        end
-        if ((BLOCK_M <= 0) || (BLOCK_M > ABUF_SIZE)) begin
-            $error("BLOCK_M must be in the range 1..ABUF_SIZE");
-        end
-        if ((BLOCK_N <= 0) || (BLOCK_N > BBUF_SIZE)) begin
-            $error("BLOCK_N must be in the range 1..BBUF_SIZE");
-        end
-        if ((BLOCK_M * BLOCK_N) > PACC_NUM) begin
-            $error("BLOCK_M * BLOCK_N must not exceed PACC_NUM");
         end
     end
 
@@ -278,6 +196,8 @@ module dynamic_uopparse_core #(
     tile_count_t block_n_base_q;
     tile_count_t block_m_q;
     tile_count_t block_n_q;
+    tile_count_t block_m_limit_q;
+    tile_count_t block_n_limit_q;
     tile_count_t k_tile_q;
     tile_count_t load_idx_q;
     tile_count_t gemm_m_idx_q;
@@ -307,12 +227,12 @@ module dynamic_uopparse_core #(
 
     always_comb begin
         next_batch_comb = batch_q;
-        if ((block_n_base_q + tile_count_t'(BLOCK_N)) < tn_q) begin
+        if ((block_n_base_q + block_n_q) < tn_q) begin
             next_block_m_base_comb = block_m_base_q;
-            next_block_n_base_comb = block_n_base_q + tile_count_t'(BLOCK_N);
+            next_block_n_base_comb = block_n_base_q + block_n_q;
             has_next_block_comb = 1'b1;
-        end else if ((block_m_base_q + tile_count_t'(BLOCK_M)) < tm_q) begin
-            next_block_m_base_comb = block_m_base_q + tile_count_t'(BLOCK_M);
+        end else if ((block_m_base_q + block_m_q) < tm_q) begin
+            next_block_m_base_comb = block_m_base_q + block_m_q;
             next_block_n_base_comb = '0;
             has_next_block_comb = 1'b1;
         end else if ((batch_q + 1'b1) < batch_count_q) begin
@@ -326,8 +246,10 @@ module dynamic_uopparse_core #(
             has_next_block_comb = 1'b0;
         end
 
-        next_block_m_comb = min_int_tile(tm_q - next_block_m_base_comb, BLOCK_M);
-        next_block_n_comb = min_int_tile(tn_q - next_block_n_base_comb, BLOCK_N);
+        next_block_m_comb = min_int_tile(tm_q - next_block_m_base_comb,
+                                         int'(block_m_limit_q));
+        next_block_n_comb = min_int_tile(tn_q - next_block_n_base_comb,
+                                         int'(block_n_limit_q));
     end
 
     assign cmd_ready_o = (state_q == ST_IDLE);
@@ -409,6 +331,8 @@ module dynamic_uopparse_core #(
             block_n_base_q <= '0;
             block_m_q <= '0;
             block_n_q <= '0;
+            block_m_limit_q <= '0;
+            block_n_limit_q <= '0;
             k_tile_q <= '0;
             load_idx_q <= '0;
             gemm_m_idx_q <= '0;
@@ -431,8 +355,10 @@ module dynamic_uopparse_core #(
                     batch_q <= '0;
                     block_m_base_q <= '0;
                     block_n_base_q <= '0;
-                    block_m_q <= min_int_tile(cmd_tm_comb, BLOCK_M);
-                    block_n_q <= min_int_tile(cmd_tn_comb, BLOCK_N);
+                    block_m_limit_q <= min_int_tile(cmd_tm_comb, int'(block_m_i));
+                    block_n_limit_q <= min_int_tile(cmd_tn_comb, int'(block_n_i));
+                    block_m_q <= min_int_tile(cmd_tm_comb, int'(block_m_i));
+                    block_n_q <= min_int_tile(cmd_tn_comb, int'(block_n_i));
                     k_tile_q <= '0;
                     load_idx_q <= '0;
                     gemm_m_idx_q <= '0;
@@ -539,6 +465,8 @@ module dynamic_uopparse #(
     parameter int BBUF_IDX_WIDTH  = (BBUF_LOGIC_SIZE <= 1) ? 1 : $clog2(BBUF_LOGIC_SIZE),
     parameter int PACC_IDX_WIDTH  = (PACC_LOGIC_SIZE <= 1) ? 1 : $clog2(PACC_LOGIC_SIZE),
     parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int BLOCK_M_WIDTH   = (ABUF_LOGIC_SIZE <= 1) ? 1 : $clog2(ABUF_LOGIC_SIZE + 1),
+    parameter int BLOCK_N_WIDTH   = (BBUF_LOGIC_SIZE <= 1) ? 1 : $clog2(BBUF_LOGIC_SIZE + 1),
     parameter int TILE_COUNT_WIDTH = DIM_WIDTH + 1
 ) (
     input  logic clk,
@@ -552,6 +480,8 @@ module dynamic_uopparse #(
     input  logic [DIM_WIDTH-1:0] cmd_n_i,
     input  logic [DIM_WIDTH-1:0] cmd_k_i,
     input  logic [DIM_WIDTH-1:0] cmd_batch_i,
+    input  logic [BLOCK_M_WIDTH-1:0] block_m_i,
+    input  logic [BLOCK_N_WIDTH-1:0] block_n_i,
     output logic uop_valid_o,
     input  logic uop_ready_i,
     output uopparse_pkg::uop_type_e uop_type_o,
@@ -582,6 +512,8 @@ module dynamic_uopparse #(
         .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),
         .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
         .LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH),
+        .BLOCK_M_WIDTH(BLOCK_M_WIDTH),
+        .BLOCK_N_WIDTH(BLOCK_N_WIDTH),
         .TILE_COUNT_WIDTH(TILE_COUNT_WIDTH)
     ) u_core (
         .clk(clk), .rst_n(rst_n),
@@ -590,6 +522,7 @@ module dynamic_uopparse #(
         .cmd_c_base_i(cmd_c_base_i),
         .cmd_m_i(cmd_m_i), .cmd_n_i(cmd_n_i), .cmd_k_i(cmd_k_i),
         .cmd_batch_i(cmd_batch_i),
+        .block_m_i(block_m_i), .block_n_i(block_n_i),
         .uop_valid_o(uop_valid_o), .uop_ready_i(uop_ready_i),
         .uop_type_o(uop_type_o), .uop_addr_o(uop_addr_o),
         .uop_abufidx_o(uop_abufidx_o), .uop_bbufidx_o(uop_bbufidx_o),
