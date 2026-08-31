@@ -1,7 +1,7 @@
 // Matrix operand buffer backed by row-banked 1R1W SRAMs.
 //
 // The logical storage contains BUF_SIZE matrices.  Each matrix is split across
-// SA_WIDTH independent banks, and each bank stores one SUBTILE_K-byte row.  A
+// BANK_COUNT independent banks, and each bank stores one SUBTILE_K-byte row.  A
 // read or write address selects one full matrix entry; all banks are read in
 // parallel and each bank can be written independently through wr_bank_en_i.
 //
@@ -21,6 +21,9 @@
 module oprandbuf #(
     parameter int BUF_SIZE        = 16,
     parameter int SA_WIDTH        = 4,
+    // BANK_COUNT is the number of rows/columns represented by this instance.
+    // SA_WIDTH remains as the legacy square-configuration default.
+    parameter int BANK_COUNT      = SA_WIDTH,
     parameter int SUBTILE_K       = 32,
     parameter int BUF_IDX_WIDTH   = (BUF_SIZE <= 1) ? 1 : $clog2(BUF_SIZE),
     parameter int BANK_DATA_WIDTH = SUBTILE_K * 8
@@ -30,21 +33,21 @@ module oprandbuf #(
 
     input  logic wr_valid_i,
     input  logic [BUF_IDX_WIDTH-1:0] wr_idx_i,
-    input  logic [SA_WIDTH-1:0] wr_bank_en_i,
-    input  logic [BANK_DATA_WIDTH-1:0] wr_data_i [SA_WIDTH],
+    input  logic [BANK_COUNT-1:0] wr_bank_en_i,
+    input  logic [BANK_DATA_WIDTH-1:0] wr_data_i [BANK_COUNT],
 
     input  logic rd_valid_i,
     input  logic [BUF_IDX_WIDTH-1:0] rd_idx_i,
     output logic rd_valid_o,
-    output logic [BANK_DATA_WIDTH-1:0] rd_data_o [SA_WIDTH]
+    output logic [BANK_DATA_WIDTH-1:0] rd_data_o [BANK_COUNT]
 );
 
     initial begin
         if (BUF_SIZE <= 0) begin
             $error("BUF_SIZE must be positive");
         end
-        if (SA_WIDTH <= 0) begin
-            $error("SA_WIDTH must be positive");
+        if (BANK_COUNT <= 0) begin
+            $error("BANK_COUNT must be positive");
         end
         if (SUBTILE_K <= 0) begin
             $error("SUBTILE_K must be positive");
@@ -67,7 +70,7 @@ module oprandbuf #(
 
     genvar bank;
     generate
-        for (bank = 0; bank < SA_WIDTH; bank++) begin : gen_bank
+        for (bank = 0; bank < BANK_COUNT; bank++) begin : gen_bank
             oprandbuf_bank_sram #(
                 .DEPTH(BUF_SIZE),
                 .ADDR_WIDTH(BUF_IDX_WIDTH),

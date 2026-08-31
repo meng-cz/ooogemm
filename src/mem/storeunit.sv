@@ -1,6 +1,6 @@
 // Store uop pipeline.
 //
-// A STORE/OUTPUT uop names one SA_WIDTH x SA_WIDTH FP32 output tile by an
+// A STORE/OUTPUT uop names one SUBTILE_M x SUBTILE_N FP32 output tile by an
 // external tile-linear base address and one PACC index.  The unit requests the
 // complete tile from the systolic array through getacc and receives
 // ROWS_PER_CYCLE consecutive rows per getacc_data_valid pulse.  One such row
@@ -9,7 +9,7 @@
 //
 // Addressing convention:
 //   write beat address =
-//       uop_addr_i * (SA_WIDTH / ROWS_PER_CYCLE) + row_group_idx
+//       uop_addr_i * (SUBTILE_M / ROWS_PER_CYCLE) + row_group_idx
 //
 // Pipeline structure:
 //   1. uop accept: enqueue tile address and PACC index in an ordered descriptor
@@ -26,12 +26,14 @@
 
 module storeunit #(
     parameter int SA_WIDTH        = 4,
+    parameter int SUBTILE_M      = SA_WIDTH,
+    parameter int SUBTILE_N      = SA_WIDTH,
     parameter int PACC_NUM        = 16,
     parameter int ADDR_WIDTH      = 32,
     parameter int PACC_IDX_WIDTH  = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
-    parameter int ROW_DATA_WIDTH  = SA_WIDTH * 32,
+    parameter int ROW_DATA_WIDTH  = SUBTILE_N * 32,
     parameter int ROWS_PER_CYCLE  = 1,
-    parameter int GROUPS_PER_TILE = SA_WIDTH / ROWS_PER_CYCLE,
+    parameter int GROUPS_PER_TILE = SUBTILE_M / ROWS_PER_CYCLE,
     parameter int GROUP_IDX_WIDTH =
         (GROUPS_PER_TILE <= 1) ? 1 : $clog2(GROUPS_PER_TILE),
     parameter int SA_DATA_WIDTH   = ROW_DATA_WIDTH * ROWS_PER_CYCLE,
@@ -68,8 +70,8 @@ module storeunit #(
 );
 
     initial begin
-        if (SA_WIDTH <= 0) begin
-            $error("SA_WIDTH must be positive");
+        if (SUBTILE_M <= 0 || SUBTILE_N <= 0) begin
+            $error("SUBTILE_M and SUBTILE_N must be positive");
         end
         if (PACC_NUM <= 0) begin
             $error("PACC_NUM must be positive");
@@ -80,17 +82,17 @@ module storeunit #(
         if (PACC_IDX_WIDTH <= 0) begin
             $error("PACC_IDX_WIDTH must be positive");
         end
-        if (ROW_DATA_WIDTH != SA_WIDTH * 32) begin
-            $error("ROW_DATA_WIDTH must equal SA_WIDTH * 32");
+        if (ROW_DATA_WIDTH != SUBTILE_N * 32) begin
+            $error("ROW_DATA_WIDTH must equal SUBTILE_N * 32");
         end
         if (ROWS_PER_CYCLE <= 0) begin
             $error("ROWS_PER_CYCLE must be positive");
         end
-        if (ROWS_PER_CYCLE > SA_WIDTH) begin
-            $error("ROWS_PER_CYCLE must not exceed SA_WIDTH");
+        if (ROWS_PER_CYCLE > SUBTILE_M) begin
+            $error("ROWS_PER_CYCLE must not exceed SUBTILE_M");
         end
-        if ((SA_WIDTH % ROWS_PER_CYCLE) != 0) begin
-            $error("SA_WIDTH must be divisible by ROWS_PER_CYCLE");
+        if ((SUBTILE_M % ROWS_PER_CYCLE) != 0) begin
+            $error("SUBTILE_M must be divisible by ROWS_PER_CYCLE");
         end
         if (SA_DATA_WIDTH != (ROW_DATA_WIDTH * ROWS_PER_CYCLE)) begin
             $error("SA_DATA_WIDTH must equal ROW_DATA_WIDTH * ROWS_PER_CYCLE");

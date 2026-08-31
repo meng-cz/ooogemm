@@ -6,6 +6,8 @@
 
 module top_new_static #(
     parameter int SA_WIDTH = 32,
+    parameter int SUBTILE_M = SA_WIDTH,
+    parameter int SUBTILE_N = SA_WIDTH,
     parameter int SUBTILE_K = 32,
     parameter int LANE_NUM = 4,
     parameter int ABUF_SIZE = 64,
@@ -20,13 +22,14 @@ module top_new_static #(
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
     parameter int ROW8_WIDTH = SUBTILE_K * 8,
+    parameter int MAX_SUBTILE_ROWS = (SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N,
     parameter int LOAD_BUS_ID_WIDTH =
-        ((SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+        ((MAX_SUBTILE_ROWS * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)) <= 1) ? 1 :
-        $clog2(SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+        $clog2(MAX_SUBTILE_ROWS * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)),
-    parameter int ROW32_WIDTH = SA_WIDTH * 32,
-    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int ROW32_WIDTH = SUBTILE_N * 32,
+    parameter int LOAD_ROWS_WIDTH = (MAX_SUBTILE_ROWS <= 1) ? 1 : $clog2(MAX_SUBTILE_ROWS + 1),
     parameter int STORE_MEM_DATA_WIDTH =
         ROW32_WIDTH * STORE_ROWS_PER_CYCLE,
     parameter int GEMM_INSTID_WIDTH = 16,
@@ -64,11 +67,11 @@ module top_new_static #(
 
     initial begin
         if (STORE_ROWS_PER_CYCLE <= 0 ||
-            STORE_ROWS_PER_CYCLE > SA_WIDTH) begin
-            $error("STORE_ROWS_PER_CYCLE must be in [1, SA_WIDTH]");
+            STORE_ROWS_PER_CYCLE > SUBTILE_M) begin
+            $error("STORE_ROWS_PER_CYCLE must be in [1, SUBTILE_M]");
         end
-        if ((SA_WIDTH % STORE_ROWS_PER_CYCLE) != 0) begin
-            $error("SA_WIDTH must be divisible by STORE_ROWS_PER_CYCLE");
+        if ((SUBTILE_M % STORE_ROWS_PER_CYCLE) != 0) begin
+            $error("SUBTILE_M must be divisible by STORE_ROWS_PER_CYCLE");
         end
         if (LOAD_DATA_WIDTH <= 0 ||
             (LOAD_DATA_WIDTH & (LOAD_DATA_WIDTH - 1)) != 0) begin
@@ -85,6 +88,7 @@ module top_new_static #(
 
     blocksel #(
         .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_M(SUBTILE_M), .SUBTILE_N(SUBTILE_N),
         .LOGIC_ABUF_SIZE(ABUF_SIZE / 2),
         .LOGIC_BBUF_SIZE(BBUF_SIZE / 2),
         .LOGIC_ACC_NUM(PACC_NUM / 2),
@@ -127,7 +131,8 @@ module top_new_static #(
     logic output_done;
 
     new_static_uopparse #(
-        .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K), .ABUF_SIZE(ABUF_SIZE),
+        .SA_WIDTH(SA_WIDTH), .SUBTILE_M(SUBTILE_M), .SUBTILE_N(SUBTILE_N),
+        .SUBTILE_K(SUBTILE_K), .ABUF_SIZE(ABUF_SIZE),
         .BBUF_SIZE(BBUF_SIZE), .PACC_NUM(PACC_NUM), .ADDR_WIDTH(ADDR_WIDTH),
         .DIM_WIDTH(DIM_WIDTH), .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH),
         .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH), .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
@@ -159,9 +164,10 @@ module top_new_static #(
     logic abuf_wr_valid, bbuf_wr_valid;
     logic [ABUF_IDX_WIDTH-1:0] abuf_wr_idx;
     logic [BBUF_IDX_WIDTH-1:0] bbuf_wr_idx;
-    logic [SA_WIDTH-1:0] abuf_wr_bank_en, bbuf_wr_bank_en;
-    logic [ROW8_WIDTH-1:0] abuf_wr_data [SA_WIDTH];
-    logic [ROW8_WIDTH-1:0] bbuf_wr_data [SA_WIDTH];
+    logic [SUBTILE_M-1:0] abuf_wr_bank_en;
+    logic [SUBTILE_N-1:0] bbuf_wr_bank_en;
+    logic [ROW8_WIDTH-1:0] abuf_wr_data [SUBTILE_M];
+    logic [ROW8_WIDTH-1:0] bbuf_wr_data [SUBTILE_N];
     logic abuf_ready_valid, bbuf_ready_valid;
     logic [ABUF_IDX_WIDTH-1:0] abuf_ready_idx;
     logic [BBUF_IDX_WIDTH-1:0] bbuf_ready_idx;
@@ -169,7 +175,8 @@ module top_new_static #(
     assign load_done = abuf_ready_valid | bbuf_ready_valid;
 
     loadunit #(
-        .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K), .ABUF_SIZE(ABUF_SIZE),
+        .SA_WIDTH(SA_WIDTH), .SUBTILE_M(SUBTILE_M), .SUBTILE_N(SUBTILE_N),
+        .SUBTILE_K(SUBTILE_K), .ABUF_SIZE(ABUF_SIZE),
         .BBUF_SIZE(BBUF_SIZE), .ADDR_WIDTH(ADDR_WIDTH),
         .ABUF_IDX_WIDTH(ABUF_IDX_WIDTH), .BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),
         .BUS_ID_WIDTH(LOAD_BUS_ID_WIDTH), .ROWS_LEFT_WIDTH(LOAD_ROWS_WIDTH),
@@ -195,17 +202,19 @@ module top_new_static #(
     logic [ABUF_IDX_WIDTH-1:0] abuf_rd_idx;
     logic [BBUF_IDX_WIDTH-1:0] bbuf_rd_idx;
     logic abuf_rd_data_valid, bbuf_rd_data_valid;
-    logic [ROW8_WIDTH-1:0] abuf_rd_data [SA_WIDTH];
-    logic [ROW8_WIDTH-1:0] bbuf_rd_data [SA_WIDTH];
+    logic [ROW8_WIDTH-1:0] abuf_rd_data [SUBTILE_M];
+    logic [ROW8_WIDTH-1:0] bbuf_rd_data [SUBTILE_N];
 
-    oprandbuf #(.BUF_SIZE(ABUF_SIZE), .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K),
+    oprandbuf #(.BUF_SIZE(ABUF_SIZE), .SA_WIDTH(SA_WIDTH), .BANK_COUNT(SUBTILE_M),
+        .SUBTILE_K(SUBTILE_K),
         .BUF_IDX_WIDTH(ABUF_IDX_WIDTH), .BANK_DATA_WIDTH(ROW8_WIDTH)) abuf (
         .clk(clk), .rst_n(rst_n), .wr_valid_i(abuf_wr_valid), .wr_idx_i(abuf_wr_idx),
         .wr_bank_en_i(abuf_wr_bank_en), .wr_data_i(abuf_wr_data),
         .rd_valid_i(abuf_rd_valid), .rd_idx_i(abuf_rd_idx),
         .rd_valid_o(abuf_rd_data_valid),
         .rd_data_o(abuf_rd_data));
-    oprandbuf #(.BUF_SIZE(BBUF_SIZE), .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K),
+    oprandbuf #(.BUF_SIZE(BBUF_SIZE), .SA_WIDTH(SA_WIDTH), .BANK_COUNT(SUBTILE_N),
+        .SUBTILE_K(SUBTILE_K),
         .BUF_IDX_WIDTH(BBUF_IDX_WIDTH), .BANK_DATA_WIDTH(ROW8_WIDTH)) bbuf (
         .clk(clk), .rst_n(rst_n), .wr_valid_i(bbuf_wr_valid), .wr_idx_i(bbuf_wr_idx),
         .wr_bank_en_i(bbuf_wr_bank_en), .wr_data_i(bbuf_wr_data),
@@ -230,8 +239,8 @@ module top_new_static #(
     logic [GEMM_INSTID_WIDTH-1:0] sa_finish_id;
     logic sa_finish_valid;
     logic sa_ain_valid, sa_bin_valid;
-    logic [ROW8_WIDTH-1:0] sa_ain_data [SA_WIDTH];
-    logic [ROW8_WIDTH-1:0] sa_bin_data [SA_WIDTH];
+    logic [ROW8_WIDTH-1:0] sa_ain_data [SUBTILE_M];
+    logic [ROW8_WIDTH-1:0] sa_bin_data [SUBTILE_N];
     logic sa_getacc_ready, sa_getacc_data_valid;
     logic [STORE_MEM_DATA_WIDTH-1:0] sa_getacc_data;
 
@@ -247,8 +256,10 @@ module top_new_static #(
     assign gemm_done = sa_finish_valid;
 
     always_comb begin
-        for (int i = 0; i < SA_WIDTH; i++) begin
+        for (int i = 0; i < SUBTILE_M; i++) begin
             sa_ain_data[i] = abuf_rd_data[i];
+        end
+        for (int i = 0; i < SUBTILE_N; i++) begin
             sa_bin_data[i] = bbuf_rd_data[i];
         end
     end
@@ -284,7 +295,8 @@ module top_new_static #(
 
     logic store_getacc_valid;
     logic [PACC_IDX_WIDTH-1:0] store_getacc_idx;
-    storeunit #(.SA_WIDTH(SA_WIDTH), .PACC_NUM(PACC_NUM), .ADDR_WIDTH(ADDR_WIDTH),
+    storeunit #(.SA_WIDTH(SA_WIDTH), .SUBTILE_M(SUBTILE_M), .SUBTILE_N(SUBTILE_N),
+        .PACC_NUM(PACC_NUM), .ADDR_WIDTH(ADDR_WIDTH),
         .PACC_IDX_WIDTH(PACC_IDX_WIDTH), .ROW_DATA_WIDTH(ROW32_WIDTH),
         .ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE),
         .MEM_DATA_WIDTH(STORE_MEM_DATA_WIDTH)) store_unit (
@@ -296,7 +308,8 @@ module top_new_static #(
         .mem_wr_ready_i(store_mem_wr_ready_i), .mem_wr_addr_o(store_mem_wr_addr_o),
         .mem_wr_data_o(store_mem_wr_data_o), .done_valid_o(output_done));
 
-    sa #(.SA_WIDTH(SA_WIDTH), .LANE_NUM(LANE_NUM), .SUBTILE_K(SUBTILE_K),
+    sa #(.SA_WIDTH(SA_WIDTH), .SUBTILE_M(SUBTILE_M), .SUBTILE_N(SUBTILE_N),
+        .LANE_NUM(LANE_NUM), .SUBTILE_K(SUBTILE_K),
         .PACC_NUM(PACC_NUM), .PACC_IDX_WIDTH(PACC_IDX_WIDTH),
         .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH),
         .GETACC_ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE)) sa_impl (

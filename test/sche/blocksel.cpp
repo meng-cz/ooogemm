@@ -1,7 +1,9 @@
 #include "Vblocksel.h"
 #include "verilated.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -10,10 +12,28 @@
 
 namespace {
 
+#ifndef SUBTILE_M_TEST
+#define SUBTILE_M_TEST 16
+#endif
+#ifndef SUBTILE_N_TEST
+#define SUBTILE_N_TEST 16
+#endif
+#ifndef LOGIC_ABUF_SIZE_TEST
+#define LOGIC_ABUF_SIZE_TEST 12
+#endif
+#ifndef LOGIC_BBUF_SIZE_TEST
+#define LOGIC_BBUF_SIZE_TEST 12
+#endif
+#ifndef LOGIC_ACC_NUM_TEST
+#define LOGIC_ACC_NUM_TEST 16
+#endif
+
 constexpr int kSaWidth = 16;
-constexpr int kAbuf = 12;
-constexpr int kBbuf = 12;
-constexpr int kAcc = 16;
+constexpr int kSubtileM = SUBTILE_M_TEST;
+constexpr int kSubtileN = SUBTILE_N_TEST;
+constexpr int kAbuf = LOGIC_ABUF_SIZE_TEST;
+constexpr int kBbuf = LOGIC_BBUF_SIZE_TEST;
+constexpr int kAcc = LOGIC_ACC_NUM_TEST;
 
 struct Case {
     uint32_t m;
@@ -99,12 +119,38 @@ private:
     }
 
     void check_output(const Case& tc, uint32_t tag) {
-        if (dut_.block_m_o != tc.bm || dut_.block_n_o != tc.bn) {
+        int expected_bm = 1;
+        int expected_bn = 1;
+        int best_cost = 0x7fffffff;
+        int best_area = 1;
+        int best_balance = 0x7fffffff;
+        const int tm = (tc.m + kSubtileM - 1) / kSubtileM;
+        const int tn = (tc.n + kSubtileN - 1) / kSubtileN;
+        const int amax = std::min(tm, kAbuf);
+        const int bmax = std::min(tn, kBbuf);
+        for (int bm = 1; bm <= amax; ++bm) {
+            const int bn = std::min(bmax, kAcc / bm);
+            if (bn < 1) continue;
+            const int cost = tm * ((tn + bn - 1) / bn) +
+                             tn * ((tm + bm - 1) / bm);
+            const int area = bm * bn;
+            const int balance = std::abs(bm - bn);
+            if (cost < best_cost ||
+                (cost == best_cost && area > best_area) ||
+                (cost == best_cost && area == best_area && balance < best_balance)) {
+                expected_bm = bm;
+                expected_bn = bn;
+                best_cost = cost;
+                best_area = area;
+                best_balance = balance;
+            }
+        }
+        if (dut_.block_m_o != expected_bm || dut_.block_n_o != expected_bn) {
             std::ostringstream os;
             os << "wrong block for M=" << tc.m << " N=" << tc.n
                << ": got " << static_cast<unsigned>(dut_.block_m_o)
                << "x" << static_cast<unsigned>(dut_.block_n_o)
-               << ", expected " << tc.bm << "x" << tc.bn;
+               << ", expected " << expected_bm << "x" << expected_bn;
             fail(os.str());
         }
         if (dut_.gemm_a_base_o != 0x10000000u + tag ||
@@ -122,11 +168,11 @@ private:
 int main() {
     try {
         Testbench tb;
-        tb.run_case({16, 256, 256, 3, 1, 12});
-        tb.run_case({256, 256, 256, 1, 4, 4});
-        tb.run_case({256, 16, 256, 2, 12, 1});
-        tb.run_case({32, 256, 64, 1, 2, 8});
-        tb.run_case({17, 17, 32, 1, 2, 2});
+        tb.run_case({16, 256, 256, 3, 0, 0});
+        tb.run_case({256, 256, 256, 1, 0, 0});
+        tb.run_case({256, 16, 256, 2, 0, 0});
+        tb.run_case({32, 256, 64, 1, 0, 0});
+        tb.run_case({17, 17, 32, 1, 0, 0});
         std::cout << "blocksel tests passed\n";
         return 0;
     } catch (const std::exception& error) {

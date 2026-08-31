@@ -51,13 +51,13 @@
 // GETACC timing:
 //   1. A request is accepted when getacc_valid && getacc_ready. A new request
 //      can be accepted while idle or on the last active row of the prior request.
-//   2. An accepted request enters a SA_WIDTH/GETACC_ROWS_PER_CYCLE-cycle scan.
+//   2. An accepted request enters a SUBTILE_M/GETACC_ROWS_PER_CYCLE-cycle scan.
 //      Scan cycle N requests GETACC_ROWS_PER_CYCLE consecutive PE rows.
 //   3. Each PE's paccreg returns FP32 after paccreg_pkg::GETACC_PIPE_STAGES.
 //      Per column, all row results are valid-masked and reduced by a two-stage
 //      OR tree per row slot, preserving all concurrently returned rows.
 //   4. getacc_data_valid marks each output row group. Row slot R occupies
-//      getacc_data[R*SA_WIDTH*32 +: SA_WIDTH*32], and groups are emitted in
+//      getacc_data[R*SUBTILE_N*32 +: SUBTILE_N*32], and groups are emitted in
 //      increasing row order.
 //   5. sa_pkg::GETACC_FIRST_LATENCY is the fixed latency from a successful
 //      getacc handshake clock edge to the first row's getacc_data_valid.
@@ -78,6 +78,9 @@ endpackage
 
 module sa #(
     parameter int SA_WIDTH        = 4,
+    // Compatibility default for the legacy square interface.
+    parameter int SUBTILE_M      = SA_WIDTH,
+    parameter int SUBTILE_N      = SA_WIDTH,
     parameter int SUBTILE_K       = 32,
     parameter int LANE_NUM        = 4,
     parameter int LANE_IDX_WIDTH  = (LANE_NUM <= 1) ? 1 : $clog2(LANE_NUM),
@@ -91,7 +94,7 @@ module sa #(
     parameter int GEMM_INSTID_WIDTH = 16,
     parameter int K_IDX_WIDTH     = (SUBTILE_K <= 1) ? 1 : $clog2(SUBTILE_K),
     parameter int GETACC_ROWS_PER_CYCLE = 1,
-    parameter int GETACC_GROUPS_PER_TILE = SA_WIDTH / GETACC_ROWS_PER_CYCLE,
+    parameter int GETACC_GROUPS_PER_TILE = SUBTILE_M / GETACC_ROWS_PER_CYCLE,
     parameter int GETACC_GROUP_IDX_WIDTH =
         (GETACC_GROUPS_PER_TILE <= 1) ? 1 : $clog2(GETACC_GROUPS_PER_TILE)
 ) (
@@ -99,11 +102,11 @@ module sa #(
     input  logic rst_n,
 
     input  logic ain_valid,
-    input  logic [SUBTILE_K*8-1:0] ain_data [SA_WIDTH],
+    input  logic [SUBTILE_K*8-1:0] ain_data [SUBTILE_M],
     input  logic [LANE_IDX_WIDTH-1:0] ain_laneidx,
 
     input  logic bin_valid,
-    input  logic [SUBTILE_K*8-1:0] bin_data [SA_WIDTH],
+    input  logic [SUBTILE_K*8-1:0] bin_data [SUBTILE_N],
     input  logic [LANE_IDX_WIDTH-1:0] bin_laneidx,
 
     input  logic gemm_valid,
@@ -121,7 +124,7 @@ module sa #(
     input  logic [PACC_IDX_WIDTH-1:0] getacc_idx,
 
     output logic getacc_data_valid,
-    output logic [SA_WIDTH*32*GETACC_ROWS_PER_CYCLE-1:0] getacc_data
+    output logic [SUBTILE_N*32*GETACC_ROWS_PER_CYCLE-1:0] getacc_data
 );
 
     import fdot8e4m3_pkg::*;
@@ -131,8 +134,23 @@ module sa #(
         if (SA_WIDTH <= 0) begin
             $error("SA_WIDTH must be positive");
         end
+        if (SUBTILE_M <= 0) begin
+            $error("SUBTILE_M must be positive");
+        end
+        if (SUBTILE_N <= 0) begin
+            $error("SUBTILE_N must be positive");
+        end
         if (SUBTILE_K <= 0) begin
             $error("SUBTILE_K must be positive");
+        end
+        if ((SUBTILE_M & (SUBTILE_M - 1)) != 0) begin
+            $error("SUBTILE_M must be a power of two");
+        end
+        if ((SUBTILE_N & (SUBTILE_N - 1)) != 0) begin
+            $error("SUBTILE_N must be a power of two");
+        end
+        if ((SUBTILE_K & (SUBTILE_K - 1)) != 0) begin
+            $error("SUBTILE_K must be a power of two");
         end
         if (LANE_NUM <= 0) begin
             $error("LANE_NUM must be positive");
@@ -147,17 +165,18 @@ module sa #(
             $error("PACC_IDX_WIDTH must be positive");
         end
         if (GETACC_ROWS_PER_CYCLE <= 0 ||
-            GETACC_ROWS_PER_CYCLE > SA_WIDTH) begin
-            $error("GETACC_ROWS_PER_CYCLE must be in [1, SA_WIDTH]");
+            GETACC_ROWS_PER_CYCLE > SUBTILE_M) begin
+            $error("GETACC_ROWS_PER_CYCLE must be in [1, SUBTILE_M]");
         end
-        if ((SA_WIDTH % GETACC_ROWS_PER_CYCLE) != 0) begin
-            $error("SA_WIDTH must be divisible by GETACC_ROWS_PER_CYCLE");
+        if ((SUBTILE_M % GETACC_ROWS_PER_CYCLE) != 0) begin
+            $error("SUBTILE_M must be divisible by GETACC_ROWS_PER_CYCLE");
         end
     end
 
     localparam int FDOT_TO_PACC_REDUCE_STAGES = 1;
     localparam int GEMM_FINISH_LATENCY =
-        (2 * SA_WIDTH) + SUBTILE_K + fdot8e4m3_pkg::LAST_TO_OUT_LATENCY +
+        (SUBTILE_M + SUBTILE_N) + SUBTILE_K +
+        fdot8e4m3_pkg::LAST_TO_OUT_LATENCY +
         FDOT_TO_PACC_REDUCE_STAGES + paccreg_pkg::ACCUM_PIPE_STAGES + 3;
 
     logic slot_in_use [LANE_NUM][2];
@@ -260,13 +279,13 @@ module sa #(
         end
     end
 
-    logic a_buf_valid [SA_WIDTH][LANE_NUM];
-    logic b_buf_valid [SA_WIDTH][LANE_NUM];
-    logic [7:0] a_buf_rddata [SA_WIDTH][LANE_NUM];
-    logic [7:0] b_buf_rddata [SA_WIDTH][LANE_NUM];
+    logic a_buf_valid [SUBTILE_M][LANE_NUM];
+    logic b_buf_valid [SUBTILE_N][LANE_NUM];
+    logic [7:0] a_buf_rddata [SUBTILE_M][LANE_NUM];
+    logic [7:0] b_buf_rddata [SUBTILE_N][LANE_NUM];
 
     always_comb begin
-        for (int row = 0; row < SA_WIDTH; row++) begin
+        for (int row = 0; row < SUBTILE_M; row++) begin
             for (int lane = 0; lane < LANE_NUM; lane++) begin
                 a_buf_valid[row][lane] = ain_valid &&
                     (ain_laneidx == lane[LANE_IDX_WIDTH-1:0]) &&
@@ -275,7 +294,7 @@ module sa #(
             end
         end
 
-        for (int col = 0; col < SA_WIDTH; col++) begin
+        for (int col = 0; col < SUBTILE_N; col++) begin
             for (int lane = 0; lane < LANE_NUM; lane++) begin
                 b_buf_valid[col][lane] = bin_valid &&
                     (bin_laneidx == lane[LANE_IDX_WIDTH-1:0]) &&
@@ -289,10 +308,10 @@ module sa #(
     genvar buf_col;
     genvar buf_lane;
     generate
-        for (buf_row = 0; buf_row < SA_WIDTH; buf_row++) begin : gen_a_lanebuf_row
+        for (buf_row = 0; buf_row < SUBTILE_M; buf_row++) begin : gen_a_lanebuf_row
             for (buf_lane = 0; buf_lane < LANE_NUM; buf_lane++) begin : gen_a_lanebuf_lane
                 lanebuf #(
-                    .SA_WIDTH(SA_WIDTH),
+                    .SA_WIDTH(SUBTILE_M),
                     .SUBTILE_K(SUBTILE_K),
                     .K_IDX_WIDTH(K_IDX_WIDTH)
                 ) u_a_lanebuf (
@@ -307,10 +326,10 @@ module sa #(
             end
         end
 
-        for (buf_col = 0; buf_col < SA_WIDTH; buf_col++) begin : gen_b_lanebuf_col
+        for (buf_col = 0; buf_col < SUBTILE_N; buf_col++) begin : gen_b_lanebuf_col
             for (buf_lane = 0; buf_lane < LANE_NUM; buf_lane++) begin : gen_b_lanebuf_lane
                 lanebuf #(
-                    .SA_WIDTH(SA_WIDTH),
+                    .SA_WIDTH(SUBTILE_N),
                     .SUBTILE_K(SUBTILE_K),
                     .K_IDX_WIDTH(K_IDX_WIDTH)
                 ) u_b_lanebuf (
@@ -326,16 +345,16 @@ module sa #(
         end
     endgenerate
 
-    logic a_src_valid [SA_WIDTH][LANE_NUM];
-    logic [7:0] a_src_data [SA_WIDTH][LANE_NUM];
-    logic a_src_first [SA_WIDTH][LANE_NUM];
-    logic a_src_last [SA_WIDTH][LANE_NUM];
-    logic [PACC_IDX_WIDTH-1:0] a_src_paccidx [SA_WIDTH][LANE_NUM];
-    logic a_src_accum [SA_WIDTH][LANE_NUM];
-    logic [7:0] b_src_data [SA_WIDTH][LANE_NUM];
+    logic a_src_valid [SUBTILE_M][LANE_NUM];
+    logic [7:0] a_src_data [SUBTILE_M][LANE_NUM];
+    logic a_src_first [SUBTILE_M][LANE_NUM];
+    logic a_src_last [SUBTILE_M][LANE_NUM];
+    logic [PACC_IDX_WIDTH-1:0] a_src_paccidx [SUBTILE_M][LANE_NUM];
+    logic a_src_accum [SUBTILE_M][LANE_NUM];
+    logic [7:0] b_src_data [SUBTILE_N][LANE_NUM];
 
     always_comb begin
-        for (int row = 0; row < SA_WIDTH; row++) begin
+        for (int row = 0; row < SUBTILE_M; row++) begin
             for (int lane = 0; lane < LANE_NUM; lane++) begin
                 a_src_valid[row][lane] = lane_active[lane];
                 a_src_data[row][lane] = a_buf_rddata[row][lane];
@@ -347,26 +366,26 @@ module sa #(
             end
         end
 
-        for (int col = 0; col < SA_WIDTH; col++) begin
+        for (int col = 0; col < SUBTILE_N; col++) begin
             for (int lane = 0; lane < LANE_NUM; lane++) begin
                 b_src_data[col][lane] = b_buf_rddata[col][lane];
             end
         end
     end
 
-    logic a_skew_valid [SA_WIDTH][LANE_NUM];
-    logic [7:0] a_skew_data [SA_WIDTH][LANE_NUM];
-    logic a_skew_first [SA_WIDTH][LANE_NUM];
-    logic a_skew_last [SA_WIDTH][LANE_NUM];
-    logic [PACC_IDX_WIDTH-1:0] a_skew_paccidx [SA_WIDTH][LANE_NUM];
-    logic a_skew_accum [SA_WIDTH][LANE_NUM];
-    logic [7:0] b_skew_data [SA_WIDTH][LANE_NUM];
+    logic a_skew_valid [SUBTILE_M][LANE_NUM];
+    logic [7:0] a_skew_data [SUBTILE_M][LANE_NUM];
+    logic a_skew_first [SUBTILE_M][LANE_NUM];
+    logic a_skew_last [SUBTILE_M][LANE_NUM];
+    logic [PACC_IDX_WIDTH-1:0] a_skew_paccidx [SUBTILE_M][LANE_NUM];
+    logic a_skew_accum [SUBTILE_M][LANE_NUM];
+    logic [7:0] b_skew_data [SUBTILE_N][LANE_NUM];
 
     genvar skew_row;
     genvar skew_col;
     genvar skew_lane;
     generate
-        for (skew_row = 0; skew_row < SA_WIDTH; skew_row++) begin : gen_a_skew_row
+        for (skew_row = 0; skew_row < SUBTILE_M; skew_row++) begin : gen_a_skew_row
             for (skew_lane = 0; skew_lane < LANE_NUM; skew_lane++) begin : gen_a_skew_lane
                 if (skew_row == 0) begin : gen_a_no_skew
                     assign a_skew_valid[skew_row][skew_lane] =
@@ -428,7 +447,7 @@ module sa #(
             end
         end
 
-        for (skew_col = 0; skew_col < SA_WIDTH; skew_col++) begin : gen_b_skew_col
+        for (skew_col = 0; skew_col < SUBTILE_N; skew_col++) begin : gen_b_skew_col
             for (skew_lane = 0; skew_lane < LANE_NUM; skew_lane++) begin : gen_b_skew_lane
                 if (skew_col == 0) begin : gen_b_no_skew
                     assign b_skew_data[skew_col][skew_lane] =
@@ -455,26 +474,26 @@ module sa #(
         end
     endgenerate
 
-    logic pe_left_valid [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic [7:0] pe_left_a [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic pe_left_first [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic pe_left_last [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic [PACC_IDX_WIDTH-1:0] pe_left_paccidx [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic pe_left_accum [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic [7:0] pe_top_b [SA_WIDTH][SA_WIDTH][LANE_NUM];
+    logic pe_left_valid [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic [7:0] pe_left_a [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic pe_left_first [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic pe_left_last [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic [PACC_IDX_WIDTH-1:0] pe_left_paccidx [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic pe_left_accum [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic [7:0] pe_top_b [SUBTILE_M][SUBTILE_N][LANE_NUM];
 
-    logic pe_right_valid [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic [7:0] pe_right_a [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic pe_right_first [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic pe_right_last [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic [PACC_IDX_WIDTH-1:0] pe_right_paccidx [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic pe_right_accum [SA_WIDTH][SA_WIDTH][LANE_NUM];
-    logic [7:0] pe_bottom_b [SA_WIDTH][SA_WIDTH][LANE_NUM];
+    logic pe_right_valid [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic [7:0] pe_right_a [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic pe_right_first [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic pe_right_last [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic [PACC_IDX_WIDTH-1:0] pe_right_paccidx [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic pe_right_accum [SUBTILE_M][SUBTILE_N][LANE_NUM];
+    logic [7:0] pe_bottom_b [SUBTILE_M][SUBTILE_N][LANE_NUM];
 
-    logic pe_getacc_i [SA_WIDTH][SA_WIDTH];
-    logic [PACC_IDX_WIDTH-1:0] pe_getacc_idx_i [SA_WIDTH][SA_WIDTH];
-    logic pe_getacc_o [SA_WIDTH][SA_WIDTH];
-    logic [31:0] pe_getacc_data_o [SA_WIDTH][SA_WIDTH];
+    logic pe_getacc_i [SUBTILE_M][SUBTILE_N];
+    logic [PACC_IDX_WIDTH-1:0] pe_getacc_idx_i [SUBTILE_M][SUBTILE_N];
+    logic pe_getacc_o [SUBTILE_M][SUBTILE_N];
+    logic [31:0] pe_getacc_data_o [SUBTILE_M][SUBTILE_N];
 
     logic getacc_active;
     logic [GETACC_GROUP_IDX_WIDTH-1:0] getacc_count;
@@ -491,8 +510,8 @@ module sa #(
     genvar pe_col;
     genvar pe_lane;
     generate
-        for (pe_row = 0; pe_row < SA_WIDTH; pe_row++) begin : gen_pe_row
-            for (pe_col = 0; pe_col < SA_WIDTH; pe_col++) begin : gen_pe_col
+        for (pe_row = 0; pe_row < SUBTILE_M; pe_row++) begin : gen_pe_row
+            for (pe_col = 0; pe_col < SUBTILE_N; pe_col++) begin : gen_pe_col
                 for (pe_lane = 0; pe_lane < LANE_NUM; pe_lane++) begin : gen_pe_input_lane
                     if (pe_col == 0) begin : gen_from_left_edge
                         assign pe_left_valid[pe_row][pe_col][pe_lane] =
@@ -575,26 +594,26 @@ module sa #(
     logic finish_pipe_valid [GEMM_FINISH_LATENCY];
     logic [GEMM_INSTID_WIDTH-1:0] finish_pipe_instid [GEMM_FINISH_LATENCY];
 
-    logic reduce_s1_valid [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
-    logic [31:0] reduce_s1_data [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
-    logic reduce_s1_valid_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
-    logic [31:0] reduce_s1_data_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH][2];
-    logic reduce_s1_any_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH];
-    logic [31:0] reduce_s1_or_comb [GETACC_ROWS_PER_CYCLE][SA_WIDTH];
+    logic reduce_s1_valid [GETACC_ROWS_PER_CYCLE][SUBTILE_N][2];
+    logic [31:0] reduce_s1_data [GETACC_ROWS_PER_CYCLE][SUBTILE_N][2];
+    logic reduce_s1_valid_comb [GETACC_ROWS_PER_CYCLE][SUBTILE_N][2];
+    logic [31:0] reduce_s1_data_comb [GETACC_ROWS_PER_CYCLE][SUBTILE_N][2];
+    logic reduce_s1_any_comb [GETACC_ROWS_PER_CYCLE][SUBTILE_N];
+    logic [31:0] reduce_s1_or_comb [GETACC_ROWS_PER_CYCLE][SUBTILE_N];
     logic reduce_s1_any_all_comb;
 
     always_comb begin
         reduce_s1_any_all_comb = 1'b0;
         for (int slot = 0; slot < GETACC_ROWS_PER_CYCLE; slot++) begin
-            for (int col = 0; col < SA_WIDTH; col++) begin
+            for (int col = 0; col < SUBTILE_N; col++) begin
                 for (int part = 0; part < 2; part++) begin
                     reduce_s1_valid_comb[slot][col][part] = 1'b0;
                     reduce_s1_data_comb[slot][col][part] = 32'd0;
                 end
 
-                for (int row = 0; row < SA_WIDTH; row++) begin
+                for (int row = 0; row < SUBTILE_M; row++) begin
                     int part;
-                    part = (row < ((SA_WIDTH + 1) / 2)) ? 0 : 1;
+                    part = (row < ((SUBTILE_M + 1) / 2)) ? 0 : 1;
                     if ((row % GETACC_ROWS_PER_CYCLE) == slot) begin
                         reduce_s1_valid_comb[slot][col][part] |=
                             pe_getacc_o[row][col];
@@ -650,12 +669,12 @@ module sa #(
             getacc_idx_q <= '0;
 
             for (int slot = 0; slot < GETACC_ROWS_PER_CYCLE; slot++) begin
-                for (int col = 0; col < SA_WIDTH; col++) begin
+                for (int col = 0; col < SUBTILE_N; col++) begin
                     for (int part = 0; part < 2; part++) begin
                         reduce_s1_valid[slot][col][part] <= 1'b0;
                         reduce_s1_data[slot][col][part] <= 32'd0;
                     end
-                    getacc_data[(slot*SA_WIDTH+col)*32 +: 32] <= 32'd0;
+                    getacc_data[(slot*SUBTILE_N+col)*32 +: 32] <= 32'd0;
                 end
             end
             getacc_data_valid <= 1'b0;
@@ -742,14 +761,14 @@ module sa #(
             end
 
             for (int slot = 0; slot < GETACC_ROWS_PER_CYCLE; slot++) begin
-                for (int col = 0; col < SA_WIDTH; col++) begin
+                for (int col = 0; col < SUBTILE_N; col++) begin
                     for (int part = 0; part < 2; part++) begin
                         reduce_s1_valid[slot][col][part] <=
                             reduce_s1_valid_comb[slot][col][part];
                         reduce_s1_data[slot][col][part] <=
                             reduce_s1_data_comb[slot][col][part];
                     end
-                    getacc_data[(slot*SA_WIDTH+col)*32 +: 32] <=
+                    getacc_data[(slot*SUBTILE_N+col)*32 +: 32] <=
                         reduce_s1_or_comb[slot][col];
                 end
             end

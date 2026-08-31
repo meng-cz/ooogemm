@@ -4,13 +4,14 @@
 // treats the batch dimension as B independent MxNxK GEMMs in batch order; it
 // does not merge tiles from different batches into one output block.  The
 // parser splits each batch instance into
-// tile-level uops for an SA_WIDTH x SA_WIDTH systolic array with a fixed
+// tile-level uops for an SUBTILE_M x SUBTILE_N systolic array with a fixed
 // SUBTILE_K reduction depth per GEMM uop.  Matrix layout and
 // padding are assumed to be handled by software; addresses are tile-linear:
 //   A tile(batch, m, k) address = a_base + batch * T_M * T_K + m * T_K + k
 //   B tile(batch, k, n) address = b_base + batch * T_K * T_N + k * T_N + n
 //   C tile(batch, m, n) address = c_base + batch * T_M * T_N + m * T_N + n
-// where T_M/T_N use ceil(M/N / SA_WIDTH), while T_K uses ceil(K / SUBTILE_K).
+// where T_M/T_N use ceil(M / SUBTILE_M) and ceil(N / SUBTILE_N), while T_K
+// uses ceil(K / SUBTILE_K).
 //
 // For each output block, the parser reserves a compact PACC rectangle:
 //   paccidx = local_m * block_n + local_n
@@ -25,6 +26,8 @@
 
 module dynamic_uopparse_core #(
     parameter int SA_WIDTH       = 4,
+    parameter int SUBTILE_M     = SA_WIDTH,
+    parameter int SUBTILE_N     = SA_WIDTH,
     parameter int SUBTILE_K      = 32,
     parameter int ABUF_SIZE      = 4,
     parameter int BBUF_SIZE      = 4,
@@ -34,7 +37,8 @@ module dynamic_uopparse_core #(
     parameter int ABUF_IDX_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
-    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int LOAD_ROWS_WIDTH = (((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) <= 1) ? 1 :
+        $clog2(((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) + 1),
     parameter int BLOCK_M_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE + 1),
     parameter int BLOCK_N_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE + 1),
     parameter int TILE_COUNT_WIDTH = DIM_WIDTH + 1
@@ -68,8 +72,11 @@ module dynamic_uopparse_core #(
     import uopparse_pkg::*;
 
     initial begin
-        if (SA_WIDTH <= 0) begin
-            $error("SA_WIDTH must be positive");
+        if (SUBTILE_M <= 0 || (SUBTILE_M & (SUBTILE_M - 1)) != 0) begin
+            $error("SUBTILE_M must be a positive power of two");
+        end
+        if (SUBTILE_N <= 0 || (SUBTILE_N & (SUBTILE_N - 1)) != 0) begin
+            $error("SUBTILE_N must be a positive power of two");
         end
         if (SUBTILE_K <= 0) begin
             $error("SUBTILE_K must be positive");
@@ -115,7 +122,11 @@ module dynamic_uopparse_core #(
     endfunction
 
     function automatic tile_count_t ceil_tiles(input logic [DIM_WIDTH-1:0] dim);
-        return ceil_tiles_by(dim, SA_WIDTH);
+        return ceil_tiles_by(dim, SUBTILE_M);
+    endfunction
+
+    function automatic tile_count_t ceil_n_tiles(input logic [DIM_WIDTH-1:0] dim);
+        return ceil_tiles_by(dim, SUBTILE_N);
     endfunction
 
     function automatic tile_count_t ceil_k_tiles(input logic [DIM_WIDTH-1:0] dim);
@@ -147,7 +158,8 @@ module dynamic_uopparse_core #(
 
     function automatic logic [LOAD_ROWS_WIDTH-1:0] tile_valid_rows(
         input logic [DIM_WIDTH-1:0] dim,
-        input tile_count_t          tile_idx
+        input tile_count_t          tile_idx,
+        input int                   tile_size
     );
         logic [TILE_COUNT_WIDTH:0] dim_ext;
         logic [TILE_COUNT_WIDTH:0] tile_start;
@@ -155,13 +167,13 @@ module dynamic_uopparse_core #(
         begin
             dim_ext = {{(TILE_COUNT_WIDTH + 1 - DIM_WIDTH){1'b0}}, dim};
             tile_start = (TILE_COUNT_WIDTH + 1)'(tile_idx) *
-                         (TILE_COUNT_WIDTH + 1)'(SA_WIDTH);
+                         (TILE_COUNT_WIDTH + 1)'(tile_size);
             if (dim_ext <= tile_start) begin
                 return '0;
             end
             rows_left = dim_ext - tile_start;
-            if (rows_left >= (TILE_COUNT_WIDTH + 1)'(SA_WIDTH)) begin
-                return LOAD_ROWS_WIDTH'(SA_WIDTH);
+            if (rows_left >= (TILE_COUNT_WIDTH + 1)'(tile_size)) begin
+                return LOAD_ROWS_WIDTH'(tile_size);
             end
             return LOAD_ROWS_WIDTH'(rows_left);
         end
@@ -218,7 +230,7 @@ module dynamic_uopparse_core #(
 
     always_comb begin
         cmd_tm_comb = ceil_tiles(cmd_m_i);
-        cmd_tn_comb = ceil_tiles(cmd_n_i);
+        cmd_tn_comb = ceil_n_tiles(cmd_n_i);
         cmd_tk_comb = ceil_k_tiles(cmd_k_i);
         command_has_tiles_comb =
             (cmd_batch_i != '0) &&
@@ -273,7 +285,8 @@ module dynamic_uopparse_core #(
                     ((block_m_base_q + load_idx_q) * tk_q) + k_tile_q
                 );
                 uop_abufidx_o = load_idx_q[ABUF_IDX_WIDTH-1:0];
-                uop_valid_rows_o = tile_valid_rows(m_dim_q, block_m_base_q + load_idx_q);
+                uop_valid_rows_o = tile_valid_rows(
+                    m_dim_q, block_m_base_q + load_idx_q, SUBTILE_M);
             end
 
             ST_LOAD_B: begin
@@ -284,7 +297,8 @@ module dynamic_uopparse_core #(
                     (k_tile_q * tn_q) + block_n_base_q + load_idx_q
                 );
                 uop_bbufidx_o = load_idx_q[BBUF_IDX_WIDTH-1:0];
-                uop_valid_rows_o = tile_valid_rows(n_dim_q, block_n_base_q + load_idx_q);
+                uop_valid_rows_o = tile_valid_rows(
+                    n_dim_q, block_n_base_q + load_idx_q, SUBTILE_N);
             end
 
             ST_GEMM: begin
@@ -452,6 +466,8 @@ endmodule
 // the independent logical namespaces consumed by dynamic_rename.
 module dynamic_uopparse #(
     parameter int SA_WIDTH        = 4,
+    parameter int SUBTILE_M      = SA_WIDTH,
+    parameter int SUBTILE_N      = SA_WIDTH,
     parameter int SUBTILE_K       = 32,
     parameter int ABUF_SIZE       = 4,
     parameter int BBUF_SIZE       = 4,
@@ -464,7 +480,8 @@ module dynamic_uopparse #(
     parameter int ABUF_IDX_WIDTH  = (ABUF_LOGIC_SIZE <= 1) ? 1 : $clog2(ABUF_LOGIC_SIZE),
     parameter int BBUF_IDX_WIDTH  = (BBUF_LOGIC_SIZE <= 1) ? 1 : $clog2(BBUF_LOGIC_SIZE),
     parameter int PACC_IDX_WIDTH  = (PACC_LOGIC_SIZE <= 1) ? 1 : $clog2(PACC_LOGIC_SIZE),
-    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int LOAD_ROWS_WIDTH = (((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) <= 1) ? 1 :
+        $clog2(((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) + 1),
     parameter int BLOCK_M_WIDTH   = (ABUF_LOGIC_SIZE <= 1) ? 1 : $clog2(ABUF_LOGIC_SIZE + 1),
     parameter int BLOCK_N_WIDTH   = (BBUF_LOGIC_SIZE <= 1) ? 1 : $clog2(BBUF_LOGIC_SIZE + 1),
     parameter int TILE_COUNT_WIDTH = DIM_WIDTH + 1
@@ -494,6 +511,10 @@ module dynamic_uopparse #(
 );
 
     initial begin
+        if (SUBTILE_M <= 0 || (SUBTILE_M & (SUBTILE_M - 1)) != 0 ||
+            SUBTILE_N <= 0 || (SUBTILE_N & (SUBTILE_N - 1)) != 0) begin
+            $error("SUBTILE_M and SUBTILE_N must be positive powers of two");
+        end
         if ((ABUF_LOGIC_SIZE <= 0) || (BBUF_LOGIC_SIZE <= 0) ||
             (PACC_LOGIC_SIZE <= 0)) begin
             $error("dynamic logical resource sizes must be positive");
@@ -502,6 +523,8 @@ module dynamic_uopparse #(
 
     dynamic_uopparse_core #(
         .SA_WIDTH(SA_WIDTH),
+        .SUBTILE_M(SUBTILE_M),
+        .SUBTILE_N(SUBTILE_N),
         .SUBTILE_K(SUBTILE_K),
         .ABUF_SIZE(ABUF_LOGIC_SIZE),
         .BBUF_SIZE(BBUF_LOGIC_SIZE),

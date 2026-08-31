@@ -2,6 +2,7 @@
 #include "verilated.h"
 
 #include <cfenv>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -19,8 +20,14 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 2
 #endif
+#ifndef SUBTILE_M_TEST
+#define SUBTILE_M_TEST SA_WIDTH_TEST
+#endif
+#ifndef SUBTILE_N_TEST
+#define SUBTILE_N_TEST SA_WIDTH_TEST
+#endif
 #ifndef SUBTILE_K_TEST
-#define SUBTILE_K_TEST 3
+#define SUBTILE_K_TEST 4
 #endif
 #ifndef LANE_NUM_TEST
 #define LANE_NUM_TEST 2
@@ -42,6 +49,8 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileM = SUBTILE_M_TEST;
+constexpr int kSubtileN = SUBTILE_N_TEST;
 constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kLaneNum = LANE_NUM_TEST;
 constexpr int kGetaccRowsPerCycle = GETACC_ROWS_PER_CYCLE_TEST;
@@ -52,6 +61,8 @@ constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 constexpr int kFdotAccFracBits = 18;
 
 static_assert(kSaWidth >= 2, "this testbench expects SA_WIDTH_TEST>=2");
+static_assert(kSubtileM >= 2, "this testbench expects SUBTILE_M_TEST>=2");
+static_assert(kSubtileN >= 2, "this testbench expects SUBTILE_N_TEST>=2");
 static_assert(kSubtileK >= 2, "this testbench expects SUBTILE_K_TEST>=2");
 
 struct DecodedFp8 {
@@ -68,13 +79,13 @@ struct Pseudo {
 };
 
 struct Matrix {
-    uint8_t a[kSaWidth][kSubtileK] = {};
-    uint8_t b[kSubtileK][kSaWidth] = {};
+    uint8_t a[kSubtileM][kSubtileK] = {};
+    uint8_t b[kSubtileK][kSubtileN] = {};
 };
 
 struct ExpectedRow {
     int row = 0;
-    uint32_t data[kSaWidth] = {};
+    uint32_t data[kSubtileN] = {};
     std::string name;
 };
 
@@ -310,17 +321,17 @@ Pseudo reference_cell(const Matrix& m, int row, int col) {
     return pseudo_from_fixed(sum, saw_nan);
 }
 
-uint32_t pack_row(const uint8_t row[kSubtileK]) {
-    uint32_t bits = 0;
+uint64_t pack_row64(const uint8_t row[kSubtileK]) {
+    uint64_t bits = 0;
     for (int i = 0; i < kSubtileK; ++i) {
-        bits |= static_cast<uint32_t>(row[i]) << (8 * i);
+        bits |= static_cast<uint64_t>(row[i]) << (8 * i);
     }
     return bits;
 }
 
 template <typename Port>
 void clear_packed_row(Port& port) {
-#if (SUBTILE_K_TEST * 8) <= 32
+#if (SUBTILE_K_TEST * 8) <= 64
     port = 0;
 #else
     for (int word = 0; word < ((SUBTILE_K_TEST * 8 + 31) / 32); ++word) {
@@ -331,8 +342,8 @@ void clear_packed_row(Port& port) {
 
 template <typename Port>
 void assign_packed_row(Port& port, const uint8_t row[kSubtileK]) {
-#if (SUBTILE_K_TEST * 8) <= 32
-    port = pack_row(row);
+#if (SUBTILE_K_TEST * 8) <= 64
+    port = pack_row64(row);
 #else
     for (int word = 0; word < ((SUBTILE_K_TEST * 8 + 31) / 32); ++word) {
         uint32_t bits = 0;
@@ -377,9 +388,9 @@ public:
     explicit SaTest(uint32_t seed)
         : seed_(seed),
           rng_(seed),
-          pacc_model_(kSaWidth,
+          pacc_model_(kSubtileM,
                       std::vector<std::vector<Pseudo>>(
-                          kSaWidth, std::vector<Pseudo>(kPaccNum))) {
+                          kSubtileN, std::vector<Pseudo>(kPaccNum))) {
         dut_.clk = 0;
         dut_.rst_n = 0;
         clear_inputs();
@@ -461,7 +472,9 @@ public:
             fail("test finished with pending GEMM finish ids");
         }
 
-        std::cout << "sa: passed, SA_WIDTH=" << kSaWidth
+        std::cout << "sa: passed, SUBTILE_M=" << kSubtileM
+                  << ", SUBTILE_N=" << kSubtileN
+                  << ", SUBTILE_K=" << kSubtileK
                   << ", LANE_NUM=" << kLaneNum
                   << ", seed=" << seed_ << "\n";
         return 0;
@@ -482,9 +495,11 @@ private:
         dut_.ain_laneidx = 0;
         dut_.bin_valid = 0;
         dut_.bin_laneidx = 0;
-        for (int i = 0; i < kSaWidth; ++i) {
-            clear_packed_row(dut_.ain_data[i]);
-            clear_packed_row(dut_.bin_data[i]);
+        for (int row = 0; row < kSubtileM; ++row) {
+            clear_packed_row(dut_.ain_data[row]);
+        }
+        for (int col = 0; col < kSubtileN; ++col) {
+            clear_packed_row(dut_.bin_data[col]);
         }
         dut_.gemm_valid = 0;
         dut_.gemm_instid = 0;
@@ -554,10 +569,10 @@ private:
         dut_.bin_valid = 1;
         dut_.bin_laneidx = static_cast<uint32_t>(lane);
 
-        for (int row = 0; row < kSaWidth; ++row) {
+        for (int row = 0; row < kSubtileM; ++row) {
             assign_packed_row(dut_.ain_data[row], m.a[row]);
         }
-        for (int col = 0; col < kSaWidth; ++col) {
+        for (int col = 0; col < kSubtileN; ++col) {
             uint8_t transposed_col[kSubtileK] = {};
             for (int k = 0; k < kSubtileK; ++k) {
                 transposed_col[k] = m.b[k][col];
@@ -573,7 +588,7 @@ private:
         clear_inputs();
         dut_.ain_valid = 1;
         dut_.ain_laneidx = static_cast<uint32_t>(lane);
-        for (int row = 0; row < kSaWidth; ++row) {
+        for (int row = 0; row < kSubtileM; ++row) {
             assign_packed_row(dut_.ain_data[row], m.a[row]);
         }
         tick();
@@ -583,7 +598,7 @@ private:
         clear_inputs();
         dut_.bin_valid = 1;
         dut_.bin_laneidx = static_cast<uint32_t>(lane);
-        for (int col = 0; col < kSaWidth; ++col) {
+        for (int col = 0; col < kSubtileN; ++col) {
             uint8_t transposed_col[kSubtileK] = {};
             for (int k = 0; k < kSubtileK; ++k) {
                 transposed_col[k] = m.b[k][col];
@@ -610,10 +625,10 @@ private:
         dut_.gemm_paccidx = static_cast<uint32_t>(paccidx);
         dut_.gemm_accum = accum ? 1 : 0;
 
-        for (int row = 0; row < kSaWidth; ++row) {
+        for (int row = 0; row < kSubtileM; ++row) {
             assign_packed_row(dut_.ain_data[row], m.a[row]);
         }
-        for (int col = 0; col < kSaWidth; ++col) {
+        for (int col = 0; col < kSubtileN; ++col) {
             uint8_t transposed_col[kSubtileK] = {};
             for (int k = 0; k < kSubtileK; ++k) {
                 transposed_col[k] = m.b[k][col];
@@ -641,13 +656,13 @@ private:
 
     Matrix deterministic_matrix(uint8_t base) {
         Matrix m{};
-        for (int row = 0; row < kSaWidth; ++row) {
+        for (int row = 0; row < kSubtileM; ++row) {
             for (int k = 0; k < kSubtileK; ++k) {
                 m.a[row][k] = static_cast<uint8_t>(base + ((row + k) & 0x3));
             }
         }
         for (int k = 0; k < kSubtileK; ++k) {
-            for (int col = 0; col < kSaWidth; ++col) {
+            for (int col = 0; col < kSubtileN; ++col) {
                 m.b[k][col] = static_cast<uint8_t>(0x30 + (((k * 2) + col) & 0x7));
             }
         }
@@ -709,7 +724,7 @@ private:
     }
 
     void continuous_allocator_order_test() {
-        if (kSaWidth != 4 || kSubtileK != 4 || kLaneNum != 4) {
+        if (kSubtileM != 4 || kSubtileN != 4 || kSubtileK != 4 || kLaneNum != 4) {
             return;
         }
 
@@ -804,8 +819,8 @@ private:
     }
 
     void update_model(const Matrix& m, int paccidx, bool accum) {
-        for (int row = 0; row < kSaWidth; ++row) {
-            for (int col = 0; col < kSaWidth; ++col) {
+        for (int row = 0; row < kSubtileM; ++row) {
+            for (int col = 0; col < kSubtileN; ++col) {
                 const Pseudo cell = reference_cell(m, row, col);
                 pacc_model_[row][col][paccidx] =
                     add_pseudo(pacc_model_[row][col][paccidx], cell, accum);
@@ -817,7 +832,7 @@ private:
         Matrix m{};
         std::uniform_int_distribution<int> zero_dist(0, 9);
         std::uniform_int_distribution<int> nan_dist(0, 79);
-        for (int row = 0; row < kSaWidth; ++row) {
+        for (int row = 0; row < kSubtileM; ++row) {
             for (int k = 0; k < kSubtileK; ++k) {
                 m.a[row][k] = (zero_dist(rng_) == 0) ? 0 : random_finite_e4m3(rng_);
                 if (nan_dist(rng_) == 0) {
@@ -826,7 +841,7 @@ private:
             }
         }
         for (int k = 0; k < kSubtileK; ++k) {
-            for (int col = 0; col < kSaWidth; ++col) {
+            for (int col = 0; col < kSubtileN; ++col) {
                 m.b[k][col] = (zero_dist(rng_) == 0) ? 0 : random_finite_e4m3(rng_);
             }
         }
@@ -844,7 +859,7 @@ private:
     }
 
     void drain_pending_outputs() {
-        const int max_cycles = 20 * kSaWidth + 1000;
+        const int max_cycles = 20 * std::max(kSubtileM, kSubtileN) + 1000;
         for (int i = 0; i < max_cycles; ++i) {
             if (expected_rows_.empty() && pending_finish_.empty()) {
                 return;
@@ -859,8 +874,10 @@ private:
         std::uniform_int_distribution<int> order_dist(0, 2);
         std::bernoulli_distribution accum_dist(0.55);
 
-        const int target_gemms = (kSaWidth >= 4 || kLaneNum >= 4) ? 48 : 24;
-        const int check_period = (kSaWidth >= 4 || kLaneNum >= 4) ? 12 : 8;
+        const int target_gemms =
+            (kSubtileM >= 4 || kSubtileN >= 4 || kLaneNum >= 4) ? 48 : 24;
+        const int check_period =
+            (kSubtileM >= 4 || kSubtileN >= 4 || kLaneNum >= 4) ? 12 : 8;
 
         for (int i = 0; i < target_gemms; ++i) {
             const Matrix m = random_matrix();
@@ -933,11 +950,11 @@ private:
     }
 
     void getacc_and_expect(int paccidx, const std::string& name) {
-        for (int row = 0; row < kSaWidth; ++row) {
+        for (int row = 0; row < kSubtileM; ++row) {
             ExpectedRow exp;
             exp.row = row;
             exp.name = name;
-            for (int col = 0; col < kSaWidth; ++col) {
+            for (int col = 0; col < kSubtileN; ++col) {
                 exp.data[col] = pseudo_to_fp32_bits(pacc_model_[row][col][paccidx]);
             }
             expected_rows_.push_back(exp);
@@ -987,7 +1004,7 @@ private:
             const ExpectedRow exp = expected_rows_.front();
             expected_rows_.pop_front();
 
-            for (int col = 0; col < kSaWidth; ++col) {
+            for (int col = 0; col < kSubtileN; ++col) {
                 const uint32_t got = getacc_word(slot, col);
                 if (got != exp.data[col]) {
                     std::ostringstream os;
@@ -1002,8 +1019,8 @@ private:
     }
 
     uint32_t getacc_word(int slot, int col) const {
-        const int word = slot * kSaWidth + col;
-#if (SA_WIDTH_TEST * GETACC_ROWS_PER_CYCLE_TEST) <= 2
+        const int word = slot * kSubtileN + col;
+#if (SUBTILE_N_TEST * GETACC_ROWS_PER_CYCLE_TEST) <= 2
         const uint64_t packed = static_cast<uint64_t>(dut_.getacc_data);
         return static_cast<uint32_t>((packed >> (32 * word)) & 0xffff'ffffull);
 #else

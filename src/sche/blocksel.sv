@@ -15,6 +15,8 @@
 
 module blocksel #(
     parameter int SA_WIDTH         = 32,
+    parameter int SUBTILE_M        = SA_WIDTH,
+    parameter int SUBTILE_N        = SA_WIDTH,
     parameter int LOGIC_ABUF_SIZE  = 12,
     parameter int LOGIC_BBUF_SIZE  = 12,
     parameter int LOGIC_ACC_NUM    = 16,
@@ -88,14 +90,25 @@ module blocksel #(
     cost_t best_area_next;
     logic scan_last;
 
-    function automatic tile_count_t ceil_tiles(
+    function automatic tile_count_t ceil_m_tiles(
         input logic [DIM_WIDTH-1:0] value
     );
         logic [TILE_COUNT_WIDTH:0] extended;
         begin
-            extended = tile_count_t'(value) + tile_count_t'(SA_WIDTH - 1);
+            extended = tile_count_t'(value) + tile_count_t'(SUBTILE_M - 1);
             return tile_count_t'(extended /
-                                 (TILE_COUNT_WIDTH + 1)'(SA_WIDTH));
+                                 (TILE_COUNT_WIDTH + 1)'(SUBTILE_M));
+        end
+    endfunction
+
+    function automatic tile_count_t ceil_n_tiles(
+        input logic [DIM_WIDTH-1:0] value
+    );
+        logic [TILE_COUNT_WIDTH:0] extended;
+        begin
+            extended = tile_count_t'(value) + tile_count_t'(SUBTILE_N - 1);
+            return tile_count_t'(extended /
+                                 (TILE_COUNT_WIDTH + 1)'(SUBTILE_N));
         end
     endfunction
 
@@ -191,7 +204,7 @@ module blocksel #(
                 candidate_balance = (candidate_bm >= candidate_bn) ?
                     (cost_t'(candidate_bm) - cost_t'(candidate_bn)) :
                     (cost_t'(candidate_bn) - cost_t'(candidate_bm));
-                best_balance = (best_bm_next >= best_bn_next) ?
+                best_balance = (cost_t'(best_bm_next) >= cost_t'(best_bn_next)) ?
                     (cost_t'(best_bm_next) - cost_t'(best_bn_next)) :
                     (cost_t'(best_bn_next) - cost_t'(best_bm_next));
 
@@ -259,10 +272,10 @@ module blocksel #(
                         cmd_n_q <= cmd_n_i;
                         cmd_k_q <= cmd_k_i;
                         cmd_batch_q <= cmd_batch_i;
-                        tm_q <= ceil_tiles(cmd_m_i);
-                        tn_q <= ceil_tiles(cmd_n_i);
-                        amax_q <= min_tile_count(ceil_tiles(cmd_m_i), LOGIC_ABUF_SIZE);
-                        bmax_q <= min_tile_count(ceil_tiles(cmd_n_i), LOGIC_BBUF_SIZE);
+                        tm_q <= ceil_m_tiles(cmd_m_i);
+                        tn_q <= ceil_n_tiles(cmd_n_i);
+                        amax_q <= min_tile_count(ceil_m_tiles(cmd_m_i), LOGIC_ABUF_SIZE);
+                        bmax_q <= min_tile_count(ceil_n_tiles(cmd_n_i), LOGIC_BBUF_SIZE);
                         scan_bm_q <= tile_count_t'(1);
                         best_bm_q <= BLOCK_M_WIDTH'(1);
                         best_bn_q <= BLOCK_N_WIDTH'(1);
@@ -296,8 +309,9 @@ module blocksel #(
     end
 
     initial begin
-        if (SA_WIDTH <= 0) begin
-            $error("SA_WIDTH must be positive");
+        if (SUBTILE_M <= 0 || (SUBTILE_M & (SUBTILE_M - 1)) != 0 ||
+            SUBTILE_N <= 0 || (SUBTILE_N & (SUBTILE_N - 1)) != 0) begin
+            $error("SUBTILE_M and SUBTILE_N must be positive powers of two");
         end
         if ((LOGIC_ABUF_SIZE <= 0) || (LOGIC_BBUF_SIZE <= 0) ||
             (LOGIC_ACC_NUM <= 0)) begin

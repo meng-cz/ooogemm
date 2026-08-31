@@ -23,6 +23,12 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 2
 #endif
+#ifndef SUBTILE_M_TEST
+#define SUBTILE_M_TEST SA_WIDTH_TEST
+#endif
+#ifndef SUBTILE_N_TEST
+#define SUBTILE_N_TEST SA_WIDTH_TEST
+#endif
 #ifndef SUBTILE_K_TEST
 #define SUBTILE_K_TEST 2
 #endif
@@ -55,6 +61,9 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileM = SUBTILE_M_TEST;
+constexpr int kSubtileN = SUBTILE_N_TEST;
+constexpr int kMaxSubtileRows = (kSubtileM > kSubtileN) ? kSubtileM : kSubtileN;
 constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kLaneNum = LANE_NUM_TEST;
 constexpr int kABufSize = ABUF_SIZE_TEST;
@@ -63,9 +72,9 @@ constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
 constexpr int kStoreRowsPerCycle = STORE_ROWS_PER_CYCLE_TEST;
-constexpr int kStoreGroupsPerTile = kSaWidth / kStoreRowsPerCycle;
+constexpr int kStoreGroupsPerTile = kSubtileM / kStoreRowsPerCycle;
 constexpr int kStoreDataWords =
-    (kSaWidth * kStoreRowsPerCycle * 32 + 31) / 32;
+    (kSubtileN * kStoreRowsPerCycle * 32 + 31) / 32;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 constexpr int kLoadRowBits = kSubtileK * 8;
 constexpr int kLoadRowWords = (kLoadRowBits + 31) / 32;
@@ -75,8 +84,8 @@ constexpr bool kLoadWide = kLoadDataBits >= kLoadRowBits;
 constexpr int kRowsPerLoadBeat = kLoadWide ? (kLoadDataBits / kLoadRowBits) : 1;
 constexpr int kLoadBeatsPerRow = kLoadWide ? 1 : (kLoadRowBits / kLoadDataBits);
 constexpr int kLoadTileBeats = kLoadWide ?
-    ((kSaWidth + kRowsPerLoadBeat - 1) / kRowsPerLoadBeat) :
-    (kSaWidth * kLoadBeatsPerRow);
+    ((kMaxSubtileRows + kRowsPerLoadBeat - 1) / kRowsPerLoadBeat) :
+    (kMaxSubtileRows * kLoadBeatsPerRow);
 constexpr bool kBigTest = TOP_STATIC_BIG_TEST != 0;
 
 constexpr int choose_parser_block_m(int abuf_group_size, int bbuf_group_size, int pacc_num) {
@@ -143,8 +152,8 @@ static_assert(kLaneNum >= 1, "top_dynamic testbench expects at least one lane");
 static_assert(kABufSize >= 4 && kBBufSize >= 4, "operand buffers must have ping-pong halves");
 static_assert(kPaccNum >= 4, "top_dynamic testbench expects at least four PACC registers");
 static_assert(kStoreRowsPerCycle >= 1 &&
-              (kSaWidth % kStoreRowsPerCycle) == 0,
-              "SA_WIDTH_TEST must be divisible by STORE_ROWS_PER_CYCLE_TEST");
+              (kSubtileM % kStoreRowsPerCycle) == 0,
+              "SUBTILE_M_TEST must be divisible by STORE_ROWS_PER_CYCLE_TEST");
 static_assert(kLoadRowWords >= 1, "load row must have at least one word");
 static_assert((kSubtileK & (kSubtileK - 1)) == 0,
               "SUBTILE_K_TEST must be a power of two");
@@ -415,7 +424,11 @@ void copy_row_bits_to_beat(const RowData& src,
 }
 
 int ceil_tiles(int dim) {
-    return (dim + kSaWidth - 1) / kSaWidth;
+    return (dim + kSubtileM - 1) / kSubtileM;
+}
+
+int ceil_n_tiles(int dim) {
+    return (dim + kSubtileN - 1) / kSubtileN;
 }
 
 int ceil_k_tiles(int dim) {
@@ -427,8 +440,8 @@ Pseudo reference_tile_cell(const Cmd& cmd, int tile_m, int tile_n, int tile_k,
     bool saw_nan = false;
     long double sum = 0.0L;
     for (int kk = 0; kk < kSubtileK; ++kk) {
-        const int global_m = tile_m * kSaWidth + local_m;
-        const int global_n = tile_n * kSaWidth + local_n;
+        const int global_m = tile_m * kSubtileM + local_m;
+        const int global_n = tile_n * kSubtileN + local_n;
         const int global_k = tile_k * kSubtileK + kk;
         const uint8_t a = get_elem(cmd.a, cmd.m, cmd.k, global_m, global_k);
         const uint8_t b = get_elem(cmd.b, cmd.k, cmd.n, global_k, global_n);
@@ -507,9 +520,9 @@ private:
 
     StoreBeatData read_store_data() const {
         StoreBeatData data;
-#if (SA_WIDTH_TEST * STORE_ROWS_PER_CYCLE_TEST * 32) <= 32
+#if (SUBTILE_N_TEST * STORE_ROWS_PER_CYCLE_TEST * 32) <= 32
         data.words[0] = dut_.store_mem_wr_data_o;
-#elif (SA_WIDTH_TEST * STORE_ROWS_PER_CYCLE_TEST * 32) <= 64
+#elif (SUBTILE_N_TEST * STORE_ROWS_PER_CYCLE_TEST * 32) <= 64
         data.words[0] = static_cast<uint32_t>(dut_.store_mem_wr_data_o);
         data.words[1] = static_cast<uint32_t>(dut_.store_mem_wr_data_o >> 32);
 #else
@@ -637,7 +650,7 @@ private:
     void push_pattern_cmd(const std::string& name, int m, int n, int k, uint32_t salt) {
         if (kBigTest && (m > 0) && (n > 0) && (k > 0)) {
             const int tm = ceil_tiles(m);
-            const int tn = ceil_tiles(n);
+            const int tn = ceil_n_tiles(n);
             const int mb = (tm + kParserBlockM - 1) / kParserBlockM;
             const int nb = (tn + kParserBlockN - 1) / kParserBlockN;
             if ((name.find("multi_block") != std::string::npos) && (mb * nb < 4)) {
@@ -664,11 +677,11 @@ private:
         push_pattern_cmd("det_cross_33x33x33", 33, 33, kSubtileK + 1, 0x1005u);
         push_pattern_cmd("det_rect_65x7x64", 65, 7, 2 * kSubtileK, 0x1006u);
         const int multi_square_dim =
-            std::max(161, kSaWidth * kParserBlockM + 1);
+            std::max(161, kSubtileM * kParserBlockM + 1);
         const int multi_rect_m =
-            std::max(257, kSaWidth * (kParserBlockM + 1) + 1);
+            std::max(257, kSubtileM * (kParserBlockM + 1) + 1);
         const int multi_rect_n =
-            std::max(193, kSaWidth * kParserBlockN + 1);
+            std::max(193, kSubtileN * kParserBlockN + 1);
         push_pattern_cmd("det_multi_block_square", multi_square_dim, multi_square_dim,
                          3 * kSubtileK + 1, 0x1007u);
         push_pattern_cmd("det_multi_block_rect", multi_rect_m, multi_rect_n,
@@ -717,26 +730,27 @@ private:
 
     void add_load_rows(const Cmd& cmd) {
         const int tm = ceil_tiles(cmd.m);
-        const int tn = ceil_tiles(cmd.n);
+        const int tn = ceil_n_tiles(cmd.n);
         const int tk = ceil_k_tiles(cmd.k);
 
         for (int tile_m = 0; tile_m < tm; ++tile_m) {
             for (int tile_k = 0; tile_k < tk; ++tile_k) {
                 const uint32_t tile_addr =
                     cmd.a_base + static_cast<uint32_t>(tile_m * tk + tile_k);
-                std::array<RowData, kSaWidth> rows{};
-                for (int row = 0; row < kSaWidth; ++row) {
+                std::array<RowData, kMaxSubtileRows> rows{};
+                for (int row = 0; row < kSubtileM; ++row) {
                     uint8_t packed_row[kSubtileK] = {};
                     for (int kk = 0; kk < kSubtileK; ++kk) {
                         packed_row[kk] = get_elem(
                             cmd.a, cmd.m, cmd.k,
-                            tile_m * kSaWidth + row,
+                            tile_m * kSubtileM + row,
                             tile_k * kSubtileK + kk
                         );
                     }
                     rows[static_cast<size_t>(row)] = pack_row(packed_row);
                 }
-                add_tile_load_beats(tile_addr, rows, valid_tile_rows(cmd.m, tile_m));
+                add_tile_load_beats(tile_addr, rows,
+                                    valid_tile_rows(cmd.m, tile_m, kSubtileM));
             }
         }
 
@@ -744,14 +758,14 @@ private:
             for (int tile_n = 0; tile_n < tn; ++tile_n) {
                 const uint32_t tile_addr =
                     cmd.b_base + static_cast<uint32_t>(tile_k * tn + tile_n);
-                std::array<RowData, kSaWidth> rows{};
-                for (int col = 0; col < kSaWidth; ++col) {
+                std::array<RowData, kMaxSubtileRows> rows{};
+                for (int col = 0; col < kSubtileN; ++col) {
                     uint8_t packed_col[kSubtileK] = {};
                     for (int kk = 0; kk < kSubtileK; ++kk) {
                         packed_col[kk] = get_elem(
                             cmd.b, cmd.k, cmd.n,
                             tile_k * kSubtileK + kk,
-                            tile_n * kSaWidth + col
+                            tile_n * kSubtileN + col
                         );
                     }
                     // The test builds the external-memory image for B as the
@@ -759,13 +773,14 @@ private:
                     // row directly into BBuf bank col without another reorder.
                     rows[static_cast<size_t>(col)] = pack_row(packed_col);
                 }
-                add_tile_load_beats(tile_addr, rows, valid_tile_rows(cmd.n, tile_n));
+                add_tile_load_beats(tile_addr, rows,
+                                    valid_tile_rows(cmd.n, tile_n, kSubtileN));
             }
         }
     }
 
     void add_tile_load_beats(uint32_t tile_addr,
-                             const std::array<RowData, kSaWidth>& rows,
+                             const std::array<RowData, kMaxSubtileRows>& rows,
                              int valid_rows) {
         const int req_count = load_req_count_for_rows(valid_rows);
         for (int req = 0; req < req_count; ++req) {
@@ -799,17 +814,17 @@ private:
         }
     }
 
-    int valid_tile_rows(int dim, int tile_idx) const {
-        const int start = tile_idx * kSaWidth;
+    int valid_tile_rows(int dim, int tile_idx, int tile_size) const {
+        const int start = tile_idx * tile_size;
         if (dim <= start) {
             return 0;
         }
-        return std::min(kSaWidth, dim - start);
+        return std::min(tile_size, dim - start);
     }
 
     uint64_t expected_load_requests(const Cmd& cmd) const {
         const int tm = ceil_tiles(cmd.m);
-        const int tn = ceil_tiles(cmd.n);
+        const int tn = ceil_n_tiles(cmd.n);
         const int tk = ceil_k_tiles(cmd.k);
         const int batch = cmd.batch == 0 ? 0 : cmd.batch;
         uint64_t count = 0;
@@ -832,10 +847,10 @@ private:
                         const int tile_m = in_batch / tn;
                         const int tile_n = in_batch % tn;
                         count += static_cast<uint64_t>(
-                            load_req_count_for_rows(valid_tile_rows(cmd.m, tile_m))
+                            load_req_count_for_rows(valid_tile_rows(cmd.m, tile_m, kSubtileM))
                         );
                         count += static_cast<uint64_t>(
-                            load_req_count_for_rows(valid_tile_rows(cmd.n, tile_n))
+                            load_req_count_for_rows(valid_tile_rows(cmd.n, tile_n, kSubtileN))
                         );
                     }
                 }
@@ -854,14 +869,14 @@ private:
                         for (int local_m = 0; local_m < block_m; ++local_m) {
                             count += static_cast<uint64_t>(
                                 load_req_count_for_rows(
-                                    valid_tile_rows(cmd.m, block_m_base + local_m)
+                                    valid_tile_rows(cmd.m, block_m_base + local_m, kSubtileM)
                                 )
                             );
                         }
                         for (int local_n = 0; local_n < block_n; ++local_n) {
                             count += static_cast<uint64_t>(
                                 load_req_count_for_rows(
-                                    valid_tile_rows(cmd.n, block_n_base + local_n)
+                                    valid_tile_rows(cmd.n, block_n_base + local_n, kSubtileN)
                                 )
                             );
                         }
@@ -881,15 +896,15 @@ private:
 
     void add_expected_writes(const Cmd& cmd) {
         const int tm = ceil_tiles(cmd.m);
-        const int tn = ceil_tiles(cmd.n);
+        const int tn = ceil_n_tiles(cmd.n);
         const int tk = ceil_k_tiles(cmd.k);
 
         for (int tile_m = 0; tile_m < tm; ++tile_m) {
             for (int tile_n = 0; tile_n < tn; ++tile_n) {
-                Pseudo pacc[kSaWidth][kSaWidth] = {};
+                Pseudo pacc[kSubtileM][kSubtileN] = {};
                 for (int tile_k = 0; tile_k < tk; ++tile_k) {
-                    for (int row = 0; row < kSaWidth; ++row) {
-                        for (int col = 0; col < kSaWidth; ++col) {
+                    for (int row = 0; row < kSubtileM; ++row) {
+                        for (int col = 0; col < kSubtileN; ++col) {
                             const Pseudo partial =
                                 reference_tile_cell(cmd, tile_m, tile_n, tile_k, row, col);
                             pacc[row][col] = add_pseudo(pacc[row][col], partial, tile_k != 0);
@@ -903,8 +918,8 @@ private:
                     StoreBeatData beat;
                     for (int slot = 0; slot < kStoreRowsPerCycle; ++slot) {
                         const int row = group * kStoreRowsPerCycle + slot;
-                        for (int col = 0; col < kSaWidth; ++col) {
-                            beat.words[static_cast<size_t>(slot * kSaWidth + col)] =
+                        for (int col = 0; col < kSubtileN; ++col) {
+                            beat.words[static_cast<size_t>(slot * kSubtileN + col)] =
                                 pseudo_to_fp32_bits(pacc[row][col]);
                         }
                     }

@@ -24,6 +24,8 @@
 
 module new_static_uopparse #(
     parameter int SA_WIDTH = 32,
+    parameter int SUBTILE_M = SA_WIDTH,
+    parameter int SUBTILE_N = SA_WIDTH,
     parameter int SUBTILE_K = 32,
     parameter int ABUF_SIZE = 16,
     parameter int BBUF_SIZE = 16,
@@ -33,7 +35,8 @@ module new_static_uopparse #(
     parameter int ABUF_IDX_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
-    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int LOAD_ROWS_WIDTH = (((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) <= 1) ? 1 :
+        $clog2(((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) + 1),
     parameter int BLOCK_M_WIDTH = ((ABUF_SIZE / 2) <= 1) ? 1 : $clog2((ABUF_SIZE / 2) + 1),
     parameter int BLOCK_N_WIDTH = ((BBUF_SIZE / 2) <= 1) ? 1 : $clog2((BBUF_SIZE / 2) + 1),
     parameter int COUNT_WIDTH = 16
@@ -169,12 +172,12 @@ module new_static_uopparse #(
     endfunction
 
     function automatic logic [LOAD_ROWS_WIDTH-1:0] valid_rows(
-        input count_t tile, input logic [DIM_WIDTH-1:0] dim);
+        input count_t tile, input logic [DIM_WIDTH-1:0] dim, input int tile_size);
         count_t left;
         begin
-            if (count_t'(dim) <= tile * count_t'(SA_WIDTH)) return '0;
-            left = count_t'(dim) - tile * count_t'(SA_WIDTH);
-            if (left > count_t'(SA_WIDTH)) return LOAD_ROWS_WIDTH'(SA_WIDTH);
+            if (count_t'(dim) <= tile * count_t'(tile_size)) return '0;
+            left = count_t'(dim) - tile * count_t'(tile_size);
+            if (left > count_t'(tile_size)) return LOAD_ROWS_WIDTH'(tile_size);
             return LOAD_ROWS_WIDTH'(left);
         end
     endfunction
@@ -206,7 +209,8 @@ module new_static_uopparse #(
     wire kwave_advance = wave_group_swap_ready && wave_is_final &&
         output_issue_done_q && (output_count_q == 0);
     wire boundary_group_swap_ready = (state_q == OUTPUT_PRELOAD) &&
-        next_exists_q && gemm_sent_q && ((tk_q <= 1) || load_ready_q);
+        next_exists_q && gemm_sent_q && ((tk_q <= 1) || load_ready_q) &&
+        output_issue_done_q && (output_count_q == 0);
 
     // Next-block descriptor calculation.  The parser walks N blocks first,
     // then M blocks, then batches; merge mode walks a flat batch-tile list.
@@ -251,12 +255,15 @@ module new_static_uopparse #(
     end
 
     logic load_from_next_comb, load_next_exists_comb;
+    logic load_next_block_wave0_comb;
     count_t load_bm_comb, load_bn_comb, load_batch_comb;
     count_t load_mbase_comb, load_nbase_comb, load_merge_base_comb, load_merge_count_comb;
     logic load_group_comb;
     always_comb begin
         load_from_next_comb = (state_q == OUTPUT_PRELOAD) ||
             ((state_q == WAVE) && (gemm_wave_q + 1 >= tk_q));
+        load_next_block_wave0_comb = (state_q == WAVE) &&
+            (gemm_wave_q + 1 >= tk_q);
         load_next_exists_comb = (state_q == OUTPUT_PRELOAD) ?
             next_exists_q : next_exists_comb;
         if (state_q == OUTPUT_PRELOAD) begin
@@ -301,13 +308,20 @@ module new_static_uopparse #(
         gemm_merge_count_comb = gemm_from_next_comb ? next_merge_count_q : merge_count_q;
         gemm_base_group_comb = gemm_from_next_comb ? next_load_base_group_q :
                                                      load_base_group_q;
-        gemm_acc_group_comb = gemm_from_next_comb ? next_acc_group_q : acc_group_q;
+        // Any GEMM issued in OUTPUT_PRELOAD belongs to the next block and
+        // must use the PACC half opposite the tile currently being output.
+        gemm_acc_group_comb = (state_q == OUTPUT_PRELOAD) ?
+            ~output_acc_group_q : acc_group_q;
     end
 
     always_comb begin
         load_valid_o = 1'b0;
         load_is_b_o = 1'b0;
-        load_group_o = load_group_comb ^ load_wave_q[0];
+        // The final GEMM wave preloads the next block's wave 0.  In that
+        // special case the address and parity must use wave zero explicitly;
+        // OUTPUT_PRELOAD resumes the normal parity walk at wave one.
+        load_group_o = load_next_block_wave0_comb ? load_group_comb :
+            (load_group_comb ^ load_wave_q[0]);
         load_addr_o = '0;
         load_abufidx_o = '0;
         load_bbufidx_o = '0;
@@ -340,10 +354,11 @@ module new_static_uopparse #(
                         addr_count(flat_batch(load_merge_base_comb + load_a_q)) *
                         addr_count(tm_q) * addr_count(tk_q) +
                         addr_count(flat_m(load_merge_base_comb + load_a_q)) *
-                        addr_count(tk_q) + addr_count(load_wave_q);
+                        addr_count(tk_q) +
+                        addr_count(load_next_block_wave0_comb ? 0 : load_wave_q);
                     load_abufidx_o = abuf_slot(load_group_o, load_a_q);
                     load_valid_rows_o = valid_rows(
-                        flat_m(load_merge_base_comb + load_a_q), m_q);
+                        flat_m(load_merge_base_comb + load_a_q), m_q, SUBTILE_M);
                 end else begin
                     load_addr_o = a_base_q +
                         addr_count(load_batch_comb) * addr_count(tm_q) *
@@ -351,7 +366,8 @@ module new_static_uopparse #(
                         (addr_count(load_mbase_comb) + addr_count(load_a_q)) *
                         addr_count(tk_q) + addr_count(load_wave_q);
                     load_abufidx_o = abuf_slot(load_group_o, load_a_q);
-                    load_valid_rows_o = valid_rows(load_mbase_comb + load_a_q, m_q);
+                    load_valid_rows_o = valid_rows(
+                        load_mbase_comb + load_a_q, m_q, SUBTILE_M);
                 end
             end else if (load_b_q < (load_from_next_comb ?
                                      (merge_mode_q ? load_merge_count_comb : load_bn_comb) :
@@ -362,19 +378,22 @@ module new_static_uopparse #(
                     load_addr_o = b_base_q +
                         addr_count(flat_batch(load_merge_base_comb + load_b_q)) *
                         addr_count(tk_q) * addr_count(tn_q) +
-                        addr_count(load_wave_q) * addr_count(tn_q) +
+                        addr_count(load_next_block_wave0_comb ? 0 : load_wave_q) *
+                        addr_count(tn_q) +
                         addr_count(flat_n(load_merge_base_comb + load_b_q));
                     load_bbufidx_o = bbuf_slot(load_group_o, load_b_q);
                     load_valid_rows_o = valid_rows(
-                        flat_n(load_merge_base_comb + load_b_q), n_q);
+                        flat_n(load_merge_base_comb + load_b_q), n_q, SUBTILE_N);
                 end else begin
                     load_addr_o = b_base_q +
                         addr_count(load_batch_comb) * addr_count(tk_q) *
                         addr_count(tn_q) +
-                        addr_count(load_wave_q) * addr_count(tn_q) +
+                        addr_count(load_next_block_wave0_comb ? 0 : load_wave_q) *
+                        addr_count(tn_q) +
                         addr_count(load_nbase_comb) + addr_count(load_b_q);
                     load_bbufidx_o = bbuf_slot(load_group_o, load_b_q);
-                    load_valid_rows_o = valid_rows(load_nbase_comb + load_b_q, n_q);
+                    load_valid_rows_o = valid_rows(
+                        load_nbase_comb + load_b_q, n_q, SUBTILE_N);
                 end
             end
         end
@@ -390,7 +409,8 @@ module new_static_uopparse #(
                 merge_mode_q ? gemm_m_q : gemm_m_q * gemm_bn_comb + gemm_n_q);
         end
 
-        if (!output_issue_done_q && (gemm_count_q[0] == 0) &&
+        if ((state_q == OUTPUT_PRELOAD) && !output_issue_done_q &&
+            (gemm_count_q[0] == 0) &&
             (merge_mode_q ? (output_m_q < output_merge_count_q) :
              (output_m_q < output_bm_q && output_n_q < output_bn_q))) begin
             output_valid_o = 1'b1;
@@ -462,25 +482,25 @@ module new_static_uopparse #(
             if (state_q == IDLE && cmd_valid_i && cmd_ready_o) begin
                 a_base_q <= cmd_a_base_i; b_base_q <= cmd_b_base_i; c_base_q <= cmd_c_base_i;
                 m_q <= cmd_m_i; n_q <= cmd_n_i; k_q <= cmd_k_i; batch_q <= cmd_batch_i;
-                tm_q <= ceil_div(cmd_m_i, SA_WIDTH);
-                tn_q <= ceil_div(cmd_n_i, SA_WIDTH);
+                tm_q <= ceil_div(cmd_m_i, SUBTILE_M);
+                tn_q <= ceil_div(cmd_n_i, SUBTILE_N);
                 tk_q <= ceil_div(cmd_k_i, SUBTILE_K);
                 // The selector's block is a resource upper bound; clip edge
                 // blocks to the actual tile shape before emitting any uops.
-                bm_q <= min_count(ceil_div(cmd_m_i, SA_WIDTH),
+                bm_q <= min_count(ceil_div(cmd_m_i, SUBTILE_M),
                                   count_t'(block_m_i));
-                bn_q <= min_count(ceil_div(cmd_n_i, SA_WIDTH),
+                bn_q <= min_count(ceil_div(cmd_n_i, SUBTILE_N),
                                   count_t'(block_n_i));
-                bm_limit_q <= min_count(ceil_div(cmd_m_i, SA_WIDTH),
+                bm_limit_q <= min_count(ceil_div(cmd_m_i, SUBTILE_M),
                                         count_t'(block_m_i));
-                bn_limit_q <= min_count(ceil_div(cmd_n_i, SA_WIDTH),
+                bn_limit_q <= min_count(ceil_div(cmd_n_i, SUBTILE_N),
                                         count_t'(block_n_i));
                 batch_idx_q <= 0; block_m_base_q <= 0; block_n_base_q <= 0;
-                merge_mode_q <= ceil_div(cmd_m_i, SA_WIDTH) *
-                                ceil_div(cmd_n_i, SA_WIDTH) < count_t'(MERGE_CAP);
+                merge_mode_q <= ceil_div(cmd_m_i, SUBTILE_M) *
+                                ceil_div(cmd_n_i, SUBTILE_N) < count_t'(MERGE_CAP);
                 merge_base_q <= 0;
                 merge_count_q <= min_count(count_t'(cmd_batch_i) *
-                    ceil_div(cmd_m_i, SA_WIDTH) * ceil_div(cmd_n_i, SA_WIDTH),
+                    ceil_div(cmd_m_i, SUBTILE_M) * ceil_div(cmd_n_i, SUBTILE_N),
                     count_t'(MERGE_CAP));
                 load_base_group_q <= 1'b0; acc_group_q <= 1'b0;
                 load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
@@ -577,10 +597,15 @@ module new_static_uopparse #(
                         next_merge_base_q <= next_merge_base_comb;
                         next_merge_count_q <= next_merge_count_comb;
                         next_load_base_group_q <= load_group_comb;
+                        // Derive the next PACC half from the half being
+                        // retired, rather than from a separately toggled
+                        // state bit.  This keeps the ownership transition
+                        // correct even when OUTPUT and the next block's
+                        // wave-0 GEMM overlap in OUTPUT_PRELOAD.
                         next_acc_group_q <= ~acc_group_q;
                         // PACC ownership changes at KWave advance.  OUTPUT uses
                         // the separately captured old-half descriptor above.
-                        acc_group_q <= ~acc_group_q;
+                        acc_group_q <= ~output_acc_group_q;
                         gemm_wave_q <= 0;
                         gemm_m_q <= 0; gemm_n_q <= 0;
                         gemm_sent_q <= 1'b0;
@@ -637,6 +662,10 @@ module new_static_uopparse #(
     assign cmd_done_valid_o = state_q == DONE;
 
     initial begin
+        if (SUBTILE_M <= 0 || (SUBTILE_M & (SUBTILE_M - 1)) != 0)
+            $error("SUBTILE_M must be a positive power of two");
+        if (SUBTILE_N <= 0 || (SUBTILE_N & (SUBTILE_N - 1)) != 0)
+            $error("SUBTILE_N must be a positive power of two");
         if (SUBTILE_K <= 0 || (SUBTILE_K & (SUBTILE_K - 1)) != 0)
             $error("SUBTILE_K must be a positive power of two");
         if (ABUF_SIZE < 2 || BBUF_SIZE < 2 || PACC_NUM < 2 ||

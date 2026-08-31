@@ -1,4 +1,4 @@
-#include "Vtop_dynamic.h"
+#include "Vtop_new_static.h"
 #include "verilated.h"
 
 #include <algorithm>
@@ -43,15 +43,6 @@ namespace {
 #ifndef PACC_NUM_TEST
 #define PACC_NUM_TEST 16
 #endif
-#ifndef ABUF_LOGIC_SIZE_TEST
-#define ABUF_LOGIC_SIZE_TEST (ABUF_SIZE_TEST / 2)
-#endif
-#ifndef BBUF_LOGIC_SIZE_TEST
-#define BBUF_LOGIC_SIZE_TEST (BBUF_SIZE_TEST / 2)
-#endif
-#ifndef PACC_LOGIC_SIZE_TEST
-#define PACC_LOGIC_SIZE_TEST (PACC_NUM_TEST / 2)
-#endif
 #ifndef STORE_ROWS_PER_CYCLE_TEST
 #define STORE_ROWS_PER_CYCLE_TEST 1
 #endif
@@ -67,9 +58,6 @@ constexpr int kLaneNum = LANE_NUM_TEST;
 constexpr int kABufSize = ABUF_SIZE_TEST;
 constexpr int kBBufSize = BBUF_SIZE_TEST;
 constexpr int kPaccNum = PACC_NUM_TEST;
-constexpr int kABufLogicSize = ABUF_LOGIC_SIZE_TEST;
-constexpr int kBBufLogicSize = BBUF_LOGIC_SIZE_TEST;
-constexpr int kPaccLogicSize = PACC_LOGIC_SIZE_TEST;
 constexpr int kStoreRowsPerCycle = STORE_ROWS_PER_CYCLE_TEST;
 constexpr int kLoadRowBits = kSubtileK * 8;
 constexpr int kLoadRowWords = (kLoadRowBits + 31) / 32;
@@ -79,10 +67,7 @@ constexpr int kWritesPerOutputTile = kSubtileM / kStoreRowsPerCycle;
 
 static_assert(kLaneNum >= 1, "LANE_NUM_TEST must be positive");
 static_assert(kABufSize >= 4 && kBBufSize >= 4, "operand buffers must have ping-pong halves");
-static_assert(kABufLogicSize >= 1 && kBBufLogicSize >= 1,
-              "logical operand buffers must be positive");
 static_assert(kPaccNum >= 1, "PACC_NUM_TEST must be positive");
-static_assert(kPaccLogicSize >= 1, "logical PACC size must be positive");
 static_assert(kStoreRowsPerCycle >= 1,
               "STORE_ROWS_PER_CYCLE_TEST must be positive");
 static_assert((kSubtileM % kStoreRowsPerCycle) == 0,
@@ -145,11 +130,11 @@ std::string result_filename(int m, int n, int k, int count) {
     std::ostringstream os;
     os << "L" << kLaneNum
        << "_W" << kSaWidth
-       << "_AB" << kABufLogicSize << "_" << kABufSize;
-    if (kBBufSize != kABufSize || kBBufLogicSize != kABufLogicSize) {
-        os << "_BB" << kBBufLogicSize << "_" << kBBufSize;
+       << "_AB" << kABufSize;
+    if (kBBufSize != kABufSize) {
+        os << "_BB" << kBBufSize;
     }
-    os << "_ACC" << kPaccLogicSize << "_" << kPaccNum
+    os << "_ACC" << kPaccNum
        << "_" << m << "X" << n << "X" << k
        << "_Cnt" << count << ".txt";
     return os.str();
@@ -197,9 +182,9 @@ void ensure_dir(const std::string& path) {
     }
 }
 
-class DynamicLab {
+class StaticLab {
 public:
-    explicit DynamicLab(const Options& opt) : opt_(opt) {
+    explicit StaticLab(const Options& opt) : opt_(opt) {
         if (opt_.m <= 0 || opt_.n <= 0 || opt_.k <= 0 || opt_.count <= 0) {
             fail("M, N, K, and Count must all be positive");
         }
@@ -232,7 +217,7 @@ public:
         reset();
         run_until_done();
         write_result();
-        std::cout << "dynamic_lab: passed"
+        std::cout << "static_lab: passed"
                   << " L=" << kLaneNum
                   << " W=" << kSaWidth
                   << " MNK=" << opt_.m << "x" << opt_.n << "x" << opt_.k
@@ -251,7 +236,7 @@ private:
     static constexpr uint32_t kCBase = 0x00030000u;
 
     Options opt_;
-    Vtop_dynamic dut_;
+    Vtop_new_static dut_;
     uint64_t cycle_ = 0;
     uint64_t output_tiles_per_cmd_ = 0;
     uint64_t expected_writes_per_cmd_ = 0;
@@ -448,7 +433,7 @@ private:
             const uint64_t latency_cycles =
                 completion_cycles_[static_cast<size_t>(cmd_idx)] -
                 issue_cycles_[static_cast<size_t>(cmd_idx)] + 1;
-            std::cout << "dynamic_lab: progress completed=" << completed_cmds_
+            std::cout << "static_lab: progress completed=" << completed_cmds_
                       << "/" << opt_.count
                       << " cmd=" << cmd_idx
                       << " cycle=" << cycle_
@@ -558,11 +543,11 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     try {
         const Options opt = parse_options(argc, argv);
-        DynamicLab lab(opt);
+        StaticLab lab(opt);
         lab.run();
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "dynamic_lab failed: " << e.what() << "\n";
+        std::cerr << "static_lab failed: " << e.what() << "\n";
         return 1;
     }
 }

@@ -18,6 +18,12 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 2
 #endif
+#ifndef SUBTILE_M_TEST
+#define SUBTILE_M_TEST SA_WIDTH_TEST
+#endif
+#ifndef SUBTILE_N_TEST
+#define SUBTILE_N_TEST SA_WIDTH_TEST
+#endif
 #ifndef SUBTILE_K_TEST
 #define SUBTILE_K_TEST 32
 #endif
@@ -32,6 +38,8 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileM = SUBTILE_M_TEST;
+constexpr int kSubtileN = SUBTILE_N_TEST;
 constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kABufSize = ABUF_SIZE_TEST;
 constexpr int kBBufSize = BBUF_SIZE_TEST;
@@ -106,13 +114,13 @@ int ceil_div(uint32_t value, int div) {
                             static_cast<uint32_t>(div));
 }
 
-uint32_t tile_valid_rows(uint32_t dim, int tile_idx) {
-    const uint32_t tile_start = static_cast<uint32_t>(tile_idx * kSaWidth);
+uint32_t tile_valid_rows(uint32_t dim, int tile_idx, int tile_size) {
+    const uint32_t tile_start = static_cast<uint32_t>(tile_idx * tile_size);
     if (dim <= tile_start) {
         return 0;
     }
     const uint32_t rows_left = dim - tile_start;
-    return std::min<uint32_t>(static_cast<uint32_t>(kSaWidth), rows_left);
+    return std::min<uint32_t>(static_cast<uint32_t>(tile_size), rows_left);
 }
 
 std::pair<int, int> choose_block() {
@@ -144,8 +152,8 @@ std::vector<Uop> reference_for_cmd(const Cmd& cmd) {
     const std::pair<int, int> block = choose_block();
     const int block_m_max = block.first;
     const int block_n_max = block.second;
-    const int tm = ceil_div(cmd.m, kSaWidth);
-    const int tn = ceil_div(cmd.n, kSaWidth);
+    const int tm = ceil_div(cmd.m, kSubtileM);
+    const int tn = ceil_div(cmd.n, kSubtileN);
     const int tk = ceil_div(cmd.k, kSubtileK);
     std::vector<Uop> out;
 
@@ -172,7 +180,8 @@ std::vector<Uop> reference_for_cmd(const Cmd& cmd) {
                         u.addr = a_batch_base +
                             static_cast<uint32_t>((block_m_base + lm) * tk + kt);
                         u.abuf = static_cast<uint32_t>(lm);
-                        u.valid_rows = tile_valid_rows(cmd.m, block_m_base + lm);
+                        u.valid_rows = tile_valid_rows(
+                            cmd.m, block_m_base + lm, kSubtileM);
                         u.tag = cmd.name;
                         out.push_back(u);
                     }
@@ -183,7 +192,8 @@ std::vector<Uop> reference_for_cmd(const Cmd& cmd) {
                         u.addr = b_batch_base +
                             static_cast<uint32_t>(kt * tn + block_n_base + ln);
                         u.bbuf = static_cast<uint32_t>(ln);
-                        u.valid_rows = tile_valid_rows(cmd.n, block_n_base + ln);
+                        u.valid_rows = tile_valid_rows(
+                            cmd.n, block_n_base + ln, kSubtileN);
                         u.tag = cmd.name;
                         out.push_back(u);
                     }
@@ -438,7 +448,8 @@ std::vector<Cmd> random_cmds(uint32_t seed) {
     std::uniform_int_distribution<int> m_tile_dist(0, max_m_tiles);
     std::uniform_int_distribution<int> n_tile_dist(0, max_n_tiles);
     std::uniform_int_distribution<int> k_tile_dist(0, max_k_tiles);
-    std::uniform_int_distribution<int> mn_edge_dist(0, kSaWidth - 1);
+    std::uniform_int_distribution<int> m_edge_dist(0, kSubtileM - 1);
+    std::uniform_int_distribution<int> n_edge_dist(0, kSubtileN - 1);
     std::uniform_int_distribution<int> k_edge_dist(0, kSubtileK - 1);
     std::uniform_int_distribution<int> batch_dist(1, 4);
     std::uniform_int_distribution<uint32_t> base_dist(0, 4000);
@@ -453,9 +464,9 @@ std::vector<Cmd> random_cmds(uint32_t seed) {
         cmd.b_base = 0x20000u + base_dist(rng) + static_cast<uint32_t>(i * 1000);
         cmd.c_base = 0x30000u + base_dist(rng) + static_cast<uint32_t>(i * 1000);
         cmd.m = m_tiles == 0 ? 0u :
-            static_cast<uint32_t>((m_tiles - 1) * kSaWidth + 1 + mn_edge_dist(rng));
+            static_cast<uint32_t>((m_tiles - 1) * kSubtileM + 1 + m_edge_dist(rng));
         cmd.n = n_tiles == 0 ? 0u :
-            static_cast<uint32_t>((n_tiles - 1) * kSaWidth + 1 + mn_edge_dist(rng));
+            static_cast<uint32_t>((n_tiles - 1) * kSubtileN + 1 + n_edge_dist(rng));
         cmd.k = k_tiles == 0 ? 0u :
             static_cast<uint32_t>((k_tiles - 1) * kSubtileK + 1 + k_edge_dist(rng));
         cmd.name = "rand" + std::to_string(i);
@@ -469,25 +480,26 @@ std::vector<Cmd> target_extreme_cmds() {
     const std::pair<int, int> block = choose_block();
     const int block_m = block.first;
     const int block_n = block.second;
-    const uint32_t s = static_cast<uint32_t>(kSaWidth);
+    const uint32_t sm = static_cast<uint32_t>(kSubtileM);
+    const uint32_t sn = static_cast<uint32_t>(kSubtileN);
     const uint32_t k = static_cast<uint32_t>(kSubtileK);
 
     std::vector<Cmd> cmds;
     cmds.push_back(Cmd{0x00100000u, 0x00200000u, 0x00300000u,
                        1u, 1u, 1u, "one_element"});
     cmds.push_back(Cmd{0x00110000u, 0x00210000u, 0x00310000u,
-                       s - 1u, s, k + 1u, "tile_edges"});
+                       sm - 1u, sn, k + 1u, "tile_edges"});
     cmds.push_back(Cmd{0x00120000u, 0x00220000u, 0x00320000u,
-                       static_cast<uint32_t>(block_m) * s,
-                       static_cast<uint32_t>(block_n) * s,
+                       static_cast<uint32_t>(block_m) * sm,
+                       static_cast<uint32_t>(block_n) * sn,
                        2u * k + 3u, "exact_block"});
     cmds.push_back(Cmd{0x00130000u, 0x00230000u, 0x00330000u,
-                       static_cast<uint32_t>(block_m + 1) * s + 5u,
-                       static_cast<uint32_t>(block_n + 1) * s + 7u,
+                       static_cast<uint32_t>(block_m + 1) * sm + 5u,
+                       static_cast<uint32_t>(block_n + 1) * sn + 7u,
                        3u * k + 11u, "cross_block_small"});
     cmds.push_back(Cmd{0x00140000u, 0x00240000u, 0x00340000u,
-                       static_cast<uint32_t>(block_m + 3) * s + 13u,
-                       static_cast<uint32_t>(block_n + 7) * s + 17u,
+                       static_cast<uint32_t>(block_m + 3) * sm + 13u,
+                       static_cast<uint32_t>(block_n + 7) * sn + 17u,
                        9u * k + 19u, "cross_block_large_k"});
     return cmds;
 }
@@ -519,8 +531,8 @@ int main(int argc, char** argv) {
 
         run_sequence(
             "single_tile",
-            {Cmd{0x10, 0x80, 0x100, static_cast<uint32_t>(kSaWidth),
-                 static_cast<uint32_t>(kSaWidth), static_cast<uint32_t>(kSubtileK),
+            {Cmd{0x10, 0x80, 0x100, static_cast<uint32_t>(kSubtileM),
+                 static_cast<uint32_t>(kSubtileN), static_cast<uint32_t>(kSubtileK),
                  "single"}},
             ready_always
         );
@@ -528,8 +540,8 @@ int main(int argc, char** argv) {
         run_sequence(
             "multiblock_backpressure",
             {Cmd{0x1000, 0x2000, 0x3000,
-                 static_cast<uint32_t>(2 * kSaWidth + 1),
-                 static_cast<uint32_t>(2 * kSaWidth + 2),
+                 static_cast<uint32_t>(2 * kSubtileM + 1),
+                 static_cast<uint32_t>(2 * kSubtileN + 2),
                  static_cast<uint32_t>(2 * kSubtileK + 1),
                  "multi"}},
             ready_periodic_stall
@@ -538,15 +550,15 @@ int main(int argc, char** argv) {
         run_sequence(
             "busy_cmd_stream",
             {
-                Cmd{0x10, 0x20, 0x30, 0, static_cast<uint32_t>(kSaWidth), 4, "zero_m"},
+                Cmd{0x10, 0x20, 0x30, 0, static_cast<uint32_t>(kSubtileN), 4, "zero_m"},
                 Cmd{0x400, 0x800, 0xc00,
-                    static_cast<uint32_t>(3 * kSaWidth),
-                    static_cast<uint32_t>(2 * kSaWidth + 1),
+                    static_cast<uint32_t>(3 * kSubtileM),
+                    static_cast<uint32_t>(2 * kSubtileN + 1),
                     static_cast<uint32_t>(2 * kSubtileK),
                     "first_busy"},
                 Cmd{0x1400, 0x1800, 0x1c00,
-                    static_cast<uint32_t>(kSaWidth + 1),
-                    static_cast<uint32_t>(kSaWidth + 1),
+                    static_cast<uint32_t>(kSubtileM + 1),
+                    static_cast<uint32_t>(kSubtileN + 1),
                     static_cast<uint32_t>(3 * kSubtileK + 1),
                     "second_busy"},
             },
@@ -554,8 +566,8 @@ int main(int argc, char** argv) {
         );
 
         Cmd batched_small{0x2100, 0x3100, 0x4100,
-                          static_cast<uint32_t>(kSaWidth),
-                          static_cast<uint32_t>(kSaWidth),
+                          static_cast<uint32_t>(kSubtileM),
+                          static_cast<uint32_t>(kSubtileN),
                           static_cast<uint32_t>(2 * kSubtileK),
                           "batched_independent"};
         batched_small.batch = 3;

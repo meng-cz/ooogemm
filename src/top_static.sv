@@ -5,6 +5,8 @@
 
 module top_static #(
     parameter int SA_WIDTH = 32,
+    parameter int SUBTILE_M = SA_WIDTH,
+    parameter int SUBTILE_N = SA_WIDTH,
     parameter int SUBTILE_K = 32,
     parameter int LANE_NUM = 4,
     parameter int ABUF_SIZE = 64,
@@ -19,14 +21,15 @@ module top_static #(
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
     parameter int PACC_IDX_WIDTH = (PACC_NUM <= 1) ? 1 : $clog2(PACC_NUM),
     parameter int ROW8_WIDTH = SUBTILE_K * 8,
+    parameter int MAX_SUBTILE_ROWS = (SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N,
     parameter int LOAD_DATA_WIDTH = 1024,
     parameter int LOAD_BUS_ID_WIDTH =
-        ((SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+        ((MAX_SUBTILE_ROWS * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)) <= 1) ? 1 :
-        $clog2(SA_WIDTH * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
+        $clog2(MAX_SUBTILE_ROWS * ((ROW8_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW8_WIDTH / LOAD_DATA_WIDTH) : 1)),
-    parameter int ROW32_WIDTH = SA_WIDTH * 32,
-    parameter int LOAD_ROWS_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1),
+    parameter int ROW32_WIDTH = SUBTILE_N * 32,
+    parameter int LOAD_ROWS_WIDTH = (MAX_SUBTILE_ROWS <= 1) ? 1 : $clog2(MAX_SUBTILE_ROWS + 1),
     parameter int STORE_MEM_DATA_WIDTH = ROW32_WIDTH * STORE_ROWS_PER_CYCLE,
     parameter int GEMM_INSTID_WIDTH = 16,
     parameter int GEMM_TRACK_DEPTH = 256,
@@ -65,7 +68,8 @@ module top_static #(
     logic unused_cmd_done;
 
     top_new_static #(
-        .SA_WIDTH(SA_WIDTH), .SUBTILE_K(SUBTILE_K), .LANE_NUM(LANE_NUM),
+        .SA_WIDTH(SA_WIDTH), .SUBTILE_M(SUBTILE_M), .SUBTILE_N(SUBTILE_N),
+        .SUBTILE_K(SUBTILE_K), .LANE_NUM(LANE_NUM),
         .ABUF_SIZE(ABUF_SIZE), .BBUF_SIZE(BBUF_SIZE), .PACC_NUM(PACC_NUM),
         .ADDR_WIDTH(ADDR_WIDTH), .DIM_WIDTH(DIM_WIDTH),
         .STORE_ROWS_PER_CYCLE(STORE_ROWS_PER_CYCLE),

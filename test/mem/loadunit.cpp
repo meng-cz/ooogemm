@@ -19,6 +19,12 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 4
 #endif
+#ifndef SUBTILE_M_TEST
+#define SUBTILE_M_TEST SA_WIDTH_TEST
+#endif
+#ifndef SUBTILE_N_TEST
+#define SUBTILE_N_TEST SA_WIDTH_TEST
+#endif
 #ifndef SUBTILE_K_TEST
 #define SUBTILE_K_TEST 4
 #endif
@@ -36,6 +42,9 @@ namespace {
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileM = SUBTILE_M_TEST;
+constexpr int kSubtileN = SUBTILE_N_TEST;
+constexpr int kMaxRows = (kSubtileM > kSubtileN) ? kSubtileM : kSubtileN;
 constexpr int kSubtileK = SUBTILE_K_TEST;
 constexpr int kABufSize = ABUF_SIZE_TEST;
 constexpr int kBBufSize = BBUF_SIZE_TEST;
@@ -47,11 +56,16 @@ constexpr int kLoadBeatWords = (kLoadDataBits + 31) / 32;
 constexpr bool kLoadWide = kLoadDataBits >= kRowBits;
 constexpr int kRowsPerBeat = kLoadWide ? (kLoadDataBits / kRowBits) : 1;
 constexpr int kBeatsPerRow = kLoadWide ? 1 : (kRowBits / kLoadDataBits);
-constexpr int kTileReqs = kLoadWide ?
-    ((kSaWidth + kRowsPerBeat - 1) / kRowsPerBeat) :
-    (kSaWidth * kBeatsPerRow);
+constexpr int kATileReqs = kLoadWide ?
+    ((kSubtileM + kRowsPerBeat - 1) / kRowsPerBeat) :
+    (kSubtileM * kBeatsPerRow);
+constexpr int kBTileReqs = kLoadWide ?
+    ((kSubtileN + kRowsPerBeat - 1) / kRowsPerBeat) :
+    (kSubtileN * kBeatsPerRow);
 
 static_assert(kSaWidth > 0, "SA_WIDTH_TEST must be positive");
+static_assert(kSubtileM > 0 && kSubtileN > 0,
+              "SUBTILE_M_TEST and SUBTILE_N_TEST must be positive");
 static_assert(kSubtileK <= 4, "this testbench expects ROW_DATA_WIDTH <= 32");
 static_assert((kSubtileK & (kSubtileK - 1)) == 0,
               "SUBTILE_K_TEST must be a power of two");
@@ -61,7 +75,8 @@ static_assert((kLoadDataBits % 8) == 0, "LOAD_DATA_WIDTH_TEST must be byte-align
 static_assert((kLoadDataBits >= kRowBits && (kLoadDataBits % kRowBits) == 0) ||
               (kRowBits >= kLoadDataBits && (kRowBits % kLoadDataBits) == 0),
               "load bus and row widths must divide each other");
-static_assert(kOutstandingNum >= kTileReqs, "ID space must fit one full tile");
+static_assert(kOutstandingNum >= ((kATileReqs > kBTileReqs) ? kATileReqs : kBTileReqs),
+              "ID space must fit one full tile");
 
 struct Load {
     bool is_b = false;
@@ -93,7 +108,7 @@ struct PendingOut {
     bool is_b = false;
     uint32_t bufidx = 0;
     uint32_t mask = 0;
-    uint32_t row_data[kSaWidth] = {};
+    uint32_t row_data[kMaxRows] = {};
     bool last = false;
     std::string name;
 };
@@ -108,12 +123,14 @@ std::string hex32(uint32_t value) {
     return os.str();
 }
 
-uint32_t row_addr(uint32_t tile_addr, int row) {
-    return tile_addr * static_cast<uint32_t>(kSaWidth) + static_cast<uint32_t>(row);
+uint32_t row_addr(uint32_t tile_addr, int row, bool is_b) {
+    const int rows = is_b ? kSubtileN : kSubtileM;
+    return tile_addr * static_cast<uint32_t>(rows) + static_cast<uint32_t>(row);
 }
 
-uint32_t beat_addr(uint32_t tile_addr, int req) {
-    return tile_addr * static_cast<uint32_t>(kTileReqs) + static_cast<uint32_t>(req);
+uint32_t beat_addr(uint32_t tile_addr, int req, bool is_b) {
+    const int tile_reqs = is_b ? kBTileReqs : kATileReqs;
+    return tile_addr * static_cast<uint32_t>(tile_reqs) + static_cast<uint32_t>(req);
 }
 
 uint32_t low_mask32(int width) {
@@ -121,7 +138,7 @@ uint32_t low_mask32(int width) {
 }
 
 uint32_t row_payload(uint32_t tile_addr, uint32_t row, bool is_b) {
-    const uint32_t addr = row_addr(tile_addr, static_cast<int>(row));
+    const uint32_t addr = row_addr(tile_addr, static_cast<int>(row), is_b);
     uint32_t value = 0xa5000000u ^ (addr * 0x45d9f3bu);
     value ^= is_b ? 0x3c6ef372u : 0x9e3779b9u;
     return value & low_mask32(kRowBits);
@@ -227,12 +244,12 @@ private:
     std::map<uint32_t, ReqInfo> inflight_;
     int a_rows_left_[kABufSize] = {};
     int b_rows_left_[kBBufSize] = {};
-    uint32_t a_model_[kABufSize][kSaWidth] = {};
-    uint32_t b_model_[kBBufSize][kSaWidth] = {};
-    uint32_t a_partial_[kABufSize][kSaWidth] = {};
-    uint32_t b_partial_[kBBufSize][kSaWidth] = {};
-    uint32_t a_mask_[kABufSize][kSaWidth] = {};
-    uint32_t b_mask_[kBBufSize][kSaWidth] = {};
+    uint32_t a_model_[kABufSize][kSubtileM] = {};
+    uint32_t b_model_[kBBufSize][kSubtileN] = {};
+    uint32_t a_partial_[kABufSize][kSubtileM] = {};
+    uint32_t b_partial_[kBBufSize][kSubtileN] = {};
+    uint32_t a_mask_[kABufSize][kSubtileM] = {};
+    uint32_t b_mask_[kBBufSize][kSubtileN] = {};
 
     bool hold_active_ = false;
     uint32_t hold_id_ = 0;
@@ -297,8 +314,9 @@ private:
     }
 
     int rows_eff(const Load& load) const {
-        if (load.valid_rows == 0 || load.valid_rows > static_cast<uint32_t>(kSaWidth)) {
-            return kSaWidth;
+        const int tile_rows = load.is_b ? kSubtileN : kSubtileM;
+        if (load.valid_rows == 0 || load.valid_rows > static_cast<uint32_t>(tile_rows)) {
+            return tile_rows;
         }
         return static_cast<int>(load.valid_rows);
     }
@@ -316,7 +334,8 @@ private:
         const int rows = rows_eff(load);
         rows_left = rows;
 
-        for (int row = rows; row < kSaWidth; ++row) {
+        const int tile_rows = load.is_b ? kSubtileN : kSubtileM;
+        for (int row = rows; row < tile_rows; ++row) {
             if (load.is_b) {
                 b_model_[bufidx][row] = 0;
             } else {
@@ -340,7 +359,7 @@ private:
         for (int req_idx = 0; req_idx < req_count; ++req_idx) {
             ReqInfo req;
             req.is_b = load.is_b;
-            req.addr = beat_addr(load.addr, req_idx);
+            req.addr = beat_addr(load.addr, req_idx, load.is_b);
             req.bufidx = bufidx;
             if (kLoadWide) {
                 req.row = static_cast<uint32_t>(req_idx * kRowsPerBeat);
@@ -362,13 +381,14 @@ private:
 
     void check_zero_init_outputs(const Load& load) {
         const int rows = rows_eff(load);
-        if (rows == kSaWidth) {
+        const int tile_rows = load.is_b ? kSubtileN : kSubtileM;
+        if (rows == tile_rows) {
             check_no_pending_outputs();
             return;
         }
 
         uint32_t expected_mask = 0;
-        for (int row = rows; row < kSaWidth; ++row) {
+        for (int row = rows; row < tile_rows; ++row) {
             expected_mask |= uint32_t{1} << row;
         }
 
@@ -387,7 +407,7 @@ private:
                    << " mask=" << hex32(static_cast<uint32_t>(dut_.bbuf_wr_bank_en_o));
                 fail(os.str());
             }
-            for (int row = rows; row < kSaWidth; ++row) {
+            for (int row = rows; row < tile_rows; ++row) {
                 if (dut_.bbuf_wr_data_o[row] != 0) {
                     fail("B zero-init wrote non-zero data");
                 }
@@ -407,7 +427,7 @@ private:
                    << " mask=" << hex32(static_cast<uint32_t>(dut_.abuf_wr_bank_en_o));
                 fail(os.str());
             }
-            for (int row = rows; row < kSaWidth; ++row) {
+            for (int row = rows; row < tile_rows; ++row) {
                 if (dut_.abuf_wr_data_o[row] != 0) {
                     fail("A zero-init wrote non-zero data");
                 }
@@ -479,7 +499,7 @@ private:
                    << " mask=" << hex32(out.mask);
                 fail(os.str());
             }
-            for (int row = 0; row < kSaWidth; ++row) {
+            for (int row = 0; row < kSubtileN; ++row) {
                 if (((out.mask >> row) & 1u) != 0 &&
                     dut_.bbuf_wr_data_o[row] != out.row_data[row]) {
                     fail("B write data mismatch");
@@ -503,7 +523,7 @@ private:
                    << " mask=" << hex32(out.mask);
                 fail(os.str());
             }
-            for (int row = 0; row < kSaWidth; ++row) {
+            for (int row = 0; row < kSubtileM; ++row) {
                 if (((out.mask >> row) & 1u) != 0 &&
                     dut_.abuf_wr_data_o[row] != out.row_data[row]) {
                     fail("A write data mismatch");
@@ -533,7 +553,8 @@ private:
         out.mask = 0;
         out.last = false;
         out.name = rsp.name;
-        for (int row = 0; row < kSaWidth; ++row) {
+        const int tile_rows = rsp.is_b ? kSubtileN : kSubtileM;
+        for (int row = 0; row < tile_rows; ++row) {
             out.row_data[row] = 0;
         }
 
@@ -734,7 +755,8 @@ private:
             load.addr = 0x1000u + addr_dist(rng_) + static_cast<uint32_t>(i * 17);
             load.abuf = static_cast<uint32_t>(abuf_dist(rng_));
             load.bbuf = static_cast<uint32_t>(bbuf_dist(rng_));
-            load.valid_rows = static_cast<uint32_t>(i % (kSaWidth + 1));
+            const int tile_rows = load.is_b ? kSubtileN : kSubtileM;
+            load.valid_rows = static_cast<uint32_t>(i % (tile_rows + 1));
             load.name = "rand" + std::to_string(i);
             loads.push_back(load);
         }

@@ -1,7 +1,7 @@
 // Load uop pipeline.
 //
-// A LOAD uop names one SA_WIDTH x SUBTILE_K A tile or a B tile stored in
-// transposed-view form in external memory: SA_WIDTH rows, one per output
+// A LOAD uop names one SUBTILE_M x SUBTILE_K A tile or a B tile stored in
+// transposed-view form in external memory: SUBTILE_N rows, one per output
 // column, each row containing SUBTILE_K K-direction FP8 values.  The load unit
 // does not transpose or reorder row payloads; memory row N is written directly
 // to operand-buffer bank N.  The uop also carries the number of valid rows in
@@ -41,22 +41,26 @@
 
 module loadunit #(
     parameter int SA_WIDTH       = 4,
+    parameter int SUBTILE_M      = SA_WIDTH,
+    parameter int SUBTILE_N      = SA_WIDTH,
     parameter int SUBTILE_K      = 32,
     parameter int ABUF_SIZE      = 8,
     parameter int BBUF_SIZE      = 8,
     parameter int ADDR_WIDTH     = 32,
     parameter int ABUF_IDX_WIDTH = (ABUF_SIZE <= 1) ? 1 : $clog2(ABUF_SIZE),
     parameter int BBUF_IDX_WIDTH = (BBUF_SIZE <= 1) ? 1 : $clog2(BBUF_SIZE),
-    parameter int ROW_IDX_WIDTH  = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH),
+    parameter int ROW_IDX_WIDTH  = (((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) <= 1) ? 1 :
+        $clog2((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N),
     parameter int ROW_DATA_WIDTH = SUBTILE_K * 8,
     parameter int LOAD_DATA_WIDTH = 1024,
     parameter int BUS_ID_WIDTH   =
-        ((SA_WIDTH * ((ROW_DATA_WIDTH >= LOAD_DATA_WIDTH) ?
+        ((((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) * ((ROW_DATA_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW_DATA_WIDTH / LOAD_DATA_WIDTH) : 1)) <= 1) ? 1 :
-        $clog2(SA_WIDTH * ((ROW_DATA_WIDTH >= LOAD_DATA_WIDTH) ?
+        $clog2(((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) * ((ROW_DATA_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW_DATA_WIDTH / LOAD_DATA_WIDTH) : 1)),
     parameter int OUTSTANDING_NUM = (1 << BUS_ID_WIDTH),
-    parameter int ROWS_LEFT_WIDTH = (SA_WIDTH <= 1) ? 1 : $clog2(SA_WIDTH + 1)
+    parameter int ROWS_LEFT_WIDTH = (((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) <= 1) ? 1 :
+        $clog2(((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) + 1)
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -81,13 +85,13 @@ module loadunit #(
 
     output logic abuf_wr_valid_o,
     output logic [ABUF_IDX_WIDTH-1:0] abuf_wr_idx_o,
-    output logic [SA_WIDTH-1:0] abuf_wr_bank_en_o,
-    output logic [ROW_DATA_WIDTH-1:0] abuf_wr_data_o [SA_WIDTH],
+    output logic [SUBTILE_M-1:0] abuf_wr_bank_en_o,
+    output logic [ROW_DATA_WIDTH-1:0] abuf_wr_data_o [SUBTILE_M],
 
     output logic bbuf_wr_valid_o,
     output logic [BBUF_IDX_WIDTH-1:0] bbuf_wr_idx_o,
-    output logic [SA_WIDTH-1:0] bbuf_wr_bank_en_o,
-    output logic [ROW_DATA_WIDTH-1:0] bbuf_wr_data_o [SA_WIDTH],
+    output logic [SUBTILE_N-1:0] bbuf_wr_bank_en_o,
+    output logic [ROW_DATA_WIDTH-1:0] bbuf_wr_data_o [SUBTILE_N],
 
     output logic abuf_ready_valid_o,
     output logic [ABUF_IDX_WIDTH-1:0] abuf_ready_idx_o,
@@ -96,8 +100,11 @@ module loadunit #(
 );
 
     initial begin
-        if (SA_WIDTH <= 0) begin
-            $error("SA_WIDTH must be positive");
+        if (SUBTILE_M <= 0) begin
+            $error("SUBTILE_M must be positive");
+        end
+        if (SUBTILE_N <= 0) begin
+            $error("SUBTILE_N must be positive");
         end
         if (SUBTILE_K <= 0) begin
             $error("SUBTILE_K must be positive");
@@ -117,8 +124,8 @@ module loadunit #(
         if (BUS_ID_WIDTH <= 0) begin
             $error("BUS_ID_WIDTH must be positive");
         end
-        if (OUTSTANDING_NUM < SA_WIDTH) begin
-            $error("OUTSTANDING_NUM must be at least SA_WIDTH");
+        if (OUTSTANDING_NUM < MAX_TILE_REQS) begin
+            $error("OUTSTANDING_NUM must fit the largest A/B tile");
         end
         if (OUTSTANDING_NUM != (1 << BUS_ID_WIDTH)) begin
             $error("OUTSTANDING_NUM must equal 1 << BUS_ID_WIDTH");
@@ -141,18 +148,22 @@ module loadunit #(
                (ROW_DATA_WIDTH % LOAD_DATA_WIDTH) == 0))) begin
             $error("LOAD_DATA_WIDTH and ROW_DATA_WIDTH must divide each other");
         end
-        if (OUTSTANDING_NUM < MAX_TILE_REQS) begin
-            $error("OUTSTANDING_NUM must fit every beat request in one tile");
+        if ((SUBTILE_M & (SUBTILE_M - 1)) != 0 ||
+            (SUBTILE_N & (SUBTILE_N - 1)) != 0) begin
+            $error("SUBTILE_M and SUBTILE_N must be powers of two");
         end
     end
 
     localparam bit LOAD_WIDE = (LOAD_DATA_WIDTH >= ROW_DATA_WIDTH);
     localparam int ROWS_PER_BEAT = LOAD_WIDE ? (LOAD_DATA_WIDTH / ROW_DATA_WIDTH) : 1;
     localparam int BEATS_PER_ROW = LOAD_WIDE ? 1 : (ROW_DATA_WIDTH / LOAD_DATA_WIDTH);
-    localparam int TILE_REQS = LOAD_WIDE ?
-        ((SA_WIDTH + ROWS_PER_BEAT - 1) / ROWS_PER_BEAT) :
-        (SA_WIDTH * BEATS_PER_ROW);
-    localparam int MAX_TILE_REQS = TILE_REQS;
+    localparam int A_TILE_REQS = LOAD_WIDE ?
+        ((SUBTILE_M + ROWS_PER_BEAT - 1) / ROWS_PER_BEAT) :
+        (SUBTILE_M * BEATS_PER_ROW);
+    localparam int B_TILE_REQS = LOAD_WIDE ?
+        ((SUBTILE_N + ROWS_PER_BEAT - 1) / ROWS_PER_BEAT) :
+        (SUBTILE_N * BEATS_PER_ROW);
+    localparam int MAX_TILE_REQS = (A_TILE_REQS > B_TILE_REQS) ? A_TILE_REQS : B_TILE_REQS;
     localparam int ISSUE_REQ_WIDTH =
         (MAX_TILE_REQS <= 1) ? 1 : $clog2(MAX_TILE_REQS + 1);
     localparam int BEAT_IDX_WIDTH =
@@ -161,7 +172,8 @@ module loadunit #(
         (ROWS_PER_BEAT <= 1) ? 1 : $clog2(ROWS_PER_BEAT + 1);
     localparam int NARROW_DATA_WIDTH = LOAD_WIDE ? ROW_DATA_WIDTH : LOAD_DATA_WIDTH;
     localparam int BEAT_GROUP_NUM =
-        (SA_WIDTH + ROWS_PER_BEAT - 1) / ROWS_PER_BEAT;
+        (((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) + ROWS_PER_BEAT - 1) /
+        ROWS_PER_BEAT;
     localparam logic [BEATS_PER_ROW-1:0] BEAT_MASK_ALL = {BEATS_PER_ROW{1'b1}};
 
     localparam int FREE_COUNT_WIDTH =
@@ -178,10 +190,10 @@ module loadunit #(
 
     logic [ROWS_LEFT_WIDTH-1:0] a_rows_left [ABUF_SIZE];
     logic [ROWS_LEFT_WIDTH-1:0] b_rows_left [BBUF_SIZE];
-    logic [ROW_DATA_WIDTH-1:0] a_partial_data [ABUF_SIZE][SA_WIDTH];
-    logic [ROW_DATA_WIDTH-1:0] b_partial_data [BBUF_SIZE][SA_WIDTH];
-    logic [BEATS_PER_ROW-1:0] a_partial_mask [ABUF_SIZE][SA_WIDTH];
-    logic [BEATS_PER_ROW-1:0] b_partial_mask [BBUF_SIZE][SA_WIDTH];
+    logic [ROW_DATA_WIDTH-1:0] a_partial_data [ABUF_SIZE][SUBTILE_M];
+    logic [ROW_DATA_WIDTH-1:0] b_partial_data [BBUF_SIZE][SUBTILE_N];
+    logic [BEATS_PER_ROW-1:0] a_partial_mask [ABUF_SIZE][SUBTILE_M];
+    logic [BEATS_PER_ROW-1:0] b_partial_mask [BBUF_SIZE][SUBTILE_N];
 
     logic issue_active_q;
     logic issue_is_b_q;
@@ -234,8 +246,8 @@ module loadunit #(
 
     always_comb begin
         if (uop_valid_rows_i == '0 ||
-            uop_valid_rows_i > ROWS_LEFT_WIDTH'(SA_WIDTH)) begin
-            uop_rows_eff = ROWS_LEFT_WIDTH'(SA_WIDTH);
+            uop_valid_rows_i > ROWS_LEFT_WIDTH'(uop_is_b_i ? SUBTILE_N : SUBTILE_M)) begin
+            uop_rows_eff = ROWS_LEFT_WIDTH'(uop_is_b_i ? SUBTILE_N : SUBTILE_M);
         end else begin
             uop_rows_eff = uop_valid_rows_i;
         end
@@ -248,7 +260,8 @@ module loadunit #(
                 int'(uop_rows_eff) * BEATS_PER_ROW
             );
         end
-        uop_needs_zero_init = uop_rows_eff < ROWS_LEFT_WIDTH'(SA_WIDTH);
+        uop_needs_zero_init = uop_rows_eff <
+            ROWS_LEFT_WIDTH'(uop_is_b_i ? SUBTILE_N : SUBTILE_M);
     end
 
     assign uop_ready_o = !issue_active_q &&
@@ -262,12 +275,13 @@ module loadunit #(
 
     function automatic logic [ADDR_WIDTH-1:0] beat_addr(
         input logic [ADDR_WIDTH-1:0] tile_addr,
-        input logic [ISSUE_REQ_WIDTH-1:0] req_idx
+        input logic [ISSUE_REQ_WIDTH-1:0] req_idx,
+        input logic is_b
     );
         logic [ADDR_WIDTH-1:0] scaled_tile;
         logic [ADDR_WIDTH-1:0] req_offset;
         begin
-            scaled_tile = tile_addr * ADDR_WIDTH'(TILE_REQS);
+            scaled_tile = tile_addr * ADDR_WIDTH'(is_b ? B_TILE_REQS : A_TILE_REQS);
             req_offset = ADDR_WIDTH'(req_idx);
             return scaled_tile + req_offset;
         end
@@ -310,7 +324,7 @@ module loadunit #(
             if (remain >= ROWS_PER_BEAT) begin
                 return ROWS_PER_BEAT_WIDTH'(ROWS_PER_BEAT);
             end
-            return ROWS_PER_BEAT_WIDTH'(remain);
+            return ROWS_PER_BEAT_WIDTH'((remain > 0) ? remain : 0);
         end
     endfunction
 
@@ -378,8 +392,10 @@ module loadunit #(
     logic rsp_a_last_q;
     logic rsp_b_last_q;
     logic [BEAT_GROUP_NUM-1:0] rsp_wide_group_hit_comb;
-    logic [SA_WIDTH-1:0] rsp_bank_en_comb;
-    logic [ROW_DATA_WIDTH-1:0] rsp_bank_data_comb [SA_WIDTH];
+    logic [SUBTILE_M-1:0] rsp_a_bank_en_comb;
+    logic [ROW_DATA_WIDTH-1:0] rsp_a_bank_data_comb [SUBTILE_M];
+    logic [SUBTILE_N-1:0] rsp_b_bank_en_comb;
+    logic [ROW_DATA_WIDTH-1:0] rsp_b_bank_data_comb [SUBTILE_N];
 
     always_comb begin
         rsp_accept = mem_rsp_valid_i && id_outstanding[int'(mem_rsp_id_i)];
@@ -441,19 +457,38 @@ module loadunit #(
             end
         end
 
-        rsp_bank_en_comb = '0;
-        for (int row = 0; row < SA_WIDTH; row++) begin
-            rsp_bank_data_comb[row] = '0;
-            if (LOAD_WIDE) begin
-                if (rsp_wide_group_hit_comb[row / ROWS_PER_BEAT] &&
-                    (row % ROWS_PER_BEAT) < int'(rsp_rows_in_beat_q)) begin
-                    rsp_bank_en_comb[row] = 1'b1;
-                    rsp_bank_data_comb[row] =
-                        rsp_wide_row_data_q[row % ROWS_PER_BEAT];
+        rsp_a_bank_en_comb = '0;
+        for (int row = 0; row < SUBTILE_M; row++) begin
+            rsp_a_bank_data_comb[row] = '0;
+            if (!rsp_is_b_q) begin
+                if (LOAD_WIDE) begin
+                    if (rsp_wide_group_hit_comb[row / ROWS_PER_BEAT] &&
+                        (row % ROWS_PER_BEAT) < int'(rsp_rows_in_beat_q)) begin
+                        rsp_a_bank_en_comb[row] = 1'b1;
+                        rsp_a_bank_data_comb[row] =
+                            rsp_wide_row_data_q[row % ROWS_PER_BEAT];
+                    end
+                end else if (int'(rsp_row_q) == row) begin
+                    rsp_a_bank_en_comb[row] = 1'b1;
+                    rsp_a_bank_data_comb[row] = rsp_data_q;
                 end
-            end else if (int'(rsp_row_q) == row) begin
-                rsp_bank_en_comb[row] = 1'b1;
-                rsp_bank_data_comb[row] = rsp_data_q;
+            end
+        end
+        rsp_b_bank_en_comb = '0;
+        for (int row = 0; row < SUBTILE_N; row++) begin
+            rsp_b_bank_data_comb[row] = '0;
+            if (rsp_is_b_q) begin
+                if (LOAD_WIDE) begin
+                    if (rsp_wide_group_hit_comb[row / ROWS_PER_BEAT] &&
+                        (row % ROWS_PER_BEAT) < int'(rsp_rows_in_beat_q)) begin
+                        rsp_b_bank_en_comb[row] = 1'b1;
+                        rsp_b_bank_data_comb[row] =
+                            rsp_wide_row_data_q[row % ROWS_PER_BEAT];
+                    end
+                end else if (int'(rsp_row_q) == row) begin
+                    rsp_b_bank_en_comb[row] = 1'b1;
+                    rsp_b_bank_data_comb[row] = rsp_data_q;
+                end
             end
         end
     end
@@ -462,18 +497,18 @@ module loadunit #(
         abuf_wr_valid_o = rsp_valid_q && !rsp_is_b_q;
         abuf_wr_idx_o = rsp_abufidx_q;
         abuf_wr_bank_en_o = '0;
-        for (int row = 0; row < SA_WIDTH; row++) begin
+        for (int row = 0; row < SUBTILE_M; row++) begin
             abuf_wr_data_o[row] = '0;
         end
         if (rsp_valid_q && !rsp_is_b_q) begin
-            for (int row = 0; row < SA_WIDTH; row++) begin
-                abuf_wr_bank_en_o[row] = rsp_bank_en_comb[row];
-                abuf_wr_data_o[row] = rsp_bank_data_comb[row];
+            for (int row = 0; row < SUBTILE_M; row++) begin
+                abuf_wr_bank_en_o[row] = rsp_a_bank_en_comb[row];
+                abuf_wr_data_o[row] = rsp_a_bank_data_comb[row];
             end
         end else if (uop_fire && !uop_is_b_i && uop_needs_zero_init) begin
             abuf_wr_valid_o = 1'b1;
             abuf_wr_idx_o = uop_abufidx_i;
-            for (int row = 0; row < SA_WIDTH; row++) begin
+            for (int row = 0; row < SUBTILE_M; row++) begin
                 if (row >= int'(uop_rows_eff)) begin
                     abuf_wr_bank_en_o[row] = 1'b1;
                     abuf_wr_data_o[row] = '0;
@@ -484,18 +519,18 @@ module loadunit #(
         bbuf_wr_valid_o = rsp_valid_q && rsp_is_b_q;
         bbuf_wr_idx_o = rsp_bbufidx_q;
         bbuf_wr_bank_en_o = '0;
-        for (int row = 0; row < SA_WIDTH; row++) begin
+        for (int row = 0; row < SUBTILE_N; row++) begin
             bbuf_wr_data_o[row] = '0;
         end
         if (rsp_valid_q && rsp_is_b_q) begin
-            for (int row = 0; row < SA_WIDTH; row++) begin
-                bbuf_wr_bank_en_o[row] = rsp_bank_en_comb[row];
-                bbuf_wr_data_o[row] = rsp_bank_data_comb[row];
+            for (int row = 0; row < SUBTILE_N; row++) begin
+                bbuf_wr_bank_en_o[row] = rsp_b_bank_en_comb[row];
+                bbuf_wr_data_o[row] = rsp_b_bank_data_comb[row];
             end
         end else if (uop_fire && uop_is_b_i && uop_needs_zero_init) begin
             bbuf_wr_valid_o = 1'b1;
             bbuf_wr_idx_o = uop_bbufidx_i;
-            for (int row = 0; row < SA_WIDTH; row++) begin
+            for (int row = 0; row < SUBTILE_N; row++) begin
                 if (row >= int'(uop_rows_eff)) begin
                     bbuf_wr_bank_en_o[row] = 1'b1;
                     bbuf_wr_data_o[row] = '0;
@@ -522,7 +557,8 @@ module loadunit #(
     always_comb begin
         issue_row_comb = req_row_start(issue_req_q);
         issue_beat_comb = req_beat_idx(issue_req_q);
-        issue_rows_in_beat_comb = req_rows_in_beat(issue_req_q, issue_rows_q);
+        issue_rows_in_beat_comb = req_rows_in_beat(
+            issue_req_q, issue_rows_q);
     end
 
     logic [LOAD_DATA_WIDTH-1:0] rsp_load_data_q;
@@ -564,14 +600,14 @@ module loadunit #(
             end
             for (int idx = 0; idx < ABUF_SIZE; idx++) begin
                 a_rows_left[idx] <= '0;
-                for (int row = 0; row < SA_WIDTH; row++) begin
+                for (int row = 0; row < SUBTILE_M; row++) begin
                     a_partial_data[idx][row] <= '0;
                     a_partial_mask[idx][row] <= '0;
                 end
             end
             for (int idx = 0; idx < BBUF_SIZE; idx++) begin
                 b_rows_left[idx] <= '0;
-                for (int row = 0; row < SA_WIDTH; row++) begin
+                for (int row = 0; row < SUBTILE_N; row++) begin
                     b_partial_data[idx][row] <= '0;
                     b_partial_mask[idx][row] <= '0;
                 end
@@ -640,13 +676,13 @@ module loadunit #(
                 issue_req_count_q <= uop_req_count_eff;
                 if (uop_is_b_i) begin
                     b_rows_left[int'(uop_bbufidx_i)] <= uop_rows_eff;
-                    for (int row = 0; row < SA_WIDTH; row++) begin
+                    for (int row = 0; row < SUBTILE_N; row++) begin
                         b_partial_data[int'(uop_bbufidx_i)][row] <= '0;
                         b_partial_mask[int'(uop_bbufidx_i)][row] <= '0;
                     end
                 end else begin
                     a_rows_left[int'(uop_abufidx_i)] <= uop_rows_eff;
-                    for (int row = 0; row < SA_WIDTH; row++) begin
+                    for (int row = 0; row < SUBTILE_M; row++) begin
                         a_partial_data[int'(uop_abufidx_i)][row] <= '0;
                         a_partial_mask[int'(uop_abufidx_i)][row] <= '0;
                     end
@@ -665,7 +701,8 @@ module loadunit #(
 
                 req_hold_valid_q <= 1'b1;
                 req_hold_id_q <= free_id;
-                req_hold_addr_q <= beat_addr(issue_tile_addr_q, issue_req_q);
+                req_hold_addr_q <= beat_addr(
+                    issue_tile_addr_q, issue_req_q, issue_is_b_q);
 
                 if (issue_reserve_last) begin
                     issue_active_q <= 1'b0;

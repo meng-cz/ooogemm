@@ -15,6 +15,12 @@
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 2
 #endif
+#ifndef SUBTILE_M_TEST
+#define SUBTILE_M_TEST SA_WIDTH_TEST
+#endif
+#ifndef SUBTILE_N_TEST
+#define SUBTILE_N_TEST SA_WIDTH_TEST
+#endif
 #ifndef SUBTILE_K_TEST
 #define SUBTILE_K_TEST 2
 #endif
@@ -50,6 +56,9 @@
 #endif
 
 namespace {
+constexpr int kSubtileM = SUBTILE_M_TEST;
+constexpr int kSubtileN = SUBTILE_N_TEST;
+constexpr int kMaxSubtileRows = (kSubtileM > kSubtileN) ? kSubtileM : kSubtileN;
 struct Response { uint64_t due; uint32_t id; };
 
 template <typename T>
@@ -267,7 +276,7 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
             const double scalar_macs =
                 static_cast<double>(batch) * m * n * k;
             const double peak_macs_per_cycle =
-                static_cast<double>(SA_WIDTH_TEST) * SA_WIDTH_TEST;
+                static_cast<double>(kSubtileM) * kSubtileN;
             const double ideal_compute_cycles = scalar_macs / peak_macs_per_cycle;
             const double cmd_throughput_per_kcycle = 1000.0 / elapsed;
             const double ideal_cmd_throughput_per_kcycle =
@@ -310,8 +319,8 @@ int main(int argc, char** argv) {
         // compiled RTL model can cover multiple GEMM command shapes.
         // Calculate bus transactions from tile dimensions and the fixed
         // configured load bus rather than hard-coding a small-test count.
-        const int tm = (perf_m + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
-        const int tn = (perf_n + SA_WIDTH_TEST - 1) / SA_WIDTH_TEST;
+        const int tm = (perf_m + kSubtileM - 1) / kSubtileM;
+        const int tn = (perf_n + kSubtileN - 1) / kSubtileN;
         const int tk = (perf_k + SUBTILE_K_TEST - 1) / SUBTILE_K_TEST;
         constexpr int a_group = ABUF_SIZE_TEST / 2;
         constexpr int b_group = BBUF_SIZE_TEST / 2;
@@ -336,7 +345,7 @@ int main(int argc, char** argv) {
             LOAD_DATA_WIDTH_TEST >= load_row_bits ?
             1 : (load_row_bits / LOAD_DATA_WIDTH_TEST);
         constexpr int load_beats_per_tile =
-            ((SA_WIDTH_TEST + rows_per_load_beat - 1) / rows_per_load_beat) *
+            ((kMaxSubtileRows + rows_per_load_beat - 1) / rows_per_load_beat) *
             beats_per_load_row;
         const bool merge_batch = tm * tn < merge_cap;
         const int expected_loads = merge_batch ?
@@ -344,9 +353,39 @@ int main(int argc, char** argv) {
             (perf_batch * blocks_m * blocks_n * tk *
              (block_m + block_n) * load_beats_per_tile);
         const int expected_stores = perf_batch * tm * tn *
-            (SA_WIDTH_TEST / STORE_ROWS_PER_CYCLE_TEST);
+            (kSubtileM / STORE_ROWS_PER_CYCLE_TEST);
         run_case("perf_batched_gemm", perf_m, perf_n, perf_k, perf_batch, 0,
                  expected_loads, expected_stores, static_cast<float>(perf_k));
+#else
+#if (SUBTILE_M_TEST != SA_WIDTH_TEST) || (SUBTILE_N_TEST != SA_WIDTH_TEST)
+        // Rectangular smoke test: one full tile, with B already supplied in
+        // the software transposed-view layout expected by the load unit.
+        constexpr int row_bits = SUBTILE_K_TEST * 8;
+        constexpr int rows_per_beat = (LOAD_DATA_WIDTH_TEST >= row_bits) ?
+            (LOAD_DATA_WIDTH_TEST / row_bits) : 1;
+        constexpr int beats_per_row = (LOAD_DATA_WIDTH_TEST >= row_bits) ?
+            1 : (row_bits / LOAD_DATA_WIDTH_TEST);
+        constexpr int tile_loads =
+            ((kMaxSubtileRows + rows_per_beat - 1) / rows_per_beat) *
+            beats_per_row;
+        constexpr int rect_tm = 2;
+        constexpr int rect_tn = 2;
+        constexpr int rect_block_m = choose_block_m(
+            rect_tm, rect_tn, ABUF_SIZE_TEST / 2, BBUF_SIZE_TEST / 2,
+            PACC_NUM_TEST / 2);
+        constexpr int rect_block_n = choose_block_n(
+            rect_tm, rect_tn, ABUF_SIZE_TEST / 2, BBUF_SIZE_TEST / 2,
+            PACC_NUM_TEST / 2);
+        run_case("rectangular_tile", kSubtileM, kSubtileN, SUBTILE_K_TEST, 1, 3,
+                 2 * tile_loads, kSubtileM / STORE_ROWS_PER_CYCLE_TEST,
+                 static_cast<float>(SUBTILE_K_TEST));
+        run_case("rectangular_multi_tile", 2 * kSubtileM, 2 * kSubtileN,
+                 SUBTILE_K_TEST, 1, 3,
+                 ((rect_tm + rect_block_m - 1) / rect_block_m) *
+                 ((rect_tn + rect_block_n - 1) / rect_block_n) *
+                 (rect_block_m + rect_block_n) * tile_loads,
+                 4 * (kSubtileM / STORE_ROWS_PER_CYCLE_TEST),
+                 static_cast<float>(SUBTILE_K_TEST));
 #else
         // The 1024-bit load bus covers each tiny operand tile in one beat.
         run_case("one_wave", 2, 2, 2, 1, 3, 2,
@@ -355,6 +394,7 @@ int main(int argc, char** argv) {
                  8 / STORE_ROWS_PER_CYCLE_TEST, 8.0f);
         run_case("merged_batch", 2, 2, 2, 2, 5, 4,
                  4 / STORE_ROWS_PER_CYCLE_TEST, 2.0f);
+#endif
 #endif
         std::cout << "top_new_static tests passed\n";
     } catch (const std::exception& e) {

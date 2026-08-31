@@ -17,6 +17,12 @@ namespace {
 #ifndef SA_WIDTH_TEST
 #define SA_WIDTH_TEST 2
 #endif
+#ifndef SUBTILE_M_TEST
+#define SUBTILE_M_TEST SA_WIDTH_TEST
+#endif
+#ifndef SUBTILE_N_TEST
+#define SUBTILE_N_TEST SA_WIDTH_TEST
+#endif
 #ifndef PACC_NUM_TEST
 #define PACC_NUM_TEST 8
 #endif
@@ -27,22 +33,26 @@ namespace {
 #define ROWS_PER_CYCLE_TEST 1
 #endif
 #ifndef MEM_DATA_WIDTH_TEST
-#define MEM_DATA_WIDTH_TEST (SA_WIDTH_TEST * 32 * ROWS_PER_CYCLE_TEST)
+#define MEM_DATA_WIDTH_TEST (SUBTILE_N_TEST * 32 * ROWS_PER_CYCLE_TEST)
 #endif
 
 constexpr int kSaWidth = SA_WIDTH_TEST;
+constexpr int kSubtileM = SUBTILE_M_TEST;
+constexpr int kSubtileN = SUBTILE_N_TEST;
 constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccIdxMask = (1 << PACC_IDX_WIDTH_TEST) - 1;
 constexpr int kRowsPerCycle = ROWS_PER_CYCLE_TEST;
-constexpr int kGroupsPerTile = kSaWidth / kRowsPerCycle;
+constexpr int kGroupsPerTile = kSubtileM / kRowsPerCycle;
 constexpr int kMemDataWidth = MEM_DATA_WIDTH_TEST;
 constexpr int kMemDataWords = (kMemDataWidth + 31) / 32;
 
 static_assert(kSaWidth >= 1, "SA_WIDTH_TEST must be positive");
+static_assert(kSubtileM >= 1 && kSubtileN >= 1,
+              "SUBTILE_M_TEST and SUBTILE_N_TEST must be positive");
 static_assert(kRowsPerCycle >= 1, "ROWS_PER_CYCLE_TEST must be positive");
-static_assert(kSaWidth % kRowsPerCycle == 0,
-              "SA_WIDTH_TEST must be divisible by ROWS_PER_CYCLE_TEST");
-static_assert(kMemDataWidth == kSaWidth * kRowsPerCycle * 32,
+static_assert(kSubtileM % kRowsPerCycle == 0,
+              "SUBTILE_M_TEST must be divisible by ROWS_PER_CYCLE_TEST");
+static_assert(kMemDataWidth == kSubtileN * kRowsPerCycle * 32,
               "MEM_DATA_WIDTH_TEST must match the SA row-group width");
 
 struct BeatData {
@@ -93,12 +103,12 @@ BeatData group_data(uint32_t pacc, int group) {
     BeatData data;
     for (int slot = 0; slot < kRowsPerCycle; ++slot) {
         const int row = group * kRowsPerCycle + slot;
-        for (int col = 0; col < kSaWidth; ++col) {
+        for (int col = 0; col < kSubtileN; ++col) {
             const uint32_t word = 0x3f800000u ^
                 (pacc * 0x00100100u) ^
                 (static_cast<uint32_t>(row) * 0x00010001u) ^
                 (static_cast<uint32_t>(col) * 0x01000001u);
-            data.words[static_cast<size_t>(slot * kSaWidth + col)] = word;
+            data.words[static_cast<size_t>(slot * kSubtileN + col)] = word;
         }
     }
     return data;
