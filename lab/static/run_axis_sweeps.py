@@ -175,9 +175,18 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 def build_all_tasks(args: argparse.Namespace) -> list[Task]:
-    m_values = parse_int_list(args.m_values, [1, 4, 16, 32, 64, 128, 256, 512])
-    n_values = parse_int_list(args.n_values, [32, 64, 128, 256, 512])
-    k_values = parse_int_list(args.k_values, [32, 64, 128, 256, 512])
+    m_values = sorted(
+        parse_int_list(args.m_values, [1, 4, 16, 32, 64, 128, 256, 512]),
+        reverse=True,
+    )
+    n_values = sorted(
+        parse_int_list(args.n_values, [32, 64, 128, 256, 512]),
+        reverse=True,
+    )
+    k_values = sorted(
+        parse_int_list(args.k_values, [32, 64, 128, 256, 512]),
+        reverse=True,
+    )
     hardware = parse_hardware_configs(
         args.hardware_configs,
         [

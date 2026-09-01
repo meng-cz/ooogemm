@@ -53,7 +53,7 @@ if [[ "${ABUF_SIZE}" == "${BBUF_SIZE}" ]]; then
 else
   CONFIG_TAG="L${LANE_NUM}_W${SA_WIDTH}_AB${ABUF_SIZE}_BB${BBUF_SIZE}_ACC${PACC_NUM}"
 fi
-BUILD_ROOT="${BUILD_DIR:-/tmp/ooogemm_static_lab_${CONFIG_TAG}}"
+BUILD_ROOT="${BUILD_DIR:-/tmp/ooogemm_rect_static_lab_${CONFIG_TAG}}"
 MAX_CYCLES="${MAX_CYCLES:-0}"
 LOAD_RSP_DELAY="${LOAD_RSP_DELAY:-4}"
 
