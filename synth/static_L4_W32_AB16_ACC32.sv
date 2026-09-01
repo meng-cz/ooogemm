@@ -56,7 +56,7 @@ module static_L4_W32_AB16_ACC32 #(
     output logic cmd_done_valid_o
 );
 
-    top_new_static #(
+    top_static #(
         .SA_WIDTH(SA_WIDTH), .SUBTILE_M(SUBTILE_M), .SUBTILE_N(SUBTILE_N),
         .SUBTILE_K(SUBTILE_K), .LANE_NUM(LANE_NUM),
         .ABUF_SIZE(ABUF_SIZE), .BBUF_SIZE(BBUF_SIZE), .PACC_NUM(PACC_NUM),

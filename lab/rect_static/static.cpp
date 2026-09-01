@@ -1,4 +1,4 @@
-#include "Vtop_new_static.h"
+#include "Vtop_static.h"
 #include "verilated.h"
 
 #include <algorithm>
@@ -236,7 +236,7 @@ private:
     static constexpr uint32_t kCBase = 0x00030000u;
 
     Options opt_;
-    Vtop_new_static dut_;
+    Vtop_static dut_;
     uint64_t cycle_ = 0;
     uint64_t output_tiles_per_cmd_ = 0;
     uint64_t expected_writes_per_cmd_ = 0;

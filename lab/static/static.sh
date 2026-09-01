@@ -52,7 +52,7 @@ read -r -a VERILATOR_EXTRA_FLAGS_ARR <<< "${VERILATOR_EXTRA_FLAGS}"
 mkdir -p "${BUILD_ROOT}" "${OUT_DIR}"
 
 OUT_FILE="${OUT_DIR}/${CONFIG_TAG}_${M_SIZE}X${N_SIZE}X${K_SIZE}_Cnt${COUNT}.txt"
-EXE="${BUILD_ROOT}/Vtop_new_static"
+EXE="${BUILD_ROOT}/Vtop_static"
 
 SOURCES=(
   "${ROOT_DIR}/src/sche/uop.sv"
@@ -66,7 +66,7 @@ SOURCES=(
   "${ROOT_DIR}/src/sa/sa.sv"
   "${ROOT_DIR}/src/mem/loadunit.sv"
   "${ROOT_DIR}/src/mem/storeunit.sv"
-  "${ROOT_DIR}/src/top_new_static.sv"
+  "${ROOT_DIR}/src/top_static.sv"
   "${SCRIPT_DIR}/static.cpp"
 )
 
@@ -105,7 +105,7 @@ if [[ "${REBUILD:-0}" == "1" || ! -x "${EXE}" || ! -f "${BUILD_STAMP}" || "$(cat
     --build \
     --build-jobs "${VERILATOR_JOBS}" \
     --Mdir "${BUILD_ROOT}" \
-    --top-module top_new_static \
+    --top-module top_static \
     "${VERILATOR_EXTRA_FLAGS_ARR[@]}" \
     "-GSA_WIDTH=${SA_WIDTH}" \
     "-GSUBTILE_K=${SUBTILE_K}" \

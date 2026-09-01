@@ -1,4 +1,4 @@
-#include "Vtop_new_static.h"
+#include "Vtop_static.h"
 #include "verilated.h"
 
 #include <cstdint>
@@ -39,8 +39,8 @@
 #ifndef LOAD_DATA_WIDTH_TEST
 #define LOAD_DATA_WIDTH_TEST 1024
 #endif
-#ifndef TOP_NEW_STATIC_PERF_TEST
-#define TOP_NEW_STATIC_PERF_TEST 0
+#ifndef TOP_STATIC_PERF_TEST
+#define TOP_STATIC_PERF_TEST 0
 #endif
 #ifndef PERF_M_TEST
 #define PERF_M_TEST 256
@@ -160,7 +160,7 @@ constexpr int choose_block_n(int remaining_m, int remaining_n,
 
 class Tb {
 public:
-    Vtop_new_static dut;
+    Vtop_static dut;
     uint64_t cycle = 0;
     std::deque<Response> responses;
     uint64_t load_requests = 0;
@@ -208,7 +208,7 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
 
     for (uint64_t guard = 0; guard < 20000000; ++guard) {
         tb.dut.cmd_valid_i = tb.command_sent ? 0 : 1;
-#if TOP_NEW_STATIC_PERF_TEST
+#if TOP_STATIC_PERF_TEST
         tb.dut.load_mem_req_ready_i = 1;
         tb.dut.store_mem_wr_ready_i = 1;
 #else
@@ -271,7 +271,7 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
             std::cout << name << ": passed cycle=" << tb.cycle
                       << " loads=" << tb.load_requests
                       << " stores=" << tb.store_writes << "\n";
-#if TOP_NEW_STATIC_PERF_TEST
+#if TOP_STATIC_PERF_TEST
             const double elapsed = static_cast<double>(tb.cycle - tb.issue_cycle + 1);
             const double scalar_macs =
                 static_cast<double>(batch) * m * n * k;
@@ -302,7 +302,7 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     try {
-#if TOP_NEW_STATIC_PERF_TEST
+#if TOP_STATIC_PERF_TEST
         const auto env_dimension = [](const char* name, int fallback) {
             const char* value = std::getenv(name);
             if (value == nullptr) return fallback;
@@ -396,9 +396,9 @@ int main(int argc, char** argv) {
                  4 / STORE_ROWS_PER_CYCLE_TEST, 2.0f);
 #endif
 #endif
-        std::cout << "top_new_static tests passed\n";
+        std::cout << "top_static tests passed\n";
     } catch (const std::exception& e) {
-        std::cerr << "top_new_static test failed: " << e.what() << "\n";
+        std::cerr << "top_static test failed: " << e.what() << "\n";
         return 1;
     }
     return 0;

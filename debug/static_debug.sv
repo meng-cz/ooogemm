@@ -6,9 +6,8 @@
 module static_debug_top #(
     parameter int ADDR_WIDTH = 32,
     parameter int DIM_WIDTH = 16,
-    parameter int UOP_FIFO_DEPTH = 32,
     parameter int GEMM_INSTID_WIDTH = 16,
-    parameter int GEMM_TRACK_DEPTH = 256
+    parameter int COUNT_WIDTH = 16
 ) (
     input  logic clk,
     input  logic rst_n,
@@ -43,9 +42,8 @@ module static_debug_top #(
         .PACC_NUM(4),
         .ADDR_WIDTH(ADDR_WIDTH),
         .DIM_WIDTH(DIM_WIDTH),
-        .UOP_FIFO_DEPTH(UOP_FIFO_DEPTH),
         .GEMM_INSTID_WIDTH(GEMM_INSTID_WIDTH),
-        .GEMM_TRACK_DEPTH(GEMM_TRACK_DEPTH),
+        .COUNT_WIDTH(COUNT_WIDTH),
         .LOAD_DATA_WIDTH(1024),
         .STORE_ROWS_PER_CYCLE(1)
     ) impl (.*);
