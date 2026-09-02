@@ -302,7 +302,8 @@ uint32_t pseudo_to_fp32_bits(const Pseudo& value) {
 class PeTest {
 public:
     explicit PeTest(uint32_t seed)
-        : seed_(seed), rng_(seed), pacc_model_(kPaccNum), lane_dots_(kLaneNum) {
+        : seed_(seed), rng_(seed), pacc_model_(kPaccNum),
+          pacc_initialized_(kPaccNum, false), lane_dots_(kLaneNum) {
         dut_.clk = 0;
         dut_.rst_n = 0;
         clear_inputs();
@@ -330,6 +331,7 @@ private:
     uint32_t seed_;
     std::mt19937 rng_;
     std::vector<Pseudo> pacc_model_;
+    std::vector<bool> pacc_initialized_;
     std::vector<std::vector<Pair>> lane_dots_;
     std::deque<ExpectedGet> expected_gets_;
     LaneIn drive_[kLaneNum];
@@ -455,7 +457,11 @@ private:
             if (drive_[lane].last) {
                 const Pseudo dot = reference_dot_pseudo(lane_dots_[lane]);
                 const int idx = static_cast<int>(drive_[lane].paccidx);
+                if (drive_[lane].accum && !pacc_initialized_[idx]) {
+                    fail("test stimulus used accum=1 before an accum=0 cover");
+                }
                 pacc_model_[idx] = add_pseudo(pacc_model_[idx], dot, drive_[lane].accum != 0);
+                pacc_initialized_[idx] = true;
                 lane_dots_[lane].clear();
             }
         }
@@ -491,6 +497,9 @@ private:
         idle(kFdotLatency + kFdotToPaccregReduceLatency +
              kPaccregAccumLatency + 2);
         for (int idx = 0; idx < kPaccNum; ++idx) {
+            if (!pacc_initialized_[idx]) {
+                continue;
+            }
             request_get(idx, prefix + "_idx" + std::to_string(idx));
         }
         idle(kGetaccLatency + 1);
@@ -515,8 +524,6 @@ private:
     }
 
     void directed_tests() {
-        get_all("reset");
-
         send_single(0, 0x38, 0x40, 0, false, 1);  // 1.0 * 2.0
         get_all("lane0_cover");
 
@@ -576,7 +583,9 @@ private:
                     active[lane].active = true;
                     active[lane].remaining = len_dist(rng_);
                     active[lane].paccidx = idx_dist(rng_);
-                    active[lane].accum = accum_dist(rng_);
+                    active[lane].accum =
+                        pacc_initialized_[active[lane].paccidx] &&
+                        accum_dist(rng_);
                     ++dots_started;
                 }
 

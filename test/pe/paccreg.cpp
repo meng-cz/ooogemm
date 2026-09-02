@@ -222,7 +222,8 @@ uint32_t pseudo_to_fp32_bits(const Pseudo& value) {
 
 class PaccregTest {
 public:
-    explicit PaccregTest(uint32_t seed) : seed_(seed), rng_(seed), model_(kPaccNum) {
+    explicit PaccregTest(uint32_t seed)
+        : seed_(seed), rng_(seed), model_(kPaccNum), initialized_(kPaccNum, false) {
         dut_.clk = 0;
         dut_.rst_n = 0;
         clear_inputs();
@@ -249,6 +250,7 @@ private:
     uint32_t seed_;
     std::mt19937 rng_;
     std::vector<Pseudo> model_;
+    std::vector<bool> initialized_;
     std::deque<ExpectedGet> expected_;
 
     void clear_inputs() {
@@ -325,6 +327,9 @@ private:
     }
 
     void send_acc(int idx, const FixedInput& value, bool accum) {
+        if (accum && !initialized_[idx]) {
+            fail("test stimulus used accum=1 before an accum=0 cover");
+        }
         dut_.valid_i = 1;
         dut_.psum_sum_i = bits_of_signed(value.sum, kFdotCsaWidth);
         dut_.psum_carry_i = bits_of_signed(value.carry, kFdotCsaWidth);
@@ -339,6 +344,7 @@ private:
             pseudo_from_fixed(value.sum + value.carry, value.nan),
             accum
         );
+        initialized_[idx] = true;
         tick();
     }
 
@@ -374,6 +380,9 @@ private:
     void get_all(const std::string& prefix) {
         idle(kAccumLatency + 1);
         for (int i = 0; i < kPaccNum; ++i) {
+            if (!initialized_[i]) {
+                continue;
+            }
             std::ostringstream name;
             name << prefix << "_idx" << i;
             request_get(i, name.str());
@@ -382,8 +391,6 @@ private:
     }
 
     void directed_tests() {
-        get_all("reset");
-
         send_value(0, 1.5L, false);
         get_all("cover_1p5");
 
@@ -445,7 +452,7 @@ private:
                     value.sum = fixed - carry;
                     value.carry = carry;
                 }
-                const bool accum = accum_dist(rng_);
+                const bool accum = initialized_[idx] && accum_dist(rng_);
                 send_acc(idx, value, accum);
                 recent_idx[2] = recent_idx[1];
                 recent_idx[1] = recent_idx[0];

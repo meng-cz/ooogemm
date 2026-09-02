@@ -391,6 +391,7 @@ public:
           pacc_model_(kSubtileM,
                       std::vector<std::vector<Pseudo>>(
                           kSubtileN, std::vector<Pseudo>(kPaccNum))) {
+        pacc_initialized_.assign(kPaccNum, false);
         dut_.clk = 0;
         dut_.rst_n = 0;
         clear_inputs();
@@ -400,7 +401,6 @@ public:
         std::fesetround(FE_TONEAREST);
         reset();
 
-        getacc_and_expect(0, "reset_idx0");
         allocator_priority_test();
         continuous_allocator_order_test();
 
@@ -486,6 +486,7 @@ private:
     uint32_t seed_;
     std::mt19937 rng_;
     std::vector<std::vector<std::vector<Pseudo>>> pacc_model_;
+    std::vector<bool> pacc_initialized_;
     std::deque<ExpectedRow> expected_rows_;
     std::deque<FinishEvent> finished_events_;
     std::multiset<uint32_t> pending_finish_;
@@ -782,6 +783,9 @@ private:
         }
         wait_finish(0x408);
         for (int idx = 0; idx < kPaccNum; ++idx) {
+            if (!pacc_initialized_[idx]) {
+                continue;
+            }
             getacc_and_expect(idx, "continuous_alloc_idx" + std::to_string(idx));
         }
     }
@@ -819,6 +823,9 @@ private:
     }
 
     void update_model(const Matrix& m, int paccidx, bool accum) {
+        if (accum && !pacc_initialized_[paccidx]) {
+            fail("test stimulus used accum=1 before an accum=0 cover");
+        }
         for (int row = 0; row < kSubtileM; ++row) {
             for (int col = 0; col < kSubtileN; ++col) {
                 const Pseudo cell = reference_cell(m, row, col);
@@ -826,6 +833,7 @@ private:
                     add_pseudo(pacc_model_[row][col][paccidx], cell, accum);
             }
         }
+        pacc_initialized_[paccidx] = true;
     }
 
     Matrix random_matrix() {
@@ -882,7 +890,7 @@ private:
         for (int i = 0; i < target_gemms; ++i) {
             const Matrix m = random_matrix();
             const int paccidx = pacc_dist(rng_);
-            const bool accum = accum_dist(rng_);
+            const bool accum = pacc_initialized_[paccidx] && accum_dist(rng_);
             const uint32_t instid = 0x100u + static_cast<uint32_t>(i);
             const int lane = allocate(instid, paccidx, accum);
 
@@ -917,6 +925,9 @@ private:
 
         flush_all_finishes();
         for (int idx = 0; idx < kPaccNum; ++idx) {
+            if (!pacc_initialized_[idx]) {
+                continue;
+            }
             getacc_and_expect(idx, "random_final_idx" + std::to_string(idx));
         }
     }

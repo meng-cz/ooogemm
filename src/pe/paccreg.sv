@@ -16,6 +16,9 @@
 //     least four submission cycles between two uses of the same paccidx.
 //     This leaves three cycles between the ACC read and the next writeback, so
 //     the accumulation read path does not need a datapath bypass.
+//   - ACC storage contents are not initialized by reset.  Software/uopparse
+//     must begin each PACC accumulation sequence with accum=0; accum=1 assumes
+//     that the corresponding PACC already contains a valid prior result.
 //   - getacc requests produce getacc_o/getacc_data_o after GETACC_PIPE_STAGES.
 
 `default_nettype none
@@ -281,12 +284,11 @@ module paccreg #(
         end
     endfunction
 
-    // The storage itself is a backend-replaceable synchronous 2R1W SRAM.
-    // acc_initialized_q supplies reset semantics without resetting the SRAM
-    // array, which is required for BRAM/SRAM inference.
+    // The storage itself is a backend-replaceable synchronous 2R1W SRAM.  The
+    // SRAM array is intentionally not reset; accum=0 is the architectural
+    // initialization operation for each PACC accumulation sequence.
     logic [ACC_REG_WIDTH-1:0] acc_rd0_data;
     logic [ACC_REG_WIDTH-1:0] acc_rd1_data;
-    logic [PACC_NUM-1:0] acc_initialized_q;
     logic acc_rd0_en;
     logic acc_rd1_en;
     logic [PACC_IDX_WIDTH-1:0] acc_rd0_addr;
@@ -313,7 +315,8 @@ module paccreg #(
 
     // The accumulation read is issued from S3 so its synchronous response is
     // available when S5 consumes the normalized S4 input.
-    assign acc_rd0_en = s3_valid && (int'(s3_idx) < PACC_NUM);
+    assign acc_rd0_en = s3_valid && s3_accum &&
+                        (int'(s3_idx) < PACC_NUM);
     assign acc_rd0_addr = s3_idx;
     assign acc_rd1_en = getacc_i && (int'(getacc_idx_i) < PACC_NUM);
 
@@ -423,7 +426,6 @@ module paccreg #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            acc_initialized_q <= '0;
             recent_valid_q <= '0;
             for (int i = 0; i < 3; i++) begin
                 recent_paccidx_q[i] <= '0;
@@ -557,7 +559,7 @@ module paccreg #(
 
                 cur_exp = '0;
                 cur_sig = '0;
-                if (acc_initialized_q[s4_idx]) begin
+                if (s4_accum) begin
                     cur_exp = $signed(acc_rd0_data[ACC_REG_WIDTH-1 -: PACC_EXP_WIDTH]);
                     cur_sig = $signed(acc_rd0_data[PACC_SIG_WIDTH-1:0]);
                 end
@@ -599,10 +601,6 @@ module paccreg #(
             end else begin
                 s6_cur_aligned <= align_abs_to_exp(s5_cur_abs, s5_cur_neg, int'(s5_cur_shift));
                 s6_in_aligned <= align_abs_to_exp(s5_in_abs, s5_in_neg, int'(s5_in_shift));
-            end
-
-            if (accum_wb_valid && (int'(accum_wb_idx) < PACC_NUM)) begin
-                acc_initialized_q[accum_wb_idx] <= 1'b1;
             end
 
         end
@@ -711,12 +709,11 @@ module paccreg #(
             getacc_rd_idx_q <= getacc_idx_i;
 
             // acc_rd1_data is the response to the GETACC request from the
-            // preceding cycle.  The initialized bit makes an unread SRAM word
-            // behave as pseudo-zero after reset.
+            // preceding cycle.  An unread SRAM word is intentionally not
+            // assigned a architectural reset value.
             g1_valid <= getacc_rd_pending_q;
             if (getacc_rd_pending_q &&
-                (int'(getacc_rd_idx_q) < PACC_NUM) &&
-                acc_initialized_q[getacc_rd_idx_q]) begin
+                (int'(getacc_rd_idx_q) < PACC_NUM)) begin
                 g1_exp <= $signed(acc_rd1_data[ACC_REG_WIDTH-1 -: PACC_EXP_WIDTH]);
                 g1_sig <= $signed(acc_rd1_data[PACC_SIG_WIDTH-1:0]);
                 if (acc_rd1_wb_valid_q) begin
