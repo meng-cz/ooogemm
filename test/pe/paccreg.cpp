@@ -34,7 +34,7 @@ constexpr int kPaccNum = PACC_NUM_TEST;
 constexpr int kPaccIdxWidth = PACC_IDX_WIDTH_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
-constexpr int kAccumLatency = 6;
+constexpr int kAccumLatency = 7;
 // Includes the synchronous read cycle of sram2r1w.
 constexpr int kGetaccLatency = 5;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;

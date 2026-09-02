@@ -22,7 +22,7 @@
 
 package paccreg_pkg;
 
-    localparam int ACCUM_PIPE_STAGES  = 6;
+    localparam int ACCUM_PIPE_STAGES  = 7;
     // GETACC includes the synchronous ACC SRAM read cycle.
     localparam int GETACC_PIPE_STAGES = 5;
 
@@ -58,6 +58,8 @@ module paccreg #(
 
     localparam int FDOT_FIXED_WIDTH = FDOT_CSA_WIDTH + 1;
     localparam int ACC_REG_WIDTH = PACC_EXP_WIDTH + PACC_SIG_WIDTH;
+    localparam int FDOT_MSB_WIDTH =
+        (FDOT_FIXED_WIDTH <= 1) ? 1 : $clog2(FDOT_FIXED_WIDTH);
 
     initial begin
         if (PACC_NUM <= 0) begin
@@ -309,10 +311,10 @@ module paccreg #(
         .rd1_data_o(acc_rd1_data)
     );
 
-    // The accumulation request is issued one stage before s3 consumes the
-    // value, so the SRAM's synchronous read latency is hidden in the pipe.
-    assign acc_rd0_en = s2_valid && (int'(s2_idx) < PACC_NUM);
-    assign acc_rd0_addr = s2_idx;
+    // The accumulation read is issued from S3 so its synchronous response is
+    // available when S5 consumes the normalized S4 input.
+    assign acc_rd0_en = s3_valid && (int'(s3_idx) < PACC_NUM);
+    assign acc_rd0_addr = s3_idx;
     assign acc_rd1_en = getacc_i && (int'(getacc_idx_i) < PACC_NUM);
 
     logic getacc_rd_pending_q;
@@ -337,47 +339,61 @@ module paccreg #(
     logic s2_accum;
 
     logic s3_valid;
-    logic signed [PACC_EXP_WIDTH-1:0] s3_exp;
-    logic signed [PACC_SIG_WIDTH-1:0] s3_sig;
+    logic [FDOT_FIXED_WIDTH-1:0] s3_abs;
+    logic [FDOT_MSB_WIDTH-1:0] s3_msb;
+    logic s3_sign;
     logic s3_nan;
     logic [PACC_IDX_WIDTH-1:0] s3_idx;
     logic s3_accum;
 
     logic s4_valid;
     logic [PACC_IDX_WIDTH-1:0] s4_idx;
-    logic s4_direct;
     logic signed [PACC_EXP_WIDTH-1:0] s4_exp;
     logic signed [PACC_SIG_WIDTH-1:0] s4_sig;
-    logic [PACC_SIG_WIDTH-1:0] s4_cur_abs;
-    logic [PACC_SIG_WIDTH-1:0] s4_in_abs;
-    logic s4_cur_neg;
-    logic s4_in_neg;
-    logic [PACC_EXP_WIDTH:0] s4_cur_shift;
-    logic [PACC_EXP_WIDTH:0] s4_in_shift;
+    logic s4_nan;
+    logic s4_accum;
 
     logic s5_valid;
     logic [PACC_IDX_WIDTH-1:0] s5_idx;
     logic s5_direct;
     logic signed [PACC_EXP_WIDTH-1:0] s5_exp;
     logic signed [PACC_SIG_WIDTH-1:0] s5_sig;
-    logic signed [PACC_SIG_WIDTH:0] s5_cur_aligned;
-    logic signed [PACC_SIG_WIDTH:0] s5_in_aligned;
+    logic [PACC_SIG_WIDTH-1:0] s5_cur_abs;
+    logic [PACC_SIG_WIDTH-1:0] s5_in_abs;
+    logic s5_cur_neg;
+    logic s5_in_neg;
+    logic [PACC_EXP_WIDTH:0] s5_cur_shift;
+    logic [PACC_EXP_WIDTH:0] s5_in_shift;
 
-    logic [FDOT_FIXED_WIDTH-1:0] s2_abs_comb;
-    int                         s2_msb_comb;
-    logic signed [PACC_EXP_WIDTH-1:0] s2_norm_exp_comb;
-    logic signed [PACC_SIG_WIDTH-1:0] s2_norm_sig_comb;
+    logic s6_valid;
+    logic [PACC_IDX_WIDTH-1:0] s6_idx;
+    logic s6_direct;
+    logic signed [PACC_EXP_WIDTH-1:0] s6_exp;
+    logic signed [PACC_SIG_WIDTH-1:0] s6_sig;
+    logic signed [PACC_SIG_WIDTH:0] s6_cur_aligned;
+    logic signed [PACC_SIG_WIDTH:0] s6_in_aligned;
+
+    logic [FDOT_FIXED_WIDTH-1:0] s3_abs_comb;
+    int                         s3_msb_comb;
+    logic signed [PACC_EXP_WIDTH-1:0] s4_norm_exp_comb;
+    logic signed [PACC_SIG_WIDTH-1:0] s4_norm_sig_comb;
 
     always_comb begin
-        s2_abs_comb = fixed_abs(s2_fixed);
-        s2_msb_comb = find_fixed_msb(s2_abs_comb);
-        s2_norm_exp_comb = pseudo_exp_from_int(
-            s2_msb_comb - FDOT_ACC_FRAC_BITS - (PACC_SIG_WIDTH - 2)
+        // This is the first half of the former s2-to-s3 critical path.
+        s3_abs_comb = fixed_abs(s2_fixed);
+        s3_msb_comb = find_fixed_msb(s3_abs_comb);
+    end
+
+    always_comb begin
+        // The registered absolute value and leading-one position isolate the
+        // dynamic significand-window construction in its own pipeline stage.
+        s4_norm_exp_comb = pseudo_exp_from_int(
+            int'(s3_msb) - FDOT_ACC_FRAC_BITS - (PACC_SIG_WIDTH - 2)
         );
-        s2_norm_sig_comb = normalized_fixed_sig(
-            s2_abs_comb,
-            s2_msb_comb,
-            s2_fixed[FDOT_FIXED_WIDTH-1]
+        s4_norm_sig_comb = normalized_fixed_sig(
+            s3_abs,
+            int'(s3_msb),
+            s3_sign
         );
     end
 
@@ -385,24 +401,24 @@ module paccreg #(
         logic signed [PACC_SIG_WIDTH:0] sum;
         logic signed [PACC_SIG_WIDTH:0] shifted_sum;
 
-        sum = s5_cur_aligned + s5_in_aligned;
+        sum = s6_cur_aligned + s6_in_aligned;
         shifted_sum = arithmetic_shift_right_one(sum);
 
-        if (s5_direct) begin
-            accum_wb_value.exp = s5_exp;
-            accum_wb_value.sig = s5_sig;
+        if (s6_direct) begin
+            accum_wb_value.exp = s6_exp;
+            accum_wb_value.sig = s6_sig;
         end else if (sum == '0) begin
             accum_wb_value = pseudo_zero();
         end else if (sum[PACC_SIG_WIDTH] != sum[PACC_SIG_WIDTH-1]) begin
-            accum_wb_value.exp = pseudo_exp_from_int(int'(s5_exp) + 1);
+            accum_wb_value.exp = pseudo_exp_from_int(int'(s6_exp) + 1);
             accum_wb_value.sig = shifted_sum[PACC_SIG_WIDTH-1:0];
         end else begin
-            accum_wb_value.exp = s5_exp;
+            accum_wb_value.exp = s6_exp;
             accum_wb_value.sig = sum[PACC_SIG_WIDTH-1:0];
         end
 
-        accum_wb_valid = s5_valid;
-        accum_wb_idx = s5_idx;
+        accum_wb_valid = s6_valid;
+        accum_wb_idx = s6_idx;
     end
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -427,31 +443,39 @@ module paccreg #(
             s2_accum <= 1'b0;
 
             s3_valid <= 1'b0;
-            s3_exp   <= '0;
-            s3_sig   <= '0;
+            s3_abs   <= '0;
+            s3_msb   <= '0;
+            s3_sign  <= 1'b0;
             s3_nan   <= 1'b0;
             s3_idx   <= '0;
             s3_accum <= 1'b0;
 
             s4_valid <= 1'b0;
             s4_idx <= '0;
-            s4_direct <= 1'b1;
             s4_exp <= '0;
             s4_sig <= '0;
-            s4_cur_abs <= '0;
-            s4_in_abs <= '0;
-            s4_cur_neg <= 1'b0;
-            s4_in_neg <= 1'b0;
-            s4_cur_shift <= '0;
-            s4_in_shift <= '0;
+            s4_nan <= 1'b0;
+            s4_accum <= 1'b0;
 
             s5_valid <= 1'b0;
             s5_idx <= '0;
             s5_direct <= 1'b1;
             s5_exp <= '0;
             s5_sig <= '0;
-            s5_cur_aligned <= '0;
-            s5_in_aligned <= '0;
+            s5_cur_abs <= '0;
+            s5_in_abs <= '0;
+            s5_cur_neg <= 1'b0;
+            s5_in_neg <= 1'b0;
+            s5_cur_shift <= '0;
+            s5_in_shift <= '0;
+
+            s6_valid <= 1'b0;
+            s6_idx <= '0;
+            s6_direct <= 1'b1;
+            s6_exp <= '0;
+            s6_sig <= '0;
+            s6_cur_aligned <= '0;
+            s6_in_aligned <= '0;
         end else begin
             for (int i = 0; i < 3; i++) begin
                 if (valid_i && recent_valid_q[i] &&
@@ -483,36 +507,48 @@ module paccreg #(
             s2_idx   <= s1_idx;
             s2_accum <= s1_accum;
 
+            // S3 only performs absolute-value/sign extraction and leading-one
+            // detection; pseudo significand construction is deferred to S4.
             s3_valid <= s2_valid;
+            s3_abs   <= s3_abs_comb;
+            s3_msb   <= FDOT_MSB_WIDTH'(s3_msb_comb);
+            s3_sign  <= s2_fixed[FDOT_FIXED_WIDTH-1];
+            s3_nan   <= s2_nan;
             s3_idx   <= s2_idx;
             s3_accum <= s2_accum;
-            if (s2_nan) begin
-                s3_exp <= PSEUDO_NAN_EXP;
-                s3_sig <= {{(PACC_SIG_WIDTH-1){1'b0}}, 1'b1};
-                s3_nan <= 1'b1;
-            end else if (s2_fixed == '0) begin
-                s3_exp <= '0;
-                s3_sig <= '0;
-                s3_nan <= 1'b0;
+
+            // S4 is now dedicated to converting the registered fixed-point
+            // magnitude into pseudo-FP exponent and significand.
+            s4_valid <= s3_valid;
+            s4_idx   <= s3_idx;
+            s4_accum <= s3_accum;
+            s4_nan   <= s3_nan;
+            if (s3_nan) begin
+                s4_exp <= PSEUDO_NAN_EXP;
+                s4_sig <= {{(PACC_SIG_WIDTH-1){1'b0}}, 1'b1};
+            end else if (s3_abs == '0) begin
+                s4_exp <= '0;
+                s4_sig <= '0;
             end else begin
-                s3_exp <= s2_norm_exp_comb;
-                s3_sig <= s2_norm_sig_comb;
-                s3_nan <= 1'b0;
+                s4_exp <= s4_norm_exp_comb;
+                s4_sig <= s4_norm_sig_comb;
             end
 
-            s4_valid <= s3_valid;
-            s4_idx <= s3_idx;
-            s4_direct <= 1'b1;
-            s4_exp <= '0;
-            s4_sig <= '0;
-            s4_cur_abs <= '0;
-            s4_in_abs <= '0;
-            s4_cur_neg <= 1'b0;
-            s4_in_neg <= 1'b0;
-            s4_cur_shift <= '0;
-            s4_in_shift <= '0;
+            // S5 consumes the synchronous ACC read and prepares the two
+            // signed operands for exponent alignment.
+            s5_valid <= s4_valid;
+            s5_idx <= s4_idx;
+            s5_direct <= 1'b1;
+            s5_exp <= '0;
+            s5_sig <= '0;
+            s5_cur_abs <= '0;
+            s5_in_abs <= '0;
+            s5_cur_neg <= 1'b0;
+            s5_in_neg <= 1'b0;
+            s5_cur_shift <= '0;
+            s5_in_shift <= '0;
 
-            if (s3_valid && (int'(s3_idx) < PACC_NUM)) begin
+            if (s4_valid && (int'(s4_idx) < PACC_NUM)) begin
                 logic signed [PACC_EXP_WIDTH-1:0] cur_exp;
                 logic signed [PACC_SIG_WIDTH-1:0] cur_sig;
                 int target_exp;
@@ -521,46 +557,48 @@ module paccreg #(
 
                 cur_exp = '0;
                 cur_sig = '0;
-                if (acc_initialized_q[s3_idx]) begin
+                if (acc_initialized_q[s4_idx]) begin
                     cur_exp = $signed(acc_rd0_data[ACC_REG_WIDTH-1 -: PACC_EXP_WIDTH]);
                     cur_sig = $signed(acc_rd0_data[PACC_SIG_WIDTH-1:0]);
                 end
-                if (s3_nan || (s3_accum && pseudo_is_nan(cur_exp, cur_sig))) begin
-                    s4_exp <= PSEUDO_NAN_EXP;
-                    s4_sig <= {{(PACC_SIG_WIDTH-1){1'b0}}, 1'b1};
-                end else if (!s3_accum || (cur_sig == '0)) begin
-                    s4_exp <= s3_exp;
-                    s4_sig <= s3_sig;
-                end else if (s3_sig == '0) begin
-                    s4_exp <= cur_exp;
-                    s4_sig <= cur_sig;
+                if (s4_nan || (s4_accum && pseudo_is_nan(cur_exp, cur_sig))) begin
+                    s5_exp <= PSEUDO_NAN_EXP;
+                    s5_sig <= {{(PACC_SIG_WIDTH-1){1'b0}}, 1'b1};
+                end else if (!s4_accum || (cur_sig == '0)) begin
+                    s5_exp <= s4_exp;
+                    s5_sig <= s4_sig;
+                end else if (s4_sig == '0) begin
+                    s5_exp <= cur_exp;
+                    s5_sig <= cur_sig;
                 end else begin
-                    target_exp = (cur_exp >= s3_exp) ? int'(cur_exp) : int'(s3_exp);
+                    target_exp = (cur_exp >= s4_exp) ? int'(cur_exp) : int'(s4_exp);
                     cur_shift = target_exp - int'(cur_exp);
-                    in_shift = target_exp - int'(s3_exp);
+                    in_shift = target_exp - int'(s4_exp);
 
-                    s4_direct <= 1'b0;
-                    s4_exp <= pseudo_exp_from_int(target_exp);
-                    s4_cur_abs <= sig_abs(cur_sig);
-                    s4_in_abs <= sig_abs(s3_sig);
-                    s4_cur_neg <= cur_sig[PACC_SIG_WIDTH-1];
-                    s4_in_neg <= s3_sig[PACC_SIG_WIDTH-1];
-                    s4_cur_shift <= cur_shift[PACC_EXP_WIDTH:0];
-                    s4_in_shift <= in_shift[PACC_EXP_WIDTH:0];
+                    s5_direct <= 1'b0;
+                    s5_exp <= pseudo_exp_from_int(target_exp);
+                    s5_cur_abs <= sig_abs(cur_sig);
+                    s5_in_abs <= sig_abs(s4_sig);
+                    s5_cur_neg <= cur_sig[PACC_SIG_WIDTH-1];
+                    s5_in_neg <= s4_sig[PACC_SIG_WIDTH-1];
+                    s5_cur_shift <= cur_shift[PACC_EXP_WIDTH:0];
+                    s5_in_shift <= in_shift[PACC_EXP_WIDTH:0];
                 end
             end
 
-            s5_valid <= s4_valid;
-            s5_idx <= s4_idx;
-            s5_direct <= s4_direct;
-            s5_exp <= s4_exp;
-            s5_sig <= s4_sig;
-            if (s4_direct) begin
-                s5_cur_aligned <= '0;
-                s5_in_aligned <= '0;
+            // S6 performs the variable right shifts.  The following
+            // combinational adder feeds the write port on the next edge.
+            s6_valid <= s5_valid;
+            s6_idx <= s5_idx;
+            s6_direct <= s5_direct;
+            s6_exp <= s5_exp;
+            s6_sig <= s5_sig;
+            if (s5_direct) begin
+                s6_cur_aligned <= '0;
+                s6_in_aligned <= '0;
             end else begin
-                s5_cur_aligned <= align_abs_to_exp(s4_cur_abs, s4_cur_neg, int'(s4_cur_shift));
-                s5_in_aligned <= align_abs_to_exp(s4_in_abs, s4_in_neg, int'(s4_in_shift));
+                s6_cur_aligned <= align_abs_to_exp(s5_cur_abs, s5_cur_neg, int'(s5_cur_shift));
+                s6_in_aligned <= align_abs_to_exp(s5_in_abs, s5_in_neg, int'(s5_in_shift));
             end
 
             if (accum_wb_valid && (int'(accum_wb_idx) < PACC_NUM)) begin
