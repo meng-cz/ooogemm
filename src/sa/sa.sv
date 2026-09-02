@@ -25,12 +25,11 @@
 //   3. Every cycle the scheduler scans lanes in increasing lane order and
 //      chooses the first lane whose current write-side slot has both A and B
 //      ready, whose physical lane is inactive or in its last active cycle, and
-//      whose PACC index differs from the lane started in the immediately
-//      previous cycle.  Only one lane can start in a cycle.  This one-cycle
-//      same-PACC interlock matches paccreg's input protocol: paccreg accepts one
-//      submission per cycle, but not two consecutive submissions to the same
-//      paccidx; a legal N/N+2 same-PACC sequence uses paccreg's writeback-to-read
-//      bypass.
+//      whose PACC index differs from the lanes started in the previous three
+//      cycles. Only one lane can start in a cycle. This four-cycle same-PACC
+//      interlock matches paccreg's input protocol and prevents an ACC read
+//      request from colliding with the preceding result writeback in the
+//      synchronous SRAM.
 //   4. The selected lane flips all of its A/B lane buffers on that clock edge.
 //      On the following cycles, the lane is active for exactly SUBTILE_K cycles
 //      and reads rdidx=0..SUBTILE_K-1 from the just-flipped read-side buffers.
@@ -191,8 +190,8 @@ module sa #(
     logic [K_IDX_WIDTH-1:0] lane_count [LANE_NUM];
     logic [PACC_IDX_WIDTH-1:0] lane_paccidx [LANE_NUM];
     logic lane_accum [LANE_NUM];
-    logic last_start_valid_q;
-    logic [PACC_IDX_WIDTH-1:0] last_start_paccidx_q;
+    logic [2:0] recent_start_valid_q;
+    logic [PACC_IDX_WIDTH-1:0] recent_start_paccidx_q [3];
 
     logic [1:0] lane_wr_slot [LANE_NUM];
     logic [1:0] lane_rd_slot [LANE_NUM];
@@ -261,8 +260,15 @@ module sa #(
                 slot_a_ready[lane][lane_wr_slot[lane][0]] &&
                 slot_b_ready[lane][lane_wr_slot[lane][0]] &&
                 (!lane_active[lane] || lane_last_cycle[lane]) &&
-                !(last_start_valid_q &&
-                  (slot_paccidx[lane][lane_wr_slot[lane][0]] == last_start_paccidx_q))) begin
+                !((recent_start_valid_q[0] &&
+                   (slot_paccidx[lane][lane_wr_slot[lane][0]] ==
+                    recent_start_paccidx_q[0])) ||
+                  (recent_start_valid_q[1] &&
+                   (slot_paccidx[lane][lane_wr_slot[lane][0]] ==
+                    recent_start_paccidx_q[1])) ||
+                  (recent_start_valid_q[2] &&
+                   (slot_paccidx[lane][lane_wr_slot[lane][0]] ==
+                    recent_start_paccidx_q[2])))) begin
                 start_found = 1'b1;
                 start_lane_comb = lane[LANE_IDX_WIDTH-1:0];
                 start_instid_comb = slot_instid[lane][lane_wr_slot[lane][0]];
@@ -661,8 +667,10 @@ module sa #(
             end
             gemm_finish <= 1'b0;
             gemm_finish_instid <= '0;
-            last_start_valid_q <= 1'b0;
-            last_start_paccidx_q <= '0;
+            recent_start_valid_q <= '0;
+            for (int i = 0; i < 3; i++) begin
+                recent_start_paccidx_q[i] <= '0;
+            end
 
             getacc_active <= 1'b0;
             getacc_count <= '0;
@@ -727,9 +735,13 @@ module sa #(
                 end
             end
 
-            last_start_valid_q <= start_found;
+            recent_start_valid_q[2] <= recent_start_valid_q[1];
+            recent_start_valid_q[1] <= recent_start_valid_q[0];
+            recent_start_valid_q[0] <= start_found;
+            recent_start_paccidx_q[2] <= recent_start_paccidx_q[1];
+            recent_start_paccidx_q[1] <= recent_start_paccidx_q[0];
             if (start_found) begin
-                last_start_paccidx_q <=
+                recent_start_paccidx_q[0] <=
                     slot_paccidx[start_lane_comb][lane_wr_slot[start_lane_comb][0]];
             end
 

@@ -2,6 +2,8 @@
 #include "verilated.h"
 
 #include <cfenv>
+#include <array>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -33,7 +35,8 @@ constexpr int kPaccIdxWidth = PACC_IDX_WIDTH_TEST;
 constexpr int kPaccExpWidth = PACC_EXP_WIDTH_TEST;
 constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
 constexpr int kAccumLatency = 6;
-constexpr int kGetaccLatency = 4;
+// Includes the synchronous read cycle of sram2r1w.
+constexpr int kGetaccLatency = 5;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 #ifndef FDOT_ACC_FRAC_BITS_TEST
 #define FDOT_ACC_FRAC_BITS_TEST 18
@@ -392,18 +395,19 @@ private:
 
         send_value(1, 8.0L, false);
         send_value(2, -3.5L, false);
+        idle(2);
         send_value(1, 0.5L, true);
         get_all("independent_regs");
 
         send_split_value(3, 1.0L, 12345, false);
-        idle(1);
+        idle(3);
         send_split_value(3, 2.0L, -54321, true);
-        idle(1);
+        idle(3);
         send_value(3, 3.0L, true);
         get_all("back_to_back_same_idx");
 
         send_nan(4, false);
-        idle(1);
+        idle(3);
         send_value(4, 1.0L, true);
         get_all("nan_sticky");
 
@@ -420,11 +424,15 @@ private:
 
         for (int batch = 0; batch < 250; ++batch) {
             const int count = batch_dist(rng_);
-            int last_idx = -1;
+            std::array<int, 3> recent_idx = {-1, -1, -1};
             for (int i = 0; i < count; ++i) {
                 const int idx = idx_dist(rng_);
-                if (idx == last_idx) {
+                while (std::find(recent_idx.begin(), recent_idx.end(), idx) !=
+                       recent_idx.end()) {
                     idle(1);
+                    recent_idx[2] = recent_idx[1];
+                    recent_idx[1] = recent_idx[0];
+                    recent_idx[0] = -1;
                 }
                 const long double real_value =
                     static_cast<long double>(value_dist(rng_)) / 16.0L;
@@ -439,7 +447,9 @@ private:
                 }
                 const bool accum = accum_dist(rng_);
                 send_acc(idx, value, accum);
-                last_idx = idx;
+                recent_idx[2] = recent_idx[1];
+                recent_idx[1] = recent_idx[0];
+                recent_idx[0] = idx;
             }
             get_all("random_batch_" + std::to_string(batch));
         }

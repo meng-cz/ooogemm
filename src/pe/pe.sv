@@ -9,7 +9,8 @@
 // after valid masking.  The reduce result is registered before paccreg so the
 // multi-lane OR tree is isolated from both fdot and paccreg pipelines.  The
 // external schedule must guarantee at most one fdot output is valid in any
-// cycle, and must not submit the same paccidx in two consecutive cycles.
+// cycle, and must not submit the same paccidx again within the next three
+// cycles (the earliest legal repeat is four submission cycles later).
 
 `default_nettype none
 

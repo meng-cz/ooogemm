@@ -12,9 +12,9 @@
 // - Same-cycle read/write to the same bank and address is modeled READ_FIRST:
 //   the read returns the old stored row.
 //
-// Each bank is instantiated through oprandbuf_bank_sram so later backend flows
-// can replace that module with a foundry/FPGA memory macro wrapper without
-// changing the matrix buffer interface.
+// Each bank is instantiated through sram1r1w so later backend flows can replace
+// that module with a foundry/FPGA memory macro wrapper without changing the
+// matrix buffer interface.
 
 `default_nettype none
 
@@ -71,71 +71,20 @@ module oprandbuf #(
     genvar bank;
     generate
         for (bank = 0; bank < BANK_COUNT; bank++) begin : gen_bank
-            oprandbuf_bank_sram #(
-                .DEPTH(BUF_SIZE),
-                .ADDR_WIDTH(BUF_IDX_WIDTH),
-                .DATA_WIDTH(BANK_DATA_WIDTH)
+            sram1r1w #(
+                .SIZE(BUF_SIZE),
+                .WIDTH(BANK_DATA_WIDTH)
             ) u_bank_sram (
                 .clk(clk),
-                .wr_valid_i(wr_valid_i && wr_bank_en_i[bank]),
-                .wr_idx_i(wr_idx_i),
+                .wr_en_i(wr_valid_i && wr_bank_en_i[bank]),
+                .wr_addr_i(wr_idx_i),
                 .wr_data_i(wr_data_i[bank]),
-                .rd_valid_i(rd_valid_i),
-                .rd_idx_i(rd_idx_i),
+                .rd_en_i(rd_valid_i),
+                .rd_addr_i(rd_idx_i),
                 .rd_data_o(rd_data_o[bank])
             );
         end
     endgenerate
-
-endmodule
-
-// Single-bank synchronous 1R1W SRAM wrapper.
-//
-// This module is the intended replacement boundary for backend-specific memory
-// macros.  The default implementation uses a Vivado-friendly inferred RAM:
-// - one-cycle synchronous read
-// - independent same-cycle read and write
-// - READ_FIRST behavior for same-address read/write in simulation
-// - no reset on the memory array, preserving BRAM/SRAM inference
-module oprandbuf_bank_sram #(
-    parameter int DEPTH      = 16,
-    parameter int ADDR_WIDTH = (DEPTH <= 1) ? 1 : $clog2(DEPTH),
-    parameter int DATA_WIDTH = 32
-) (
-    input  logic clk,
-
-    input  logic wr_valid_i,
-    input  logic [ADDR_WIDTH-1:0] wr_idx_i,
-    input  logic [DATA_WIDTH-1:0] wr_data_i,
-
-    input  logic rd_valid_i,
-    input  logic [ADDR_WIDTH-1:0] rd_idx_i,
-    output logic [DATA_WIDTH-1:0] rd_data_o
-);
-
-    initial begin
-        if (DEPTH <= 0) begin
-            $error("DEPTH must be positive");
-        end
-        if (ADDR_WIDTH <= 0) begin
-            $error("ADDR_WIDTH must be positive");
-        end
-        if (DATA_WIDTH <= 0) begin
-            $error("DATA_WIDTH must be positive");
-        end
-    end
-
-    (* ram_style = "block" *)
-    logic [DATA_WIDTH-1:0] ram [0:DEPTH-1];
-
-    always_ff @(posedge clk) begin
-        if (rd_valid_i) begin
-            rd_data_o <= ram[rd_idx_i];
-        end
-        if (wr_valid_i) begin
-            ram[wr_idx_i] <= wr_data_i;
-        end
-    end
 
 endmodule
 

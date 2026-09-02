@@ -51,8 +51,10 @@ verilator \
   "${ROOT_DIR}/src/sche/blocksel.sv" \
   "${ROOT_DIR}/src/sche/new_static_uopparse.sv" \
   "${ROOT_DIR}/src/buf/oprandbuf.sv" \
+  "${ROOT_DIR}/src/sram/sram1r1w.sv" \
   "${ROOT_DIR}/src/pe/fdot8e4m3.sv" \
   "${ROOT_DIR}/src/pe/paccreg.sv" \
+  "${ROOT_DIR}/src/sram/sram2r1w.sv" \
   "${ROOT_DIR}/src/pe/pe.sv" \
   "${ROOT_DIR}/src/sa/lanebuf.sv" \
   "${ROOT_DIR}/src/sa/sa.sv" \

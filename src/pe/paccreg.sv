@@ -12,9 +12,10 @@
 //
 // Pipeline:
 //   - Accumulation input writes the register file after ACCUM_PIPE_STAGES.
-//   - The input protocol permits one submission per cycle, but forbids two
-//     consecutive submissions to the same paccidx.  A writeback-to-read bypass
-//     handles the legal N/N+2 same-paccidx case.
+//   - The input protocol permits one submission per cycle, but requires at
+//     least four submission cycles between two uses of the same paccidx.
+//     This leaves three cycles between the ACC read and the next writeback, so
+//     the accumulation read path does not need a datapath bypass.
 //   - getacc requests produce getacc_o/getacc_data_o after GETACC_PIPE_STAGES.
 
 `default_nettype none
@@ -22,7 +23,8 @@
 package paccreg_pkg;
 
     localparam int ACCUM_PIPE_STAGES  = 6;
-    localparam int GETACC_PIPE_STAGES = 4;
+    // GETACC includes the synchronous ACC SRAM read cycle.
+    localparam int GETACC_PIPE_STAGES = 5;
 
 endpackage
 
@@ -55,6 +57,7 @@ module paccreg #(
     import paccreg_pkg::*;
 
     localparam int FDOT_FIXED_WIDTH = FDOT_CSA_WIDTH + 1;
+    localparam int ACC_REG_WIDTH = PACC_EXP_WIDTH + PACC_SIG_WIDTH;
 
     initial begin
         if (PACC_NUM <= 0) begin
@@ -276,10 +279,49 @@ module paccreg #(
         end
     endfunction
 
-    pseudo_t acc_reg [PACC_NUM];
+    // The storage itself is a backend-replaceable synchronous 2R1W SRAM.
+    // acc_initialized_q supplies reset semantics without resetting the SRAM
+    // array, which is required for BRAM/SRAM inference.
+    logic [ACC_REG_WIDTH-1:0] acc_rd0_data;
+    logic [ACC_REG_WIDTH-1:0] acc_rd1_data;
+    logic [PACC_NUM-1:0] acc_initialized_q;
+    logic acc_rd0_en;
+    logic acc_rd1_en;
+    logic [PACC_IDX_WIDTH-1:0] acc_rd0_addr;
 
-    logic prev_valid_q;
-    logic [PACC_IDX_WIDTH-1:0] prev_paccidx_q;
+    pseudo_t accum_wb_value;
+    logic accum_wb_valid;
+    logic [PACC_IDX_WIDTH-1:0] accum_wb_idx;
+
+    sram2r1w #(
+        .SIZE(PACC_NUM),
+        .WIDTH(ACC_REG_WIDTH)
+    ) u_acc_sram (
+        .clk(clk),
+        .wr_en_i(accum_wb_valid && (int'(accum_wb_idx) < PACC_NUM)),
+        .wr_addr_i(accum_wb_idx),
+        .wr_data_i(accum_wb_value),
+        .rd0_en_i(acc_rd0_en),
+        .rd0_addr_i(acc_rd0_addr),
+        .rd0_data_o(acc_rd0_data),
+        .rd1_en_i(acc_rd1_en),
+        .rd1_addr_i(getacc_idx_i),
+        .rd1_data_o(acc_rd1_data)
+    );
+
+    // The accumulation request is issued one stage before s3 consumes the
+    // value, so the SRAM's synchronous read latency is hidden in the pipe.
+    assign acc_rd0_en = s2_valid && (int'(s2_idx) < PACC_NUM);
+    assign acc_rd0_addr = s2_idx;
+    assign acc_rd1_en = getacc_i && (int'(getacc_idx_i) < PACC_NUM);
+
+    logic getacc_rd_pending_q;
+    logic [PACC_IDX_WIDTH-1:0] getacc_rd_idx_q;
+    logic acc_rd1_wb_valid_q;
+    pseudo_t acc_rd1_wb_value_q;
+
+    logic [2:0] recent_valid_q;
+    logic [PACC_IDX_WIDTH-1:0] recent_paccidx_q [3];
 
     logic s1_valid;
     logic signed [FDOT_CSA_WIDTH-1:0] s1_sum;
@@ -339,10 +381,6 @@ module paccreg #(
         );
     end
 
-    pseudo_t accum_wb_value;
-    logic accum_wb_valid;
-    logic [PACC_IDX_WIDTH-1:0] accum_wb_idx;
-
     always_comb begin
         logic signed [PACC_SIG_WIDTH:0] sum;
         logic signed [PACC_SIG_WIDTH:0] shifted_sum;
@@ -369,12 +407,11 @@ module paccreg #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (int i = 0; i < PACC_NUM; i++) begin
-                acc_reg[i] <= pseudo_zero();
+            acc_initialized_q <= '0;
+            recent_valid_q <= '0;
+            for (int i = 0; i < 3; i++) begin
+                recent_paccidx_q[i] <= '0;
             end
-
-            prev_valid_q <= 1'b0;
-            prev_paccidx_q <= '0;
 
             s1_valid <= 1'b0;
             s1_sum   <= '0;
@@ -416,13 +453,20 @@ module paccreg #(
             s5_cur_aligned <= '0;
             s5_in_aligned <= '0;
         end else begin
-            if (valid_i && prev_valid_q && (paccidx_i == prev_paccidx_q)) begin
-                $error("paccreg input protocol violation: consecutive submissions to same paccidx");
+            for (int i = 0; i < 3; i++) begin
+                if (valid_i && recent_valid_q[i] &&
+                    (paccidx_i == recent_paccidx_q[i])) begin
+                    $error("paccreg input protocol violation: submissions to the same paccidx must be four cycles apart");
+                end
             end
 
-            prev_valid_q <= valid_i;
+            recent_valid_q[2] <= recent_valid_q[1];
+            recent_valid_q[1] <= recent_valid_q[0];
+            recent_valid_q[0] <= valid_i;
+            recent_paccidx_q[2] <= recent_paccidx_q[1];
+            recent_paccidx_q[1] <= recent_paccidx_q[0];
             if (valid_i) begin
-                prev_paccidx_q <= paccidx_i;
+                recent_paccidx_q[0] <= paccidx_i;
             end
 
             s1_valid <= valid_i;
@@ -475,13 +519,12 @@ module paccreg #(
                 int cur_shift;
                 int in_shift;
 
-                cur_exp = acc_reg[s3_idx].exp;
-                cur_sig = acc_reg[s3_idx].sig;
-                if (accum_wb_valid && (accum_wb_idx == s3_idx)) begin
-                    cur_exp = accum_wb_value.exp;
-                    cur_sig = accum_wb_value.sig;
+                cur_exp = '0;
+                cur_sig = '0;
+                if (acc_initialized_q[s3_idx]) begin
+                    cur_exp = $signed(acc_rd0_data[ACC_REG_WIDTH-1 -: PACC_EXP_WIDTH]);
+                    cur_sig = $signed(acc_rd0_data[PACC_SIG_WIDTH-1:0]);
                 end
-
                 if (s3_nan || (s3_accum && pseudo_is_nan(cur_exp, cur_sig))) begin
                     s4_exp <= PSEUDO_NAN_EXP;
                     s4_sig <= {{(PACC_SIG_WIDTH-1){1'b0}}, 1'b1};
@@ -521,9 +564,9 @@ module paccreg #(
             end
 
             if (accum_wb_valid && (int'(accum_wb_idx) < PACC_NUM)) begin
-                acc_reg[accum_wb_idx].exp <= accum_wb_value.exp;
-                acc_reg[accum_wb_idx].sig <= accum_wb_value.sig;
+                acc_initialized_q[accum_wb_idx] <= 1'b1;
             end
+
         end
     end
 
@@ -591,6 +634,11 @@ module paccreg #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
+            getacc_rd_pending_q <= 1'b0;
+            getacc_rd_idx_q <= '0;
+            acc_rd1_wb_valid_q <= 1'b0;
+            acc_rd1_wb_value_q <= pseudo_zero();
+
             g1_valid <= 1'b0;
             g1_exp   <= '0;
             g1_sig   <= '0;
@@ -621,17 +669,45 @@ module paccreg #(
             getacc_o      <= 1'b0;
             getacc_data_o <= 32'd0;
         end else begin
-            g1_valid <= getacc_i;
-            if (getacc_i && (int'(getacc_idx_i) < PACC_NUM)) begin
-                g1_exp <= acc_reg[getacc_idx_i].exp;
-                g1_sig <= acc_reg[getacc_idx_i].sig;
-                if (accum_wb_valid && (accum_wb_idx == getacc_idx_i)) begin
+            getacc_rd_pending_q <= getacc_i;
+            getacc_rd_idx_q <= getacc_idx_i;
+
+            // acc_rd1_data is the response to the GETACC request from the
+            // preceding cycle.  The initialized bit makes an unread SRAM word
+            // behave as pseudo-zero after reset.
+            g1_valid <= getacc_rd_pending_q;
+            if (getacc_rd_pending_q &&
+                (int'(getacc_rd_idx_q) < PACC_NUM) &&
+                acc_initialized_q[getacc_rd_idx_q]) begin
+                g1_exp <= $signed(acc_rd1_data[ACC_REG_WIDTH-1 -: PACC_EXP_WIDTH]);
+                g1_sig <= $signed(acc_rd1_data[PACC_SIG_WIDTH-1:0]);
+                if (acc_rd1_wb_valid_q) begin
+                    g1_exp <= acc_rd1_wb_value_q.exp;
+                    g1_sig <= acc_rd1_wb_value_q.sig;
+                end
+                if (accum_wb_valid && (accum_wb_idx == getacc_rd_idx_q)) begin
                     g1_exp <= accum_wb_value.exp;
                     g1_sig <= accum_wb_value.sig;
                 end
+            end else if (getacc_rd_pending_q &&
+                         acc_rd1_wb_valid_q) begin
+                g1_exp <= acc_rd1_wb_value_q.exp;
+                g1_sig <= acc_rd1_wb_value_q.sig;
+            end else if (getacc_rd_pending_q &&
+                         accum_wb_valid &&
+                         (accum_wb_idx == getacc_rd_idx_q)) begin
+                g1_exp <= accum_wb_value.exp;
+                g1_sig <= accum_wb_value.sig;
             end else begin
                 g1_exp <= '0;
                 g1_sig <= '0;
+            end
+
+            acc_rd1_wb_valid_q <= acc_rd1_en && accum_wb_valid &&
+                                  (accum_wb_idx == getacc_idx_i);
+            if (acc_rd1_en && accum_wb_valid &&
+                (accum_wb_idx == getacc_idx_i)) begin
+                acc_rd1_wb_value_q <= accum_wb_value;
             end
 
             g2_valid     <= g1_valid;

@@ -2,6 +2,7 @@
 #include "verilated.h"
 
 #include <cfenv>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -39,7 +40,8 @@ constexpr int kPaccSigWidth = PACC_SIG_WIDTH_TEST;
 constexpr int kFdotLatency = 2;
 constexpr int kFdotToPaccregReduceLatency = 1;
 constexpr int kPaccregAccumLatency = 6;
-constexpr int kGetaccLatency = 4;
+// Includes the synchronous read cycle of sram2r1w.
+constexpr int kGetaccLatency = 5;
 constexpr int64_t kPseudoNanExp = (int64_t{1} << (kPaccExpWidth - 1)) - 1;
 constexpr int kFdotAccFracBits = 18;
 
@@ -560,8 +562,7 @@ private:
 
         int dots_started = 0;
         int dots_finished = 0;
-        bool prev_last_valid = false;
-        int prev_last_paccidx = -1;
+        std::array<int, 3> recent_last_paccidx = {-1, -1, -1};
         constexpr int kTargetDots = 320;
 
         while (dots_finished < kTargetDots) {
@@ -588,8 +589,11 @@ private:
                 if (is_last && used_last) {
                     continue;
                 }
-                if (is_last && prev_last_valid &&
-                    active[lane].paccidx == prev_last_paccidx) {
+                if (is_last &&
+                    std::find(recent_last_paccidx.begin(),
+                              recent_last_paccidx.end(),
+                              active[lane].paccidx) !=
+                        recent_last_paccidx.end()) {
                     continue;
                 }
 
@@ -618,8 +622,9 @@ private:
             }
 
             drive_cycle(lanes);
-            prev_last_valid = this_last_valid;
-            prev_last_paccidx = this_last_paccidx;
+            recent_last_paccidx[2] = recent_last_paccidx[1];
+            recent_last_paccidx[1] = recent_last_paccidx[0];
+            recent_last_paccidx[0] = this_last_valid ? this_last_paccidx : -1;
         }
 
         for (;;) {

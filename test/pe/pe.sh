@@ -36,6 +36,7 @@ verilator \
   -CFLAGS "-DGEMM_LANE_NUM_TEST=${GEMM_LANE_NUM} -DPACC_NUM_TEST=${PACC_NUM} -DPACC_IDX_WIDTH_TEST=${PACC_IDX_WIDTH} -DPACC_EXP_WIDTH_TEST=${PACC_EXP_WIDTH} -DPACC_SIG_WIDTH_TEST=${PACC_SIG_WIDTH}" \
   "${ROOT_DIR}/src/pe/fdot8e4m3.sv" \
   "${ROOT_DIR}/src/pe/paccreg.sv" \
+  "${ROOT_DIR}/src/sram/sram2r1w.sv" \
   "${ROOT_DIR}/src/pe/pe.sv" \
   "${SCRIPT_DIR}/pe.cpp"
 

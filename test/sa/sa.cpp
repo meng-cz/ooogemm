@@ -808,7 +808,7 @@ private:
 
         const uint64_t finish0 = wait_finish_cycle(0x510);
         const uint64_t finish1 = wait_finish_cycle(0x511);
-        if (finish1 < finish0 + 2) {
+        if (finish1 < finish0 + 4) {
             std::ostringstream os;
             os << "same-PACC interlock allowed dependent GEMMs to finish too close: "
                << "finish0=" << finish0 << " finish1=" << finish1;
