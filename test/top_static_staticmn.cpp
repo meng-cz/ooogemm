@@ -338,7 +338,10 @@ int main(int argc, char** argv) {
         constexpr int load_beats_per_tile =
             ((kMaxSubtileRows + rows_per_load_beat - 1) / rows_per_load_beat) *
             beats_per_load_row;
-        const bool merge_batch = tm * tn < merge_cap;
+        const bool merge_batch =
+            perf_batch > 1 &&
+            tm * tn < merge_cap &&
+            (merge_cap / (tm * tn)) >= 2;
         const int expected_loads = merge_batch ?
             (2 * perf_batch * tm * tn * tk * load_beats_per_tile) :
             (perf_batch * blocks_m * blocks_n * tk *

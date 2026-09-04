@@ -146,6 +146,46 @@ module new_static_uopparse #(
         return v;
     endfunction
 
+    // Merge mode is reserved for combining at least two independent batch
+    // instances.  A single batch with several output tiles must use the
+    // ordinary BM x BN Cartesian block; treating those tiles as merge entries
+    // would load the same A tile once per output tile.
+    function automatic logic merge_enabled(
+        input logic [DIM_WIDTH-1:0] batch_count,
+        input count_t               tiles_per_batch
+    );
+        count_t max_batches;
+        begin
+            if (batch_count <= 1 || tiles_per_batch == 0 ||
+                tiles_per_batch >= count_t'(MERGE_CAP)) begin
+                return 1'b0;
+            end
+            max_batches = count_t'(MERGE_CAP) / tiles_per_batch;
+            return max_batches >= 2;
+        end
+    endfunction
+
+    // Return the number of flattened tile entries in one merge chunk.  The
+    // chunk is made from complete batch instances, so LOAD_A/LOAD_B counts
+    // are derived from the actual number of merged batches rather than from
+    // the capacity alone.
+    function automatic count_t merge_chunk_count(
+        input count_t remaining_tiles,
+        input count_t tiles_per_batch
+    );
+        count_t max_batches;
+        count_t chunk_batches;
+        begin
+            if (tiles_per_batch == 0) return '0;
+            max_batches = count_t'(MERGE_CAP) / tiles_per_batch;
+            if (max_batches == 0) max_batches = 1;
+            chunk_batches = remaining_tiles / tiles_per_batch;
+            if (chunk_batches > max_batches) chunk_batches = max_batches;
+            if (chunk_batches == 0 && remaining_tiles != 0) chunk_batches = 1;
+            return min_count(remaining_tiles, chunk_batches * tiles_per_batch);
+        end
+    endfunction
+
     // Address offsets are expressed in tiles.  Widen each count before any
     // arithmetic so products cannot overflow count_t before reaching the
     // ADDR_WIDTH-wide memory address.
@@ -230,9 +270,10 @@ module new_static_uopparse #(
             if (merge_base_q + merge_count_q < count_t'(batch_q) * tm_q * tn_q) begin
                 next_exists_comb = 1'b1;
                 next_merge_base_comb = merge_base_q + merge_count_q;
-                next_merge_count_comb = min_count(
-                    count_t'(batch_q) * tm_q * tn_q - merge_base_q - merge_count_q,
-                    count_t'(MERGE_CAP));
+                next_merge_count_comb = merge_chunk_count(
+                    count_t'(batch_q) * tm_q * tn_q -
+                        merge_base_q - merge_count_q,
+                    tm_q * tn_q);
             end
         end else if (block_n_base_q + bn_q < tn_q) begin
             next_exists_comb = 1'b1;
@@ -496,12 +537,21 @@ module new_static_uopparse #(
                 bn_limit_q <= min_count(ceil_div(cmd_n_i, SUBTILE_N),
                                         count_t'(block_n_i));
                 batch_idx_q <= 0; block_m_base_q <= 0; block_n_base_q <= 0;
-                merge_mode_q <= ceil_div(cmd_m_i, SUBTILE_M) *
-                                ceil_div(cmd_n_i, SUBTILE_N) < count_t'(MERGE_CAP);
+                merge_mode_q <= merge_enabled(
+                    cmd_batch_i,
+                    ceil_div(cmd_m_i, SUBTILE_M) *
+                    ceil_div(cmd_n_i, SUBTILE_N));
                 merge_base_q <= 0;
-                merge_count_q <= min_count(count_t'(cmd_batch_i) *
-                    ceil_div(cmd_m_i, SUBTILE_M) * ceil_div(cmd_n_i, SUBTILE_N),
-                    count_t'(MERGE_CAP));
+                merge_count_q <= merge_enabled(
+                    cmd_batch_i,
+                    ceil_div(cmd_m_i, SUBTILE_M) *
+                    ceil_div(cmd_n_i, SUBTILE_N)) ?
+                    merge_chunk_count(
+                        count_t'(cmd_batch_i) *
+                            ceil_div(cmd_m_i, SUBTILE_M) *
+                            ceil_div(cmd_n_i, SUBTILE_N),
+                        ceil_div(cmd_m_i, SUBTILE_M) *
+                        ceil_div(cmd_n_i, SUBTILE_N)) : '0;
                 load_base_group_q <= 1'b0; acc_group_q <= 1'b0;
                 load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
                 load_active_q <= 1'b1; load_issue_done_q <= 1'b0; load_ready_q <= 1'b0;

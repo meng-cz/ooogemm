@@ -14,21 +14,20 @@
 //   req: mem_req_valid_o && mem_req_ready_i, carrying mem_req_addr_o/id_o
 //   rsp: mem_rsp_valid_i && mem_rsp_ready_o, carrying mem_rsp_id_i/data_i
 //
-// Requests are non-blocking.  IDs are reserved before requests are presented
-// on the bus, held stable while req_valid is stalled, and marked outstanding
-// after the request handshake.  The pipeline is split into:
-//   1. uop accept: latch one tile-level load uop.
-//   2. row issue: reserve an ID, write the metadata table, and present a stable
-//      memory request.  The request unit is a memory beat, not necessarily one
-//      operand row.
-//   3. response decode: register metadata/data looked up by mem_rsp_id_i.  A
-//      wide memory beat can contain multiple operand rows; a narrow memory beat
-//      is assembled with other beats before a row-bank write is emitted.
-//   4. buffer write: drive one or more row-bank writes and an optional
-//      tile-ready pulse.
+// Requests are non-blocking.  A tile-uop FIFO decouples uop acceptance from
+// memory request issue.  The request head reserves IDs and walks every beat of
+// each queued tile, while an independent completion head retires tiles after
+// all of their responses have written the operand buffer.  Consequently the
+// request stream can cross tile boundaries without an idle cycle and the uop
+// input can continue filling the queue in parallel.
+//
+// Responses may return out of order.  Each transaction ID records its FIFO
+// slot and row metadata, so response data is routed directly to the correct
+// A/B bank.  The completion head only orders ready notification and queue-slot
+// release; it does not serialize the response data path.
 // This keeps the response ID table lookup off the A/B buffer write critical
-// path.  A/B buffer ready is reported when the last row response for that tile
-// is written.
+// path.  A/B buffer ready is reported when the completed tile reaches the
+// FIFO completion head.
 //
 // Addressing convention: uop_addr_i is a tile-linear address and memory
 // addresses are beat-linear.  When LOAD_DATA_WIDTH == ROW_DATA_WIDTH this is
@@ -59,6 +58,7 @@ module loadunit #(
         $clog2(((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) * ((ROW_DATA_WIDTH >= LOAD_DATA_WIDTH) ?
           (ROW_DATA_WIDTH / LOAD_DATA_WIDTH) : 1)),
     parameter int OUTSTANDING_NUM = (1 << BUS_ID_WIDTH),
+    parameter int UOP_QUEUE_DEPTH = OUTSTANDING_NUM,
     parameter int ROWS_LEFT_WIDTH = (((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) <= 1) ? 1 :
         $clog2(((SUBTILE_M > SUBTILE_N) ? SUBTILE_M : SUBTILE_N) + 1)
 ) (
@@ -130,6 +130,9 @@ module loadunit #(
         if (OUTSTANDING_NUM != (1 << BUS_ID_WIDTH)) begin
             $error("OUTSTANDING_NUM must equal 1 << BUS_ID_WIDTH");
         end
+        if (UOP_QUEUE_DEPTH <= 0) begin
+            $error("UOP_QUEUE_DEPTH must be positive");
+        end
         if (ROW_DATA_WIDTH != SUBTILE_K * 8) begin
             $error("ROW_DATA_WIDTH must equal SUBTILE_K * 8");
         end
@@ -176,8 +179,10 @@ module loadunit #(
         ROWS_PER_BEAT;
     localparam logic [BEATS_PER_ROW-1:0] BEAT_MASK_ALL = {BEATS_PER_ROW{1'b1}};
 
-    localparam int FREE_COUNT_WIDTH =
-        (OUTSTANDING_NUM <= 1) ? 1 : $clog2(OUTSTANDING_NUM + 1);
+    localparam int UOP_PTR_WIDTH =
+        (UOP_QUEUE_DEPTH <= 1) ? 1 : $clog2(UOP_QUEUE_DEPTH);
+    localparam int UOP_COUNT_WIDTH =
+        (UOP_QUEUE_DEPTH <= 1) ? 1 : $clog2(UOP_QUEUE_DEPTH + 1);
 
     logic id_busy [OUTSTANDING_NUM];
     logic id_outstanding [OUTSTANDING_NUM];
@@ -187,30 +192,43 @@ module loadunit #(
     logic [ROWS_PER_BEAT_WIDTH-1:0] id_rows_in_beat [OUTSTANDING_NUM];
     logic [ABUF_IDX_WIDTH-1:0] id_abufidx [OUTSTANDING_NUM];
     logic [BBUF_IDX_WIDTH-1:0] id_bbufidx [OUTSTANDING_NUM];
+    logic [UOP_PTR_WIDTH-1:0] id_uop_slot [OUTSTANDING_NUM];
 
-    logic [ROWS_LEFT_WIDTH-1:0] a_rows_left [ABUF_SIZE];
-    logic [ROWS_LEFT_WIDTH-1:0] b_rows_left [BBUF_SIZE];
     logic [ROW_DATA_WIDTH-1:0] a_partial_data [ABUF_SIZE][SUBTILE_M];
     logic [ROW_DATA_WIDTH-1:0] b_partial_data [BBUF_SIZE][SUBTILE_N];
     logic [BEATS_PER_ROW-1:0] a_partial_mask [ABUF_SIZE][SUBTILE_M];
     logic [BEATS_PER_ROW-1:0] b_partial_mask [BBUF_SIZE][SUBTILE_N];
 
-    logic issue_active_q;
-    logic issue_is_b_q;
-    logic [ADDR_WIDTH-1:0] issue_tile_addr_q;
-    logic [ABUF_IDX_WIDTH-1:0] issue_abufidx_q;
-    logic [BBUF_IDX_WIDTH-1:0] issue_bbufidx_q;
+    logic uop_valid_q [UOP_QUEUE_DEPTH];
+    logic uop_is_b_q [UOP_QUEUE_DEPTH];
+    logic [ADDR_WIDTH-1:0] uop_tile_addr_q [UOP_QUEUE_DEPTH];
+    logic [ABUF_IDX_WIDTH-1:0] uop_abufidx_q [UOP_QUEUE_DEPTH];
+    logic [BBUF_IDX_WIDTH-1:0] uop_bbufidx_q [UOP_QUEUE_DEPTH];
+    logic [ROWS_LEFT_WIDTH-1:0] uop_rows_q [UOP_QUEUE_DEPTH];
+    logic [ISSUE_REQ_WIDTH-1:0] uop_req_count_q [UOP_QUEUE_DEPTH];
+    logic [ROWS_LEFT_WIDTH-1:0] uop_rows_left_q [UOP_QUEUE_DEPTH];
+    logic uop_complete_q [UOP_QUEUE_DEPTH];
+
+    logic [UOP_PTR_WIDTH-1:0] uop_wr_ptr_q;
+    logic [UOP_PTR_WIDTH-1:0] issue_head_q;
+    logic [UOP_PTR_WIDTH-1:0] complete_head_q;
+    logic [UOP_COUNT_WIDTH-1:0] uop_count_q;
+    logic [UOP_COUNT_WIDTH-1:0] issue_count_q;
     logic [ISSUE_REQ_WIDTH-1:0] issue_req_q;
-    logic [ROWS_LEFT_WIDTH-1:0] issue_rows_q;
-    logic [ISSUE_REQ_WIDTH-1:0] issue_req_count_q;
+
+    logic a_target_reserved_q [ABUF_SIZE];
+    logic b_target_reserved_q [BBUF_SIZE];
 
     logic req_hold_valid_q;
     logic [BUS_ID_WIDTH-1:0] req_hold_id_q;
     logic [ADDR_WIDTH-1:0] req_hold_addr_q;
 
-    logic [FREE_COUNT_WIDTH-1:0] free_count_q;
     logic free_found;
     logic [BUS_ID_WIDTH-1:0] free_id;
+
+    wire complete_fire = (uop_count_q != '0) &&
+                         uop_valid_q[int'(complete_head_q)] &&
+                         uop_complete_q[int'(complete_head_q)];
 
     always_comb begin
         free_found = 1'b0;
@@ -231,11 +249,11 @@ module loadunit #(
         target_busy = 1'b1;
         if (uop_is_b_i) begin
             if (int'(uop_bbufidx_i) < BBUF_SIZE) begin
-                target_busy = b_rows_left[int'(uop_bbufidx_i)] != '0;
+                target_busy = b_target_reserved_q[int'(uop_bbufidx_i)];
             end
         end else begin
             if (int'(uop_abufidx_i) < ABUF_SIZE) begin
-                target_busy = a_rows_left[int'(uop_abufidx_i)] != '0;
+                target_busy = a_target_reserved_q[int'(uop_abufidx_i)];
             end
         end
     end
@@ -264,9 +282,7 @@ module loadunit #(
             ROWS_LEFT_WIDTH'(uop_is_b_i ? SUBTILE_N : SUBTILE_M);
     end
 
-    assign uop_ready_o = !issue_active_q &&
-                         !req_hold_valid_q &&
-                         (free_count_q >= FREE_COUNT_WIDTH'(uop_req_count_eff)) &&
+    assign uop_ready_o = (uop_count_q < UOP_COUNT_WIDTH'(UOP_QUEUE_DEPTH)) &&
                          !target_busy &&
                          !(uop_needs_zero_init && rsp_valid_q);
 
@@ -284,6 +300,17 @@ module loadunit #(
             scaled_tile = tile_addr * ADDR_WIDTH'(is_b ? B_TILE_REQS : A_TILE_REQS);
             req_offset = ADDR_WIDTH'(req_idx);
             return scaled_tile + req_offset;
+        end
+    endfunction
+
+    function automatic logic [UOP_PTR_WIDTH-1:0] uop_ptr_inc(
+        input logic [UOP_PTR_WIDTH-1:0] ptr
+    );
+        begin
+            if (int'(ptr) == UOP_QUEUE_DEPTH - 1) begin
+                return '0;
+            end
+            return ptr + 1'b1;
         end
     endfunction
 
@@ -376,11 +403,10 @@ module loadunit #(
     logic [ROWS_LEFT_WIDTH-1:0] rsp_rows_complete_comb;
     logic [ABUF_IDX_WIDTH-1:0] rsp_abufidx_comb;
     logic [BBUF_IDX_WIDTH-1:0] rsp_bbufidx_comb;
+    logic [UOP_PTR_WIDTH-1:0] rsp_uop_slot_comb;
     logic [ROW_DATA_WIDTH-1:0] rsp_full_row_comb;
     logic [BEATS_PER_ROW-1:0] rsp_new_mask_comb;
     logic rsp_row_complete_comb;
-    logic rsp_a_last_comb;
-    logic rsp_b_last_comb;
 
     logic rsp_valid_q;
     logic rsp_is_b_q;
@@ -389,8 +415,6 @@ module loadunit #(
     logic [ABUF_IDX_WIDTH-1:0] rsp_abufidx_q;
     logic [BBUF_IDX_WIDTH-1:0] rsp_bbufidx_q;
     logic [ROW_DATA_WIDTH-1:0] rsp_data_q;
-    logic rsp_a_last_q;
-    logic rsp_b_last_q;
     logic [BEAT_GROUP_NUM-1:0] rsp_wide_group_hit_comb;
     logic [SUBTILE_M-1:0] rsp_a_bank_en_comb;
     logic [ROW_DATA_WIDTH-1:0] rsp_a_bank_data_comb [SUBTILE_M];
@@ -405,6 +429,7 @@ module loadunit #(
         rsp_rows_in_beat_comb = id_rows_in_beat[int'(mem_rsp_id_i)];
         rsp_abufidx_comb = id_abufidx[int'(mem_rsp_id_i)];
         rsp_bbufidx_comb = id_bbufidx[int'(mem_rsp_id_i)];
+        rsp_uop_slot_comb = id_uop_slot[int'(mem_rsp_id_i)];
         rsp_full_row_comb = '0;
         rsp_new_mask_comb = '0;
 
@@ -436,16 +461,6 @@ module loadunit #(
         rsp_rows_complete_comb = rsp_row_complete_comb ?
             ROWS_LEFT_WIDTH'(rsp_rows_in_beat_comb) : '0;
 
-        rsp_a_last_comb = 1'b0;
-        rsp_b_last_comb = 1'b0;
-        if (rsp_accept && rsp_row_complete_comb && !rsp_is_b_comb) begin
-            rsp_a_last_comb =
-                a_rows_left[int'(rsp_abufidx_comb)] == rsp_rows_complete_comb;
-        end
-        if (rsp_accept && rsp_row_complete_comb && rsp_is_b_comb) begin
-            rsp_b_last_comb =
-                b_rows_left[int'(rsp_bbufidx_comb)] == rsp_rows_complete_comb;
-        end
     end
 
     always_comb begin
@@ -538,17 +553,21 @@ module loadunit #(
             end
         end
 
-        abuf_ready_valid_o = rsp_valid_q && !rsp_is_b_q && rsp_a_last_q;
-        abuf_ready_idx_o = rsp_abufidx_q;
-        bbuf_ready_valid_o = rsp_valid_q && rsp_is_b_q && rsp_b_last_q;
-        bbuf_ready_idx_o = rsp_bbufidx_q;
+        abuf_ready_valid_o = complete_fire &&
+                             !uop_is_b_q[int'(complete_head_q)];
+        abuf_ready_idx_o = complete_fire ?
+            uop_abufidx_q[int'(complete_head_q)] : '0;
+        bbuf_ready_valid_o = complete_fire &&
+                             uop_is_b_q[int'(complete_head_q)];
+        bbuf_ready_idx_o = complete_fire ?
+            uop_bbufidx_q[int'(complete_head_q)] : '0;
     end
 
-    wire can_reserve_req = issue_active_q &&
+    wire can_reserve_req = (issue_count_q != '0) &&
                            (!req_hold_valid_q || req_fire) &&
                            free_found;
     wire issue_reserve_last = issue_req_q ==
-                              (issue_req_count_q - ISSUE_REQ_WIDTH'(1));
+        (uop_req_count_q[int'(issue_head_q)] - ISSUE_REQ_WIDTH'(1));
 
     logic [ROW_IDX_WIDTH-1:0] issue_row_comb;
     logic [BEAT_IDX_WIDTH-1:0] issue_beat_comb;
@@ -558,25 +577,22 @@ module loadunit #(
         issue_row_comb = req_row_start(issue_req_q);
         issue_beat_comb = req_beat_idx(issue_req_q);
         issue_rows_in_beat_comb = req_rows_in_beat(
-            issue_req_q, issue_rows_q);
+            issue_req_q, uop_rows_q[int'(issue_head_q)]);
     end
 
     logic [LOAD_DATA_WIDTH-1:0] rsp_load_data_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            issue_active_q <= 1'b0;
-            issue_is_b_q <= 1'b0;
-            issue_tile_addr_q <= '0;
-            issue_abufidx_q <= '0;
-            issue_bbufidx_q <= '0;
+            uop_wr_ptr_q <= '0;
+            issue_head_q <= '0;
+            complete_head_q <= '0;
+            uop_count_q <= '0;
+            issue_count_q <= '0;
             issue_req_q <= '0;
-            issue_rows_q <= '0;
-            issue_req_count_q <= '0;
             req_hold_valid_q <= 1'b0;
             req_hold_id_q <= '0;
             req_hold_addr_q <= '0;
-            free_count_q <= FREE_COUNT_WIDTH'(OUTSTANDING_NUM);
             rsp_valid_q <= 1'b0;
             rsp_is_b_q <= 1'b0;
             rsp_row_q <= '0;
@@ -585,8 +601,6 @@ module loadunit #(
             rsp_bbufidx_q <= '0;
             rsp_data_q <= '0;
             rsp_load_data_q <= '0;
-            rsp_a_last_q <= 1'b0;
-            rsp_b_last_q <= 1'b0;
 
             for (int id = 0; id < OUTSTANDING_NUM; id++) begin
                 id_busy[id] <= 1'b0;
@@ -597,16 +611,28 @@ module loadunit #(
                 id_rows_in_beat[id] <= '0;
                 id_abufidx[id] <= '0;
                 id_bbufidx[id] <= '0;
+                id_uop_slot[id] <= '0;
+            end
+            for (int slot = 0; slot < UOP_QUEUE_DEPTH; slot++) begin
+                uop_valid_q[slot] <= 1'b0;
+                uop_is_b_q[slot] <= 1'b0;
+                uop_tile_addr_q[slot] <= '0;
+                uop_abufidx_q[slot] <= '0;
+                uop_bbufidx_q[slot] <= '0;
+                uop_rows_q[slot] <= '0;
+                uop_req_count_q[slot] <= '0;
+                uop_rows_left_q[slot] <= '0;
+                uop_complete_q[slot] <= 1'b0;
             end
             for (int idx = 0; idx < ABUF_SIZE; idx++) begin
-                a_rows_left[idx] <= '0;
+                a_target_reserved_q[idx] <= 1'b0;
                 for (int row = 0; row < SUBTILE_M; row++) begin
                     a_partial_data[idx][row] <= '0;
                     a_partial_mask[idx][row] <= '0;
                 end
             end
             for (int idx = 0; idx < BBUF_SIZE; idx++) begin
-                b_rows_left[idx] <= '0;
+                b_target_reserved_q[idx] <= 1'b0;
                 for (int row = 0; row < SUBTILE_N; row++) begin
                     b_partial_data[idx][row] <= '0;
                     b_partial_mask[idx][row] <= '0;
@@ -621,14 +647,6 @@ module loadunit #(
             rsp_bbufidx_q <= rsp_bbufidx_comb;
             rsp_data_q <= rsp_full_row_comb;
             rsp_load_data_q <= mem_rsp_data_i;
-            rsp_a_last_q <= rsp_a_last_comb;
-            rsp_b_last_q <= rsp_b_last_comb;
-
-            if (can_reserve_req && !rsp_accept) begin
-                free_count_q <= free_count_q - FREE_COUNT_WIDTH'(1);
-            end else if (!can_reserve_req && rsp_accept) begin
-                free_count_q <= free_count_q + FREE_COUNT_WIDTH'(1);
-            end
 
             if (req_fire) begin
                 id_outstanding[int'(req_hold_id_q)] <= 1'b1;
@@ -645,11 +663,6 @@ module loadunit #(
                         b_partial_mask[int'(rsp_bbufidx_comb)][int'(rsp_row_comb)] <=
                             rsp_row_complete_comb ? '0 : rsp_new_mask_comb;
                     end
-                    if (rsp_row_complete_comb &&
-                        b_rows_left[int'(rsp_bbufidx_comb)] != '0) begin
-                        b_rows_left[int'(rsp_bbufidx_comb)] <=
-                            b_rows_left[int'(rsp_bbufidx_comb)] - rsp_rows_complete_comb;
-                    end
                 end else begin
                     if (!LOAD_WIDE) begin
                         a_partial_data[int'(rsp_abufidx_comb)][int'(rsp_row_comb)] <=
@@ -657,31 +670,40 @@ module loadunit #(
                         a_partial_mask[int'(rsp_abufidx_comb)][int'(rsp_row_comb)] <=
                             rsp_row_complete_comb ? '0 : rsp_new_mask_comb;
                     end
-                    if (rsp_row_complete_comb &&
-                        a_rows_left[int'(rsp_abufidx_comb)] != '0) begin
-                        a_rows_left[int'(rsp_abufidx_comb)] <=
-                            a_rows_left[int'(rsp_abufidx_comb)] - rsp_rows_complete_comb;
+                end
+                if (rsp_row_complete_comb &&
+                    (uop_rows_left_q[int'(rsp_uop_slot_comb)] != '0)) begin
+                    if (uop_rows_left_q[int'(rsp_uop_slot_comb)] ==
+                        rsp_rows_complete_comb) begin
+                        uop_rows_left_q[int'(rsp_uop_slot_comb)] <= '0;
+                        uop_complete_q[int'(rsp_uop_slot_comb)] <= 1'b1;
+                    end else begin
+                        uop_rows_left_q[int'(rsp_uop_slot_comb)] <=
+                            uop_rows_left_q[int'(rsp_uop_slot_comb)] -
+                            rsp_rows_complete_comb;
                     end
                 end
             end
 
             if (uop_fire) begin
-                issue_active_q <= 1'b1;
-                issue_is_b_q <= uop_is_b_i;
-                issue_tile_addr_q <= uop_addr_i;
-                issue_abufidx_q <= uop_abufidx_i;
-                issue_bbufidx_q <= uop_bbufidx_i;
-                issue_req_q <= '0;
-                issue_rows_q <= uop_rows_eff;
-                issue_req_count_q <= uop_req_count_eff;
+                uop_valid_q[int'(uop_wr_ptr_q)] <= 1'b1;
+                uop_is_b_q[int'(uop_wr_ptr_q)] <= uop_is_b_i;
+                uop_tile_addr_q[int'(uop_wr_ptr_q)] <= uop_addr_i;
+                uop_abufidx_q[int'(uop_wr_ptr_q)] <= uop_abufidx_i;
+                uop_bbufidx_q[int'(uop_wr_ptr_q)] <= uop_bbufidx_i;
+                uop_rows_q[int'(uop_wr_ptr_q)] <= uop_rows_eff;
+                uop_req_count_q[int'(uop_wr_ptr_q)] <= uop_req_count_eff;
+                uop_rows_left_q[int'(uop_wr_ptr_q)] <= uop_rows_eff;
+                uop_complete_q[int'(uop_wr_ptr_q)] <= 1'b0;
+                uop_wr_ptr_q <= uop_ptr_inc(uop_wr_ptr_q);
                 if (uop_is_b_i) begin
-                    b_rows_left[int'(uop_bbufidx_i)] <= uop_rows_eff;
+                    b_target_reserved_q[int'(uop_bbufidx_i)] <= 1'b1;
                     for (int row = 0; row < SUBTILE_N; row++) begin
                         b_partial_data[int'(uop_bbufidx_i)][row] <= '0;
                         b_partial_mask[int'(uop_bbufidx_i)][row] <= '0;
                     end
                 end else begin
-                    a_rows_left[int'(uop_abufidx_i)] <= uop_rows_eff;
+                    a_target_reserved_q[int'(uop_abufidx_i)] <= 1'b1;
                     for (int row = 0; row < SUBTILE_M; row++) begin
                         a_partial_data[int'(uop_abufidx_i)][row] <= '0;
                         a_partial_mask[int'(uop_abufidx_i)][row] <= '0;
@@ -692,25 +714,54 @@ module loadunit #(
             if (can_reserve_req) begin
                 id_busy[int'(free_id)] <= 1'b1;
                 id_outstanding[int'(free_id)] <= 1'b0;
-                id_is_b[int'(free_id)] <= issue_is_b_q;
                 id_row[int'(free_id)] <= issue_row_comb;
                 id_beat[int'(free_id)] <= issue_beat_comb;
                 id_rows_in_beat[int'(free_id)] <= issue_rows_in_beat_comb;
-                id_abufidx[int'(free_id)] <= issue_abufidx_q;
-                id_bbufidx[int'(free_id)] <= issue_bbufidx_q;
+                id_abufidx[int'(free_id)] <=
+                    uop_abufidx_q[int'(issue_head_q)];
+                id_bbufidx[int'(free_id)] <=
+                    uop_bbufidx_q[int'(issue_head_q)];
+                id_uop_slot[int'(free_id)] <= issue_head_q;
+                id_is_b[int'(free_id)] <= uop_is_b_q[int'(issue_head_q)];
 
                 req_hold_valid_q <= 1'b1;
                 req_hold_id_q <= free_id;
                 req_hold_addr_q <= beat_addr(
-                    issue_tile_addr_q, issue_req_q, issue_is_b_q);
+                    uop_tile_addr_q[int'(issue_head_q)],
+                    issue_req_q,
+                    uop_is_b_q[int'(issue_head_q)]);
 
                 if (issue_reserve_last) begin
-                    issue_active_q <= 1'b0;
                     issue_req_q <= '0;
+                    issue_head_q <= uop_ptr_inc(issue_head_q);
                 end else begin
                     issue_req_q <= issue_req_q + ISSUE_REQ_WIDTH'(1);
                 end
             end
+
+            if (complete_fire) begin
+                uop_valid_q[int'(complete_head_q)] <= 1'b0;
+                uop_complete_q[int'(complete_head_q)] <= 1'b0;
+                if (uop_is_b_q[int'(complete_head_q)]) begin
+                    b_target_reserved_q[
+                        int'(uop_bbufidx_q[int'(complete_head_q)])] <= 1'b0;
+                end else begin
+                    a_target_reserved_q[
+                        int'(uop_abufidx_q[int'(complete_head_q)])] <= 1'b0;
+                end
+                complete_head_q <= uop_ptr_inc(complete_head_q);
+            end
+
+            unique case ({uop_fire, complete_fire})
+                2'b10: uop_count_q <= uop_count_q + 1'b1;
+                2'b01: uop_count_q <= uop_count_q - 1'b1;
+                default: begin end
+            endcase
+            unique case ({uop_fire, can_reserve_req && issue_reserve_last})
+                2'b10: issue_count_q <= issue_count_q + 1'b1;
+                2'b01: issue_count_q <= issue_count_q - 1'b1;
+                default: begin end
+            endcase
         end
     end
 

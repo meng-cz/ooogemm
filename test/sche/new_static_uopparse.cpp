@@ -1,6 +1,7 @@
 #include "Vnew_static_uopparse.h"
 #include "verilated.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <iostream>
@@ -265,16 +266,41 @@ void run_case(const std::string& name, int m, int n, int k, int batch,
             if (load_issued == 0 || gemm_issued == 0 || output_issued == 0) {
                 fail(name + ": missing uop class");
             }
-            if (check_block_boundary_overlap && !boundary_overlap_checked) {
+            const uint64_t tm = (static_cast<uint64_t>(m) + kSubtileM - 1) / kSubtileM;
+            const uint64_t tn = (static_cast<uint64_t>(n) + kSubtileN - 1) / kSubtileN;
+            const uint64_t tk = (static_cast<uint64_t>(k) + kSubtileK - 1) / kSubtileK;
+            const uint64_t merge_cap =
+                std::min<uint64_t>({kBlockM, kBlockN, kPaccGroupSize});
+            const bool merge_batch =
+                batch > 1 && tm * tn < merge_cap &&
+                (merge_cap / (tm * tn)) >= 2;
+            uint64_t expected_load = 0;
+            if (merge_batch) {
+                expected_load = 2 * static_cast<uint64_t>(batch) * tm * tn * tk;
+            } else {
+                for (uint64_t mbase = 0; mbase < tm; mbase += kBlockM) {
+                    const uint64_t bm = std::min<uint64_t>(kBlockM, tm - mbase);
+                    for (uint64_t nbase = 0; nbase < tn; nbase += kBlockN) {
+                        const uint64_t bn = std::min<uint64_t>(kBlockN, tn - nbase);
+                        expected_load += static_cast<uint64_t>(batch) * tk * (bm + bn);
+                    }
+                }
+            }
+            if (load_issued != expected_load) {
+                fail(name + ": LOAD count=" + std::to_string(load_issued) +
+                     " expected=" + std::to_string(expected_load));
+            }
+            const bool has_multiple_blocks =
+                ((tm + kBlockM - 1) / kBlockM) *
+                ((tn + kBlockN - 1) / kBlockN) > 1;
+            if (check_block_boundary_overlap && has_multiple_blocks &&
+                !boundary_overlap_checked) {
                 fail(name + ": block-boundary overlap was not observed");
             }
             if (check_completion_fence &&
                 !saw_next_wave_before_gemm_completion) {
                 fail(name + ": GEMM completion still blocked K-group progress");
             }
-            const uint64_t tm = (static_cast<uint64_t>(m) + kSubtileM - 1) / kSubtileM;
-            const uint64_t tn = (static_cast<uint64_t>(n) + kSubtileN - 1) / kSubtileN;
-            const uint64_t tk = (static_cast<uint64_t>(k) + kSubtileK - 1) / kSubtileK;
             const uint64_t expected_gemm = tm * tn * tk * static_cast<uint64_t>(batch);
             const uint64_t expected_output = tm * tn * static_cast<uint64_t>(batch);
             if (gemm_issued != expected_gemm) {
@@ -312,6 +338,7 @@ int main(int argc, char** argv) {
         run_case("large_rectangular_gemm", 256, 128, 128, 1, 29, 11, 37);
         run_case("merged_batch_single_tile", 8, 8, 64, 4, 7, 13, 19);
         run_case("merged_batch_partial_block", 8, 16, 32, 3, 11, 17, 23);
+        run_case("single_batch_multi_tile_no_merge", 8, 16, 32, 1, 11, 17, 23);
         run_case("independent_full_batch_blocks", 16, 16, 32, 2, 7, 15, 27);
         run_case("slow_completion_fence", 8, 16, 128, 1, 3, 100, 7,
                  false, true);

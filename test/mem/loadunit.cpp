@@ -101,6 +101,15 @@ struct ReqInfo {
     uint32_t beat = 0;
     BeatData data;
     int age = 0;
+    uint64_t load_id = 0;
+    std::string name;
+};
+
+struct RetireInfo {
+    uint64_t load_id = 0;
+    bool is_b = false;
+    uint32_t bufidx = 0;
+    bool complete = false;
     std::string name;
 };
 
@@ -227,6 +236,7 @@ public:
 
     int run() {
         reset();
+        pipeline_throughput_test();
         directed_tests();
         random_tests();
         std::cout << "loadunit: passed, seed=" << hex32(seed_) << "\n";
@@ -241,7 +251,9 @@ private:
 
     std::deque<ReqInfo> expected_reqs_;
     std::deque<PendingOut> pending_outputs_;
+    std::deque<RetireInfo> retire_q_;
     std::map<uint32_t, ReqInfo> inflight_;
+    uint64_t next_load_id_ = 0;
     int a_rows_left_[kABufSize] = {};
     int b_rows_left_[kBBufSize] = {};
     uint32_t a_model_[kABufSize][kSubtileM] = {};
@@ -322,6 +334,7 @@ private:
     }
 
     void enqueue_expected_reqs(const Load& load) {
+        const uint64_t load_id = next_load_id_++;
         const uint32_t bufidx = load.is_b ? load.bbuf : load.abuf;
         int& rows_left = load.is_b ? b_rows_left_[bufidx] : a_rows_left_[bufidx];
         if (rows_left != 0) {
@@ -356,6 +369,9 @@ private:
         const int req_count = kLoadWide ?
             ((rows + kRowsPerBeat - 1) / kRowsPerBeat) :
             (rows * kBeatsPerRow);
+        retire_q_.push_back(RetireInfo{
+            load_id, load.is_b, bufidx, false, load.name
+        });
         for (int req_idx = 0; req_idx < req_count; ++req_idx) {
             ReqInfo req;
             req.is_b = load.is_b;
@@ -375,6 +391,7 @@ private:
                 req.data = narrow_beat_data(load.addr, req.row, req.beat, load.is_b);
             }
             req.name = load.name;
+            req.load_id = load_id;
             expected_reqs_.push_back(req);
         }
     }
@@ -393,8 +410,7 @@ private:
         }
 
         if (load.is_b) {
-            if (dut_.abuf_wr_valid_o || dut_.abuf_ready_valid_o ||
-                dut_.bbuf_ready_valid_o ||
+            if (dut_.abuf_wr_valid_o ||
                 !dut_.bbuf_wr_valid_o ||
                 dut_.bbuf_wr_idx_o != load.bbuf ||
                 dut_.bbuf_wr_bank_en_o != expected_mask) {
@@ -413,8 +429,7 @@ private:
                 }
             }
         } else {
-            if (dut_.bbuf_wr_valid_o || dut_.bbuf_ready_valid_o ||
-                dut_.abuf_ready_valid_o ||
+            if (dut_.bbuf_wr_valid_o ||
                 !dut_.abuf_wr_valid_o ||
                 dut_.abuf_wr_idx_o != load.abuf ||
                 dut_.abuf_wr_bank_en_o != expected_mask) {
@@ -476,8 +491,7 @@ private:
     }
 
     void check_no_pending_outputs() {
-        if (dut_.abuf_wr_valid_o || dut_.bbuf_wr_valid_o ||
-            dut_.abuf_ready_valid_o || dut_.bbuf_ready_valid_o) {
+        if (dut_.abuf_wr_valid_o || dut_.bbuf_wr_valid_o) {
             std::ostringstream os;
             os << "unexpected buffer output without pending response at cycle " << cycle_;
             fail(os.str());
@@ -486,7 +500,7 @@ private:
 
     void check_response_outputs(const PendingOut& out) {
         if (out.is_b) {
-            if (dut_.abuf_wr_valid_o || dut_.abuf_ready_valid_o) {
+            if (dut_.abuf_wr_valid_o) {
                 fail("A output asserted for B response");
             }
             if (!dut_.bbuf_wr_valid_o ||
@@ -505,12 +519,8 @@ private:
                     fail("B write data mismatch");
                 }
             }
-            if ((dut_.bbuf_ready_valid_o != (out.last ? 1 : 0)) ||
-                (out.last && dut_.bbuf_ready_idx_o != out.bufidx)) {
-                fail("B ready pulse mismatch");
-            }
         } else {
-            if (dut_.bbuf_wr_valid_o || dut_.bbuf_ready_valid_o) {
+            if (dut_.bbuf_wr_valid_o) {
                 fail("B output asserted for A response");
             }
             if (!dut_.abuf_wr_valid_o ||
@@ -529,11 +539,44 @@ private:
                     fail("A write data mismatch");
                 }
             }
-            if ((dut_.abuf_ready_valid_o != (out.last ? 1 : 0)) ||
-                (out.last && dut_.abuf_ready_idx_o != out.bufidx)) {
-                fail("A ready pulse mismatch");
+        }
+    }
+
+    void mark_load_complete(uint64_t load_id) {
+        for (auto& item : retire_q_) {
+            if (item.load_id == load_id) {
+                if (item.complete) {
+                    fail("load completed more than once");
+                }
+                item.complete = true;
+                return;
             }
         }
+        fail("response completed an unknown load uop");
+    }
+
+    void check_retire_output() {
+        const bool expected = !retire_q_.empty() && retire_q_.front().complete;
+        if (!expected) {
+            if (dut_.abuf_ready_valid_o || dut_.bbuf_ready_valid_o) {
+                fail("unexpected operand-buffer ready pulse");
+            }
+            return;
+        }
+
+        const RetireInfo item = retire_q_.front();
+        if (item.is_b) {
+            if (dut_.abuf_ready_valid_o || !dut_.bbuf_ready_valid_o ||
+                dut_.bbuf_ready_idx_o != item.bufidx) {
+                fail("ordered B ready pulse mismatch for " + item.name);
+            }
+        } else {
+            if (dut_.bbuf_ready_valid_o || !dut_.abuf_ready_valid_o ||
+                dut_.abuf_ready_idx_o != item.bufidx) {
+                fail("ordered A ready pulse mismatch for " + item.name);
+            }
+        }
+        retire_q_.pop_front();
     }
 
     void check_pending_output() {
@@ -652,17 +695,31 @@ private:
 
     void run_sequence(const std::string& name,
                       const std::vector<Load>& loads,
-                      int max_cycles) {
+                      int max_cycles,
+                      bool require_dense_pipeline = false) {
         size_t load_idx = 0;
+        size_t fired_reqs = 0;
+        size_t total_reqs = 0;
+        bool accept_started = false;
+        bool request_started = false;
         std::bernoulli_distribution ready_dist(0.65);
         std::bernoulli_distribution rsp_dist(0.75);
 
+        for (const Load& load : loads) {
+            const int rows = rows_eff(load);
+            total_reqs += static_cast<size_t>(kLoadWide ?
+                ((rows + kRowsPerBeat - 1) / kRowsPerBeat) :
+                (rows * kBeatsPerRow));
+        }
+
         while (cycle_ < static_cast<uint64_t>(max_cycles)) {
             ReqInfo rsp;
-            const bool have_rsp = rsp_dist(rng_) && choose_response(rsp);
+            const bool have_rsp =
+                (require_dense_pipeline || rsp_dist(rng_)) && choose_response(rsp);
             drive_response(have_rsp ? &rsp : nullptr);
 
-            dut_.mem_req_ready_i = ready_dist(rng_) ? 1 : 0;
+            dut_.mem_req_ready_i =
+                (require_dense_pipeline || ready_dist(rng_)) ? 1 : 0;
             if (load_idx < loads.size()) {
                 drive_load(loads[load_idx]);
             } else {
@@ -673,11 +730,21 @@ private:
             const bool uop_fire = dut_.uop_valid_i && dut_.uop_ready_o;
             const bool req_fire = dut_.mem_req_valid_o && dut_.mem_req_ready_i;
 
+            if (require_dense_pipeline) {
+                if (accept_started && load_idx < loads.size() && !uop_fire) {
+                    fail(name + ": LOAD uop input developed a bubble");
+                }
+                if (request_started && fired_reqs < total_reqs && !req_fire) {
+                    fail(name + ": memory request stream developed a tile-boundary bubble");
+                }
+            }
+
             if (pending_outputs_.empty() && uop_fire) {
                 check_zero_init_outputs(loads[load_idx]);
             } else {
                 check_pending_output();
             }
+            check_retire_output();
 
             if (uop_fire) {
                 enqueue_expected_reqs(loads[load_idx]);
@@ -689,6 +756,8 @@ private:
             if (req_fire) {
                 fired_req = check_request_fire();
                 have_fired_req = true;
+                request_started = true;
+                ++fired_reqs;
             }
 
             tick_raw();
@@ -696,6 +765,9 @@ private:
             if (have_rsp) {
                 PendingOut out;
                 if (update_model_for_response(rsp, out)) {
+                    if (out.last) {
+                        mark_load_complete(rsp.load_id);
+                    }
                     pending_outputs_.push_back(out);
                 }
             }
@@ -706,12 +778,14 @@ private:
                 ++item.second.age;
             }
             if (uop_fire) {
+                accept_started = true;
                 ++load_idx;
             }
 
             if (load_idx == loads.size() &&
                 expected_reqs_.empty() &&
                 pending_outputs_.empty() &&
+                retire_q_.empty() &&
                 inflight_.empty() &&
                 !dut_.mem_req_valid_o) {
                 std::cout << name << ": passed, loads=" << loads.size()
@@ -726,6 +800,22 @@ private:
            << " expected_reqs=" << expected_reqs_.size()
            << " inflight=" << inflight_.size();
         fail(os.str());
+    }
+
+    void pipeline_throughput_test() {
+        run_sequence(
+            "pipeline_dense",
+            {
+                Load{false, 0x040, 0, 0, 0, "pipe_A0"},
+                Load{true,  0x080, 0, 0, 0, "pipe_B0"},
+                Load{false, 0x041, 1, 0, 0, "pipe_A1"},
+                Load{true,  0x081, 0, 1, 0, "pipe_B1"},
+                Load{false, 0x042, 2, 0, 0, "pipe_A2"},
+                Load{true,  0x082, 0, 2, 0, "pipe_B2"},
+            },
+            1000,
+            true
+        );
     }
 
     void directed_tests() {
