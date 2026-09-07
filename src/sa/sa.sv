@@ -619,8 +619,8 @@ module sa #(
 
                 for (int row = 0; row < SUBTILE_M; row++) begin
                     int part;
-                    part = (row < ((SUBTILE_M + 1) / 2)) ? 0 : 1;
-                    if ((row % GETACC_ROWS_PER_CYCLE) == slot) begin
+                    part = (row < ((SUBTILE_M + 1) >> 1)) ? 0 : 1;
+                    if ((row & (GETACC_ROWS_PER_CYCLE - 1)) == slot) begin
                         reduce_s1_valid_comb[slot][col][part] |=
                             pe_getacc_o[row][col];
                         reduce_s1_data_comb[slot][col][part] |=

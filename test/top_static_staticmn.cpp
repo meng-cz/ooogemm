@@ -384,7 +384,7 @@ int main(int argc, char** argv) {
         // The 1024-bit load bus covers each tiny operand tile in one beat.
         run_case("one_wave", 2, 2, 2, 1, 3, 2,
                  2 / STORE_ROWS_PER_CYCLE_TEST, 2.0f);
-        run_case("multi_k_wave", 4, 4, 8, 1, 9, 32,
+        run_case("multi_k_wave", 4, 4, 8, 1, 9, 16,
                  8 / STORE_ROWS_PER_CYCLE_TEST, 8.0f);
         run_case("merged_batch", 2, 2, 2, 2, 5, 4,
                  4 / STORE_ROWS_PER_CYCLE_TEST, 2.0f);

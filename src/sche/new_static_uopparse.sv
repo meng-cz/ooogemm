@@ -87,6 +87,9 @@ module new_static_uopparse #(
     localparam int A_GROUP = ABUF_SIZE / 2;
     localparam int B_GROUP = BBUF_SIZE / 2;
     localparam int ACC_GROUP = PACC_NUM / 2;
+    localparam int SUBTILE_M_SHIFT = $clog2(SUBTILE_M);
+    localparam int SUBTILE_N_SHIFT = $clog2(SUBTILE_N);
+    localparam int SUBTILE_K_SHIFT = $clog2(SUBTILE_K);
     // Batch merge is different from a rectangular block: every flattened
     // tile consumes one slot from all three resource groups.
     localparam int MERGE_CAP = (A_GROUP < B_GROUP) ?
@@ -107,6 +110,7 @@ module new_static_uopparse #(
     count_t block_m_base_q, block_n_base_q;
     logic merge_mode_q;
     count_t merge_base_q, merge_count_q;
+    count_t merge_batch_base_q, merge_batch_count_q;
     logic load_base_group_q, acc_group_q;
 
     count_t gemm_wave_q;
@@ -135,10 +139,22 @@ module new_static_uopparse #(
     count_t next_bm_q, next_bn_q, next_batch_idx_q;
     count_t next_block_m_base_q, next_block_n_base_q;
     count_t next_merge_base_q, next_merge_count_q;
+    count_t next_merge_batch_base_q, next_merge_batch_count_q;
     logic next_load_base_group_q, next_acc_group_q;
 
-    function automatic count_t ceil_div(input logic [DIM_WIDTH-1:0] v, input int d);
-        return (count_t'(v) + count_t'(d - 1)) / count_t'(d);
+    function automatic count_t ceil_m_tiles(input logic [DIM_WIDTH-1:0] v);
+        return (count_t'(v) >> SUBTILE_M_SHIFT) +
+            count_t'((v & DIM_WIDTH'(SUBTILE_M - 1)) != '0);
+    endfunction
+
+    function automatic count_t ceil_n_tiles(input logic [DIM_WIDTH-1:0] v);
+        return (count_t'(v) >> SUBTILE_N_SHIFT) +
+            count_t'((v & DIM_WIDTH'(SUBTILE_N - 1)) != '0);
+    endfunction
+
+    function automatic count_t ceil_k_tiles(input logic [DIM_WIDTH-1:0] v);
+        return (count_t'(v) >> SUBTILE_K_SHIFT) +
+            count_t'((v & DIM_WIDTH'(SUBTILE_K - 1)) != '0);
     endfunction
 
     function automatic count_t min_count(input count_t v, input count_t limit);
@@ -154,35 +170,32 @@ module new_static_uopparse #(
         input logic [DIM_WIDTH-1:0] batch_count,
         input count_t               tiles_per_batch
     );
-        count_t max_batches;
         begin
-            if (batch_count <= 1 || tiles_per_batch == 0 ||
-                tiles_per_batch >= count_t'(MERGE_CAP)) begin
-                return 1'b0;
-            end
-            max_batches = count_t'(MERGE_CAP) / tiles_per_batch;
-            return max_batches >= 2;
+            return (batch_count > 1) && (tiles_per_batch != 0) &&
+                (tiles_per_batch <= count_t'(MERGE_CAP >> 1));
         end
     endfunction
 
-    // Return the number of flattened tile entries in one merge chunk.  The
-    // chunk is made from complete batch instances, so LOAD_A/LOAD_B counts
-    // are derived from the actual number of merged batches rather than from
-    // the capacity alone.
-    function automatic count_t merge_chunk_count(
-        input count_t remaining_tiles,
+    // Return the largest number of complete batches fitting in one merge
+    // chunk.  tiles_per_batch is runtime data, but both the result and search
+    // range are bounded by MERGE_CAP, so constant-coefficient compares replace
+    // the former variable division.
+    function automatic count_t merge_batch_capacity(
         input count_t tiles_per_batch
     );
-        count_t max_batches;
-        count_t chunk_batches;
+        count_t capacity;
         begin
-            if (tiles_per_batch == 0) return '0;
-            max_batches = count_t'(MERGE_CAP) / tiles_per_batch;
-            if (max_batches == 0) max_batches = 1;
-            chunk_batches = remaining_tiles / tiles_per_batch;
-            if (chunk_batches > max_batches) chunk_batches = max_batches;
-            if (chunk_batches == 0 && remaining_tiles != 0) chunk_batches = 1;
-            return min_count(remaining_tiles, chunk_batches * tiles_per_batch);
+            capacity = '0;
+            if ((tiles_per_batch != 0) &&
+                (tiles_per_batch <= count_t'(MERGE_CAP))) begin
+                for (int batches = 1; batches <= MERGE_CAP; batches++) begin
+                    if ((count_t'(batches) * tiles_per_batch) <=
+                        count_t'(MERGE_CAP)) begin
+                        capacity = count_t'(batches);
+                    end
+                end
+            end
+            return capacity;
         end
     endfunction
 
@@ -222,18 +235,23 @@ module new_static_uopparse #(
         end
     endfunction
 
-    function automatic count_t flat_batch(input count_t flat);
-        return flat / (tm_q * tn_q);
-    endfunction
-    function automatic count_t flat_in_batch(input count_t flat);
-        return flat % (tm_q * tn_q);
-    endfunction
-    function automatic count_t flat_m(input count_t flat);
-        return flat_in_batch(flat) / tn_q;
-    endfunction
-    function automatic count_t flat_n(input count_t flat);
-        return flat_in_batch(flat) % tn_q;
-    endfunction
+    count_t cmd_tm_comb, cmd_tn_comb, cmd_tk_comb;
+    count_t cmd_tiles_per_batch_comb;
+    count_t cmd_merge_capacity_comb, cmd_merge_batch_count_comb;
+    logic cmd_merge_enabled_comb;
+
+    always_comb begin
+        cmd_tm_comb = ceil_m_tiles(cmd_m_i);
+        cmd_tn_comb = ceil_n_tiles(cmd_n_i);
+        cmd_tk_comb = ceil_k_tiles(cmd_k_i);
+        cmd_tiles_per_batch_comb = cmd_tm_comb * cmd_tn_comb;
+        cmd_merge_capacity_comb =
+            merge_batch_capacity(cmd_tiles_per_batch_comb);
+        cmd_merge_enabled_comb =
+            merge_enabled(cmd_batch_i, cmd_tiles_per_batch_comb);
+        cmd_merge_batch_count_comb = min_count(
+            count_t'(cmd_batch_i), cmd_merge_capacity_comb);
+    end
 
     wire load_fire = load_valid_o && load_ready_i;
     wire gemm_fire = gemm_valid_o && gemm_ready_i;
@@ -258,6 +276,8 @@ module new_static_uopparse #(
     count_t next_bm_comb, next_bn_comb, next_batch_idx_comb;
     count_t next_mbase_comb, next_nbase_comb;
     count_t next_merge_base_comb, next_merge_count_comb;
+    count_t next_merge_batch_base_comb, next_merge_batch_count_comb;
+    count_t merge_tiles_per_batch_comb, merge_capacity_comb;
     always_comb begin
         next_exists_comb = 1'b0;
         next_bm_comb = bm_q; next_bn_comb = bn_q;
@@ -265,15 +285,23 @@ module new_static_uopparse #(
         next_mbase_comb = block_m_base_q; next_nbase_comb = block_n_base_q;
         next_merge_base_comb = merge_base_q;
         next_merge_count_comb = merge_count_q;
+        next_merge_batch_base_comb = merge_batch_base_q;
+        next_merge_batch_count_comb = merge_batch_count_q;
+        merge_tiles_per_batch_comb = tm_q * tn_q;
+        merge_capacity_comb =
+            merge_batch_capacity(merge_tiles_per_batch_comb);
 
         if (merge_mode_q) begin
-            if (merge_base_q + merge_count_q < count_t'(batch_q) * tm_q * tn_q) begin
+            if (merge_batch_base_q + merge_batch_count_q < count_t'(batch_q)) begin
                 next_exists_comb = 1'b1;
                 next_merge_base_comb = merge_base_q + merge_count_q;
-                next_merge_count_comb = merge_chunk_count(
-                    count_t'(batch_q) * tm_q * tn_q -
-                        merge_base_q - merge_count_q,
-                    tm_q * tn_q);
+                next_merge_batch_base_comb =
+                    merge_batch_base_q + merge_batch_count_q;
+                next_merge_batch_count_comb = min_count(
+                    count_t'(batch_q) - next_merge_batch_base_comb,
+                    merge_capacity_comb);
+                next_merge_count_comb =
+                    next_merge_batch_count_comb * merge_tiles_per_batch_comb;
             end
         end else if (block_n_base_q + bn_q < tn_q) begin
             next_exists_comb = 1'b1;
@@ -298,7 +326,8 @@ module new_static_uopparse #(
     logic load_from_next_comb, load_next_exists_comb;
     logic load_next_block_wave0_comb;
     count_t load_bm_comb, load_bn_comb, load_batch_comb;
-    count_t load_mbase_comb, load_nbase_comb, load_merge_base_comb, load_merge_count_comb;
+    count_t load_mbase_comb, load_nbase_comb, load_merge_count_comb;
+    count_t load_merge_batch_base_comb;
     logic load_group_comb;
     always_comb begin
         load_from_next_comb = (state_q == OUTPUT_PRELOAD) ||
@@ -313,8 +342,8 @@ module new_static_uopparse #(
             load_batch_comb = next_batch_idx_q;
             load_mbase_comb = next_block_m_base_q;
             load_nbase_comb = next_block_n_base_q;
-            load_merge_base_comb = next_merge_base_q;
             load_merge_count_comb = next_merge_count_q;
+            load_merge_batch_base_comb = next_merge_batch_base_q;
             load_group_comb = next_load_base_group_q;
         end else if (load_from_next_comb) begin
             load_bm_comb = next_bm_comb;
@@ -322,8 +351,8 @@ module new_static_uopparse #(
             load_batch_comb = next_batch_idx_comb;
             load_mbase_comb = next_mbase_comb;
             load_nbase_comb = next_nbase_comb;
-            load_merge_base_comb = next_merge_base_comb;
             load_merge_count_comb = next_merge_count_comb;
+            load_merge_batch_base_comb = next_merge_batch_base_comb;
             // wave 0 of the next block is written opposite the final GEMM's
             // operand half, independent of whether TK is odd or even.
             load_group_comb = ~(load_base_group_q ^ ~tk_q[0]);
@@ -333,9 +362,44 @@ module new_static_uopparse #(
             load_batch_comb = batch_idx_q;
             load_mbase_comb = block_m_base_q;
             load_nbase_comb = block_n_base_q;
-            load_merge_base_comb = merge_base_q;
             load_merge_count_comb = merge_count_q;
+            load_merge_batch_base_comb = merge_batch_base_q;
             load_group_comb = load_base_group_q;
+        end
+    end
+
+    // Decode only the offset inside a merge chunk.  It is bounded by
+    // MERGE_CAP, unlike the old global flattened index, so a finite bank of
+    // constant-coefficient comparisons is sufficient for batch/M/N recovery.
+    count_t load_merge_local_idx_comb;
+    count_t load_merge_batch_offset_comb;
+    count_t load_merge_in_batch_comb;
+    count_t load_merge_batch_comb;
+    count_t load_merge_m_comb, load_merge_n_comb;
+    always_comb begin
+        load_merge_local_idx_comb =
+            (load_a_q < load_merge_count_comb) ? load_a_q : load_b_q;
+        load_merge_batch_offset_comb = '0;
+        load_merge_in_batch_comb = load_merge_local_idx_comb;
+        for (int batch_off = 1; batch_off < MERGE_CAP; batch_off++) begin
+            if (load_merge_local_idx_comb >=
+                count_t'(batch_off) * merge_tiles_per_batch_comb) begin
+                load_merge_batch_offset_comb = count_t'(batch_off);
+                load_merge_in_batch_comb = load_merge_local_idx_comb -
+                    count_t'(batch_off) * merge_tiles_per_batch_comb;
+            end
+        end
+
+        load_merge_batch_comb =
+            load_merge_batch_base_comb + load_merge_batch_offset_comb;
+        load_merge_m_comb = '0;
+        load_merge_n_comb = load_merge_in_batch_comb;
+        for (int m_off = 1; m_off < MERGE_CAP; m_off++) begin
+            if (load_merge_in_batch_comb >= count_t'(m_off) * tn_q) begin
+                load_merge_m_comb = count_t'(m_off);
+                load_merge_n_comb = load_merge_in_batch_comb -
+                    count_t'(m_off) * tn_q;
+            end
         end
     end
 
@@ -392,14 +456,14 @@ module new_static_uopparse #(
                 load_is_b_o = 1'b0;
                 if (merge_mode_q) begin
                     load_addr_o = a_base_q +
-                        addr_count(flat_batch(load_merge_base_comb + load_a_q)) *
+                        addr_count(load_merge_batch_comb) *
                         addr_count(tm_q) * addr_count(tk_q) +
-                        addr_count(flat_m(load_merge_base_comb + load_a_q)) *
+                        addr_count(load_merge_m_comb) *
                         addr_count(tk_q) +
                         addr_count(load_next_block_wave0_comb ? 0 : load_wave_q);
                     load_abufidx_o = abuf_slot(load_group_o, load_a_q);
                     load_valid_rows_o = valid_rows(
-                        flat_m(load_merge_base_comb + load_a_q), m_q, SUBTILE_M);
+                        load_merge_m_comb, m_q, SUBTILE_M);
                 end else begin
                     load_addr_o = a_base_q +
                         addr_count(load_batch_comb) * addr_count(tm_q) *
@@ -417,14 +481,14 @@ module new_static_uopparse #(
                 load_is_b_o = 1'b1;
                 if (merge_mode_q) begin
                     load_addr_o = b_base_q +
-                        addr_count(flat_batch(load_merge_base_comb + load_b_q)) *
+                        addr_count(load_merge_batch_comb) *
                         addr_count(tk_q) * addr_count(tn_q) +
                         addr_count(load_next_block_wave0_comb ? 0 : load_wave_q) *
                         addr_count(tn_q) +
-                        addr_count(flat_n(load_merge_base_comb + load_b_q));
+                        addr_count(load_merge_n_comb);
                     load_bbufidx_o = bbuf_slot(load_group_o, load_b_q);
                     load_valid_rows_o = valid_rows(
-                        flat_n(load_merge_base_comb + load_b_q), n_q, SUBTILE_N);
+                        load_merge_n_comb, n_q, SUBTILE_N);
                 end else begin
                     load_addr_o = b_base_q +
                         addr_count(load_batch_comb) * addr_count(tk_q) *
@@ -487,6 +551,10 @@ module new_static_uopparse #(
             output_merge_base_q <= '0; output_merge_count_q <= '0;
             output_acc_group_q <= 1'b0;
             next_exists_q <= 1'b0;
+            merge_batch_base_q <= '0;
+            merge_batch_count_q <= '0;
+            next_merge_batch_base_q <= '0;
+            next_merge_batch_count_q <= '0;
             bm_limit_q <= '0;
             bn_limit_q <= '0;
             end else begin
@@ -523,35 +591,23 @@ module new_static_uopparse #(
             if (state_q == IDLE && cmd_valid_i && cmd_ready_o) begin
                 a_base_q <= cmd_a_base_i; b_base_q <= cmd_b_base_i; c_base_q <= cmd_c_base_i;
                 m_q <= cmd_m_i; n_q <= cmd_n_i; k_q <= cmd_k_i; batch_q <= cmd_batch_i;
-                tm_q <= ceil_div(cmd_m_i, SUBTILE_M);
-                tn_q <= ceil_div(cmd_n_i, SUBTILE_N);
-                tk_q <= ceil_div(cmd_k_i, SUBTILE_K);
+                tm_q <= cmd_tm_comb;
+                tn_q <= cmd_tn_comb;
+                tk_q <= cmd_tk_comb;
                 // The selector's block is a resource upper bound; clip edge
                 // blocks to the actual tile shape before emitting any uops.
-                bm_q <= min_count(ceil_div(cmd_m_i, SUBTILE_M),
-                                  count_t'(block_m_i));
-                bn_q <= min_count(ceil_div(cmd_n_i, SUBTILE_N),
-                                  count_t'(block_n_i));
-                bm_limit_q <= min_count(ceil_div(cmd_m_i, SUBTILE_M),
-                                        count_t'(block_m_i));
-                bn_limit_q <= min_count(ceil_div(cmd_n_i, SUBTILE_N),
-                                        count_t'(block_n_i));
+                bm_q <= min_count(cmd_tm_comb, count_t'(block_m_i));
+                bn_q <= min_count(cmd_tn_comb, count_t'(block_n_i));
+                bm_limit_q <= min_count(cmd_tm_comb, count_t'(block_m_i));
+                bn_limit_q <= min_count(cmd_tn_comb, count_t'(block_n_i));
                 batch_idx_q <= 0; block_m_base_q <= 0; block_n_base_q <= 0;
-                merge_mode_q <= merge_enabled(
-                    cmd_batch_i,
-                    ceil_div(cmd_m_i, SUBTILE_M) *
-                    ceil_div(cmd_n_i, SUBTILE_N));
+                merge_mode_q <= cmd_merge_enabled_comb;
                 merge_base_q <= 0;
-                merge_count_q <= merge_enabled(
-                    cmd_batch_i,
-                    ceil_div(cmd_m_i, SUBTILE_M) *
-                    ceil_div(cmd_n_i, SUBTILE_N)) ?
-                    merge_chunk_count(
-                        count_t'(cmd_batch_i) *
-                            ceil_div(cmd_m_i, SUBTILE_M) *
-                            ceil_div(cmd_n_i, SUBTILE_N),
-                        ceil_div(cmd_m_i, SUBTILE_M) *
-                        ceil_div(cmd_n_i, SUBTILE_N)) : '0;
+                merge_count_q <= cmd_merge_enabled_comb ?
+                    cmd_merge_batch_count_comb * cmd_tiles_per_batch_comb : '0;
+                merge_batch_base_q <= '0;
+                merge_batch_count_q <= cmd_merge_enabled_comb ?
+                    cmd_merge_batch_count_comb : '0;
                 load_base_group_q <= 1'b0; acc_group_q <= 1'b0;
                 load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
                 load_active_q <= 1'b1; load_issue_done_q <= 1'b0; load_ready_q <= 1'b0;
@@ -646,6 +702,8 @@ module new_static_uopparse #(
                         next_block_n_base_q <= next_nbase_comb;
                         next_merge_base_q <= next_merge_base_comb;
                         next_merge_count_q <= next_merge_count_comb;
+                        next_merge_batch_base_q <= next_merge_batch_base_comb;
+                        next_merge_batch_count_q <= next_merge_batch_count_comb;
                         next_load_base_group_q <= load_group_comb;
                         // Derive the next PACC half from the half being
                         // retired, rather than from a separately toggled
@@ -675,6 +733,8 @@ module new_static_uopparse #(
                     block_n_base_q <= next_block_n_base_q;
                     merge_base_q <= next_merge_base_q;
                     merge_count_q <= next_merge_count_q;
+                    merge_batch_base_q <= next_merge_batch_base_q;
+                    merge_batch_count_q <= next_merge_batch_count_q;
                     load_base_group_q <= next_load_base_group_q;
                     acc_group_q <= next_acc_group_q;
                     load_ready_q <= 1'b0;

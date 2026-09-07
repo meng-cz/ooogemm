@@ -78,8 +78,8 @@ module dynamic_uopparse_core #(
         if (SUBTILE_N <= 0 || (SUBTILE_N & (SUBTILE_N - 1)) != 0) begin
             $error("SUBTILE_N must be a positive power of two");
         end
-        if (SUBTILE_K <= 0) begin
-            $error("SUBTILE_K must be positive");
+        if (SUBTILE_K <= 0 || (SUBTILE_K & (SUBTILE_K - 1)) != 0) begin
+            $error("SUBTILE_K must be a positive power of two");
         end
         if (ABUF_SIZE <= 0) begin
             $error("ABUF_SIZE must be positive");
@@ -99,6 +99,9 @@ module dynamic_uopparse_core #(
     end
 
     typedef logic [TILE_COUNT_WIDTH-1:0] tile_count_t;
+    localparam int SUBTILE_M_SHIFT = $clog2(SUBTILE_M);
+    localparam int SUBTILE_N_SHIFT = $clog2(SUBTILE_N);
+    localparam int SUBTILE_K_SHIFT = $clog2(SUBTILE_K);
     typedef enum logic [2:0] {
         ST_IDLE,
         ST_LOAD_A,
@@ -107,30 +110,19 @@ module dynamic_uopparse_core #(
         ST_OUTPUT
     } state_t;
 
-    function automatic tile_count_t ceil_tiles_by(
-        input logic [DIM_WIDTH-1:0] dim,
-        input int                   tile_size
-    );
-        logic [TILE_COUNT_WIDTH:0] extended;
-        logic [TILE_COUNT_WIDTH:0] divisor;
-        begin
-            extended = {{(TILE_COUNT_WIDTH + 1 - DIM_WIDTH){1'b0}}, dim} +
-                       tile_count_t'(tile_size - 1);
-            divisor = (TILE_COUNT_WIDTH + 1)'(tile_size);
-            return tile_count_t'(extended / divisor);
-        end
-    endfunction
-
     function automatic tile_count_t ceil_tiles(input logic [DIM_WIDTH-1:0] dim);
-        return ceil_tiles_by(dim, SUBTILE_M);
+        return (tile_count_t'(dim) >> SUBTILE_M_SHIFT) +
+            tile_count_t'((dim & DIM_WIDTH'(SUBTILE_M - 1)) != '0);
     endfunction
 
     function automatic tile_count_t ceil_n_tiles(input logic [DIM_WIDTH-1:0] dim);
-        return ceil_tiles_by(dim, SUBTILE_N);
+        return (tile_count_t'(dim) >> SUBTILE_N_SHIFT) +
+            tile_count_t'((dim & DIM_WIDTH'(SUBTILE_N - 1)) != '0);
     endfunction
 
     function automatic tile_count_t ceil_k_tiles(input logic [DIM_WIDTH-1:0] dim);
-        return ceil_tiles_by(dim, SUBTILE_K);
+        return (tile_count_t'(dim) >> SUBTILE_K_SHIFT) +
+            tile_count_t'((dim & DIM_WIDTH'(SUBTILE_K - 1)) != '0);
     endfunction
 
     function automatic tile_count_t min_int_tile(

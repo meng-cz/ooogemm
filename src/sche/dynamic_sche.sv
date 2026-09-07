@@ -153,7 +153,14 @@ module dynamic_sche #(
         input_pacc_in_range = int'(uop_paccidx_i) < PACC_PHYS_SIZE;
         input_abuf_in_range = int'(uop_abufidx_i) < ABUF_PHYS_SIZE;
         input_bbuf_in_range = int'(uop_bbufidx_i) < BBUF_PHYS_SIZE;
-        input_slot = SLOT_IDX_WIDTH'(int'(uop_paccidx_i) / SLOT_ACC_COUNT);
+        // Decode floor(pacc/SLOT_ACC_COUNT) with constant boundaries.  The
+        // original int division could otherwise become a 32-bit signed divider.
+        input_slot = '0;
+        for (int slot_idx = 1; slot_idx < SLOT_COUNT; slot_idx++) begin
+            if (int'(uop_paccidx_i) >= slot_idx * SLOT_ACC_COUNT) begin
+                input_slot = SLOT_IDX_WIDTH'(slot_idx);
+            end
+        end
         input_slot_in_range = int'(input_slot) < SLOT_COUNT;
 
         uop_ready_o = 1'b0;
@@ -199,7 +206,12 @@ module dynamic_sche #(
         selected_gemm = '0;
         for (int offset = 0; offset < SLOT_COUNT; offset++) begin
             logic [SLOT_IDX_WIDTH-1:0] slot;
-            slot = SLOT_IDX_WIDTH'((int'(gemm_rr_q) + offset) % SLOT_COUNT);
+            int slot_unwrapped;
+            slot_unwrapped = int'(gemm_rr_q) + offset;
+            if (slot_unwrapped >= SLOT_COUNT) begin
+                slot_unwrapped = slot_unwrapped - SLOT_COUNT;
+            end
+            slot = SLOT_IDX_WIDTH'(slot_unwrapped);
             if (!selected_gemm_valid && gemm_buf_valid_q[slot]) begin
                 selected_gemm_valid = 1'b1;
                 selected_gemm_slot = SLOT_IDX_WIDTH'(slot);
@@ -219,7 +231,12 @@ module dynamic_sche #(
         selected_output_pacc = '0;
         for (int offset = 0; offset < PACC_PHYS_SIZE; offset++) begin
             logic [PACC_PHYS_IDX_WIDTH-1:0] pacc;
-            pacc = PACC_PHYS_IDX_WIDTH'((int'(output_rr_q) + offset) % PACC_PHYS_SIZE);
+            int pacc_unwrapped;
+            pacc_unwrapped = int'(output_rr_q) + offset;
+            if (pacc_unwrapped >= PACC_PHYS_SIZE) begin
+                pacc_unwrapped = pacc_unwrapped - PACC_PHYS_SIZE;
+            end
+            pacc = PACC_PHYS_IDX_WIDTH'(pacc_unwrapped);
             if (!selected_output_valid && output_pending_q[pacc] &&
                 !output_issued_q[pacc] && (acc_use_count_q[pacc] == '0) &&
                 acc_ready_q[pacc]) begin

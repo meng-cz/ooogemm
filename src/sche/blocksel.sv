@@ -13,6 +13,58 @@
 
 `default_nettype none
 
+// Exact unsigned ceil(numerator / DENOM) with a compile-time denominator.
+// Power-of-two divisors reduce to wiring and a low-bit reduction.  Other
+// constants use a fixed-point reciprocal; the estimate differs from floor by
+// at most one, so one comparison/subtraction restores the exact quotient.
+module blocksel_const_ceil_div #(
+    parameter int WIDTH = 17,
+    parameter int DENOM = 1
+) (
+    input  logic [WIDTH-1:0] numerator_i,
+    output logic [WIDTH-1:0] quotient_o
+);
+    localparam bit DENOM_IS_POW2 =
+        (DENOM > 0) && ((DENOM & (DENOM - 1)) == 0);
+    localparam int DENOM_SHIFT = $clog2(DENOM);
+
+    generate
+        if (DENOM_IS_POW2) begin : gen_pow2
+            assign quotient_o = (numerator_i >> DENOM_SHIFT) +
+                WIDTH'((numerator_i & WIDTH'(DENOM - 1)) != '0);
+        end else begin : gen_reciprocal
+            localparam logic [WIDTH:0] RECIPROCAL =
+                ({1'b1, {WIDTH{1'b0}}} + (WIDTH + 1)'(DENOM - 1)) /
+                (WIDTH + 1)'(DENOM);
+            logic [(2 * WIDTH):0] reciprocal_product;
+            logic [WIDTH:0] quotient_estimate;
+            logic [WIDTH:0] quotient_floor;
+            logic [(2 * WIDTH)+1:0] estimate_scaled;
+            logic [(2 * WIDTH)+1:0] floor_scaled;
+            logic [(2 * WIDTH)+1:0] numerator_extended;
+
+            assign reciprocal_product = numerator_i * RECIPROCAL;
+            assign quotient_estimate =
+                (WIDTH + 1)'(reciprocal_product >> WIDTH);
+            assign estimate_scaled =
+                quotient_estimate * (WIDTH + 1)'(DENOM);
+            assign numerator_extended =
+                {{(WIDTH + 2){1'b0}}, numerator_i};
+            assign quotient_floor = (estimate_scaled > numerator_extended) ?
+                (quotient_estimate - 1'b1) : quotient_estimate;
+            assign floor_scaled = quotient_floor * (WIDTH + 1)'(DENOM);
+            assign quotient_o = WIDTH'(quotient_floor) +
+                WIDTH'(floor_scaled != numerator_extended);
+        end
+    endgenerate
+
+    initial begin
+        if (DENOM <= 0) begin
+            $error("blocksel_const_ceil_div DENOM must be positive");
+        end
+    end
+endmodule
+
 module blocksel #(
     parameter int SA_WIDTH         = 32,
     parameter int SUBTILE_M        = SA_WIDTH,
@@ -76,7 +128,6 @@ module blocksel #(
     tile_count_t tm_q;
     tile_count_t tn_q;
     tile_count_t amax_q;
-    tile_count_t bmax_q;
     tile_count_t scan_bm_q;
 
     logic [BLOCK_M_WIDTH-1:0] best_bm_q;
@@ -90,25 +141,24 @@ module blocksel #(
     cost_t best_area_next;
     logic scan_last;
 
+    localparam int SUBTILE_M_SHIFT = $clog2(SUBTILE_M);
+    localparam int SUBTILE_N_SHIFT = $clog2(SUBTILE_N);
+
     function automatic tile_count_t ceil_m_tiles(
         input logic [DIM_WIDTH-1:0] value
     );
-        logic [TILE_COUNT_WIDTH:0] extended;
         begin
-            extended = tile_count_t'(value) + tile_count_t'(SUBTILE_M - 1);
-            return tile_count_t'(extended /
-                                 (TILE_COUNT_WIDTH + 1)'(SUBTILE_M));
+            return (tile_count_t'(value) >> SUBTILE_M_SHIFT) +
+                   tile_count_t'((value & DIM_WIDTH'(SUBTILE_M - 1)) != '0);
         end
     endfunction
 
     function automatic tile_count_t ceil_n_tiles(
         input logic [DIM_WIDTH-1:0] value
     );
-        logic [TILE_COUNT_WIDTH:0] extended;
         begin
-            extended = tile_count_t'(value) + tile_count_t'(SUBTILE_N - 1);
-            return tile_count_t'(extended /
-                                 (TILE_COUNT_WIDTH + 1)'(SUBTILE_N));
+            return (tile_count_t'(value) >> SUBTILE_N_SHIFT) +
+                   tile_count_t'((value & DIM_WIDTH'(SUBTILE_N - 1)) != '0);
         end
     endfunction
 
@@ -124,40 +174,60 @@ module blocksel #(
         end
     endfunction
 
-    function automatic tile_count_t ceil_div_tile_count(
-        input tile_count_t numerator,
-        input int          denominator
-    );
-        begin
-            if (denominator <= 0) begin
-                return '0;
+    // BM is a scan register, but its legal range is a compile-time resource
+    // bound.  Generate one constant-divisor cost entry for every possible BM
+    // and select it by index.  This prevents a synthesizer from inferring the
+    // much larger variable-divisor circuits implied by the original RTL.
+    tile_count_t candidate_bn_by_bm [0:LOGIC_ABUF_SIZE];
+    cost_t candidate_cost_by_bm [0:LOGIC_ABUF_SIZE];
+    cost_t candidate_area_by_bm [0:LOGIC_ABUF_SIZE];
+
+    assign candidate_bn_by_bm[0] = '0;
+    assign candidate_cost_by_bm[0] = '0;
+    assign candidate_area_by_bm[0] = '0;
+
+    generate
+        for (genvar bm_value = 1; bm_value <= LOGIC_ABUF_SIZE;
+             bm_value++) begin : gen_candidate_cost
+            localparam int ACC_BN_CAP = LOGIC_ACC_NUM / bm_value;
+            localparam int BN_CAP =
+                (ACC_BN_CAP < LOGIC_BBUF_SIZE) ? ACC_BN_CAP : LOGIC_BBUF_SIZE;
+
+            if (BN_CAP > 0) begin : gen_legal_bm
+                tile_count_t m_blocks;
+                tile_count_t n_blocks;
+
+                blocksel_const_ceil_div #(
+                    .WIDTH(TILE_COUNT_WIDTH),
+                    .DENOM(bm_value)
+                ) m_block_count (
+                    .numerator_i(tm_q),
+                    .quotient_o(m_blocks)
+                );
+
+                blocksel_const_ceil_div #(
+                    .WIDTH(TILE_COUNT_WIDTH),
+                    .DENOM(BN_CAP)
+                ) n_block_count (
+                    .numerator_i(tn_q),
+                    .quotient_o(n_blocks)
+                );
+                assign candidate_bn_by_bm[bm_value] =
+                    (tn_q < tile_count_t'(BN_CAP)) ? tn_q :
+                                                     tile_count_t'(BN_CAP);
+                assign candidate_cost_by_bm[bm_value] =
+                    cost_t'(tm_q) * cost_t'(n_blocks) +
+                    cost_t'(tn_q) * cost_t'(m_blocks);
+                assign candidate_area_by_bm[bm_value] =
+                    cost_t'(bm_value) *
+                    cost_t'(candidate_bn_by_bm[bm_value]);
+            end else begin : gen_illegal_bm
+                assign candidate_bn_by_bm[bm_value] = '0;
+                assign candidate_cost_by_bm[bm_value] = '0;
+                assign candidate_area_by_bm[bm_value] = '0;
             end
-            return (numerator + tile_count_t'(denominator - 1)) /
-                   tile_count_t'(denominator);
         end
-    endfunction
-
-    function automatic cost_t candidate_cost(
-        input tile_count_t bm,
-        input tile_count_t bn
-    );
-        logic [COST_WIDTH-1:0] a_loads;
-        logic [COST_WIDTH-1:0] b_loads;
-        begin
-            a_loads = cost_t'(tm_q) *
-                cost_t'(ceil_div_tile_count(tn_q, int'(bn)));
-            b_loads = cost_t'(tn_q) *
-                cost_t'(ceil_div_tile_count(tm_q, int'(bm)));
-            return a_loads + b_loads;
-        end
-    endfunction
-
-    function automatic cost_t candidate_area(
-        input tile_count_t bm,
-        input tile_count_t bn
-    );
-        return cost_t'(bm) * cost_t'(bn);
-    endfunction
+    endgenerate
 
     always_comb begin
         best_bm_next = best_bm_q;
@@ -190,17 +260,12 @@ module blocksel #(
             candidate_balance = '0;
             best_balance = '0;
             if ((candidate_bm >= 1) && (candidate_bm <= amax_q)) begin
-                candidate_bn = bmax_q;
-                if (candidate_bm > tile_count_t'(LOGIC_ACC_NUM)) begin
-                    candidate_bn = '0;
-                end else if (tile_count_t'(LOGIC_ACC_NUM / int'(candidate_bm)) < candidate_bn) begin
-                    candidate_bn = tile_count_t'(LOGIC_ACC_NUM / int'(candidate_bm));
-                end
+                candidate_bn = candidate_bn_by_bm[int'(candidate_bm)];
             end
 
             if (candidate_bn != '0) begin
-                candidate_cost_value = candidate_cost(candidate_bm, candidate_bn);
-                candidate_area_value = candidate_area(candidate_bm, candidate_bn);
+                candidate_cost_value = candidate_cost_by_bm[int'(candidate_bm)];
+                candidate_area_value = candidate_area_by_bm[int'(candidate_bm)];
                 candidate_balance = (candidate_bm >= candidate_bn) ?
                     (cost_t'(candidate_bm) - cost_t'(candidate_bn)) :
                     (cost_t'(candidate_bn) - cost_t'(candidate_bm));
@@ -255,7 +320,6 @@ module blocksel #(
             tm_q <= '0;
             tn_q <= '0;
             amax_q <= '0;
-            bmax_q <= '0;
             scan_bm_q <= '0;
             best_bm_q <= BLOCK_M_WIDTH'(1);
             best_bn_q <= BLOCK_N_WIDTH'(1);
@@ -275,7 +339,6 @@ module blocksel #(
                         tm_q <= ceil_m_tiles(cmd_m_i);
                         tn_q <= ceil_n_tiles(cmd_n_i);
                         amax_q <= min_tile_count(ceil_m_tiles(cmd_m_i), LOGIC_ABUF_SIZE);
-                        bmax_q <= min_tile_count(ceil_n_tiles(cmd_n_i), LOGIC_BBUF_SIZE);
                         scan_bm_q <= tile_count_t'(1);
                         best_bm_q <= BLOCK_M_WIDTH'(1);
                         best_bn_q <= BLOCK_N_WIDTH'(1);

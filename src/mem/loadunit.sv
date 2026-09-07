@@ -160,6 +160,8 @@ module loadunit #(
     localparam bit LOAD_WIDE = (LOAD_DATA_WIDTH >= ROW_DATA_WIDTH);
     localparam int ROWS_PER_BEAT = LOAD_WIDE ? (LOAD_DATA_WIDTH / ROW_DATA_WIDTH) : 1;
     localparam int BEATS_PER_ROW = LOAD_WIDE ? 1 : (ROW_DATA_WIDTH / LOAD_DATA_WIDTH);
+    localparam int ROWS_PER_BEAT_SHIFT = $clog2(ROWS_PER_BEAT);
+    localparam int BEATS_PER_ROW_SHIFT = $clog2(BEATS_PER_ROW);
     localparam int A_TILE_REQS = LOAD_WIDE ?
         ((SUBTILE_M + ROWS_PER_BEAT - 1) / ROWS_PER_BEAT) :
         (SUBTILE_M * BEATS_PER_ROW);
@@ -271,7 +273,9 @@ module loadunit #(
         end
         if (LOAD_WIDE) begin
             uop_req_count_eff = ISSUE_REQ_WIDTH'(
-                (int'(uop_rows_eff) + ROWS_PER_BEAT - 1) / ROWS_PER_BEAT
+                (ISSUE_REQ_WIDTH'(uop_rows_eff) >> ROWS_PER_BEAT_SHIFT) +
+                ISSUE_REQ_WIDTH'(
+                    (uop_rows_eff & ROWS_LEFT_WIDTH'(ROWS_PER_BEAT - 1)) != '0)
             );
         end else begin
             uop_req_count_eff = ISSUE_REQ_WIDTH'(
@@ -321,7 +325,7 @@ module loadunit #(
             if (LOAD_WIDE) begin
                 return ROW_IDX_WIDTH'(int'(req_idx) * ROWS_PER_BEAT);
             end
-            return ROW_IDX_WIDTH'(int'(req_idx) / BEATS_PER_ROW);
+            return ROW_IDX_WIDTH'(req_idx >> BEATS_PER_ROW_SHIFT);
         end
     endfunction
 
@@ -332,7 +336,8 @@ module loadunit #(
             if (LOAD_WIDE) begin
                 return '0;
             end
-            return BEAT_IDX_WIDTH'(int'(req_idx) % BEATS_PER_ROW);
+            return BEAT_IDX_WIDTH'(
+                req_idx & ISSUE_REQ_WIDTH'(BEATS_PER_ROW - 1));
         end
     endfunction
 
@@ -477,11 +482,11 @@ module loadunit #(
             rsp_a_bank_data_comb[row] = '0;
             if (!rsp_is_b_q) begin
                 if (LOAD_WIDE) begin
-                    if (rsp_wide_group_hit_comb[row / ROWS_PER_BEAT] &&
-                        (row % ROWS_PER_BEAT) < int'(rsp_rows_in_beat_q)) begin
+                    if (rsp_wide_group_hit_comb[row >> ROWS_PER_BEAT_SHIFT] &&
+                        (row & (ROWS_PER_BEAT - 1)) < int'(rsp_rows_in_beat_q)) begin
                         rsp_a_bank_en_comb[row] = 1'b1;
                         rsp_a_bank_data_comb[row] =
-                            rsp_wide_row_data_q[row % ROWS_PER_BEAT];
+                            rsp_wide_row_data_q[row & (ROWS_PER_BEAT - 1)];
                     end
                 end else if (int'(rsp_row_q) == row) begin
                     rsp_a_bank_en_comb[row] = 1'b1;
@@ -494,11 +499,11 @@ module loadunit #(
             rsp_b_bank_data_comb[row] = '0;
             if (rsp_is_b_q) begin
                 if (LOAD_WIDE) begin
-                    if (rsp_wide_group_hit_comb[row / ROWS_PER_BEAT] &&
-                        (row % ROWS_PER_BEAT) < int'(rsp_rows_in_beat_q)) begin
+                    if (rsp_wide_group_hit_comb[row >> ROWS_PER_BEAT_SHIFT] &&
+                        (row & (ROWS_PER_BEAT - 1)) < int'(rsp_rows_in_beat_q)) begin
                         rsp_b_bank_en_comb[row] = 1'b1;
                         rsp_b_bank_data_comb[row] =
-                            rsp_wide_row_data_q[row % ROWS_PER_BEAT];
+                            rsp_wide_row_data_q[row & (ROWS_PER_BEAT - 1)];
                     end
                 end else if (int'(rsp_row_q) == row) begin
                     rsp_b_bank_en_comb[row] = 1'b1;

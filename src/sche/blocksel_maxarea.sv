@@ -127,32 +127,26 @@ module blocksel_maxarea #(
 
     localparam int FIXED_BLOCK_M = fixed_block_m();
     localparam int FIXED_BLOCK_N = fixed_block_n();
+    localparam int SUBTILE_M_SHIFT = $clog2(SUBTILE_M);
+    localparam int SUBTILE_N_SHIFT = $clog2(SUBTILE_N);
 
     function automatic logic [TILE_COUNT_WIDTH-1:0] ceil_m_tiles(
         input logic [DIM_WIDTH-1:0] value
     );
-        logic [TILE_COUNT_WIDTH:0] extended;
-        logic [TILE_COUNT_WIDTH-1:0] quotient;
         begin
-            extended = {{(TILE_COUNT_WIDTH + 1 - DIM_WIDTH){1'b0}}, value};
-            extended = extended + (TILE_COUNT_WIDTH + 1)'(SUBTILE_M - 1);
-            quotient = TILE_COUNT_WIDTH'(
-                extended / (TILE_COUNT_WIDTH + 1)'(SUBTILE_M));
-            return quotient;
+            return (TILE_COUNT_WIDTH'(value) >> SUBTILE_M_SHIFT) +
+                TILE_COUNT_WIDTH'(
+                    (value & DIM_WIDTH'(SUBTILE_M - 1)) != '0);
         end
     endfunction
 
     function automatic logic [TILE_COUNT_WIDTH-1:0] ceil_n_tiles(
         input logic [DIM_WIDTH-1:0] value
     );
-        logic [TILE_COUNT_WIDTH:0] extended;
-        logic [TILE_COUNT_WIDTH-1:0] quotient;
         begin
-            extended = {{(TILE_COUNT_WIDTH + 1 - DIM_WIDTH){1'b0}}, value};
-            extended = extended + (TILE_COUNT_WIDTH + 1)'(SUBTILE_N - 1);
-            quotient = TILE_COUNT_WIDTH'(
-                extended / (TILE_COUNT_WIDTH + 1)'(SUBTILE_N));
-            return quotient;
+            return (TILE_COUNT_WIDTH'(value) >> SUBTILE_N_SHIFT) +
+                TILE_COUNT_WIDTH'(
+                    (value & DIM_WIDTH'(SUBTILE_N - 1)) != '0);
         end
     endfunction
 
