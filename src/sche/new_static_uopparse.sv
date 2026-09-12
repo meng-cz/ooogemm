@@ -96,6 +96,20 @@ module new_static_uopparse #(
         ((A_GROUP < ACC_GROUP) ? A_GROUP : ACC_GROUP) :
         ((B_GROUP < ACC_GROUP) ? B_GROUP : ACC_GROUP);
 
+    // Merge decisions only ever need products in [0, MERGE_CAP], so the merge
+    // arithmetic is done in these narrow fields instead of count_t.
+    localparam int MERGE_FACTOR_WIDTH = $clog2(MERGE_CAP + 2);
+    localparam int MERGE_COUNT_WIDTH = $clog2(MERGE_CAP + 1);
+    typedef logic [MERGE_COUNT_WIDTH-1:0] merge_count_t;
+    typedef logic [2*MERGE_FACTOR_WIDTH-1:0] merge_product_t;
+
+    // Load-issue counters only ever reach the block width, so they are kept in
+    // this narrow field and compared with a narrow comparator instead of the
+    // full count width.
+    localparam int LOAD_IDX_WIDTH =
+        ((BLOCK_M_WIDTH > BLOCK_N_WIDTH) ? BLOCK_M_WIDTH : BLOCK_N_WIDTH) + 1;
+    typedef logic [LOAD_IDX_WIDTH-1:0] load_idx_t;
+
     typedef logic [DIM_WIDTH:0] count_t;
     typedef logic [COUNT_WIDTH-1:0] outstanding_t;
     typedef enum logic [2:0] {IDLE, PRELOAD, WAVE, OUTPUT_PRELOAD, DONE} state_t;
@@ -108,9 +122,25 @@ module new_static_uopparse #(
     count_t bm_q, bn_q, batch_idx_q;
     count_t bm_limit_q, bn_limit_q;
     count_t block_m_base_q, block_n_base_q;
+    // Registered block end coordinates: block_*_base_q + bm/bn is needed by
+    // the next-descriptor logic every cycle, so the add is done once when the
+    // descriptor is loaded instead of standing on the load-enable path.
+    count_t block_m_end_q, block_n_end_q;
     logic merge_mode_q;
     count_t merge_base_q, merge_count_q;
-    count_t merge_batch_base_q, merge_batch_count_q;
+    count_t merge_batch_base_q;
+    merge_count_t merge_batch_count_q;
+    // Batches still available from the current merge chunk base.  Keeping it
+    // registered removes a full width add from the per-cycle descriptor path.
+    count_t merge_batch_rem_q;
+    // First-chunk merge descriptor, evaluated in the PRELOAD cycle from the
+    // already registered command values (tiles_per_batch and capacity).  This
+    // keeps the multiply/LUT chain out of the command-accept cycle.
+    merge_count_t merge_batch_count_pre_comb;
+    count_t merge_count_pre_comb;
+    logic [MERGE_FACTOR_WIDTH:0] merge_need_pre_comb;
+    // capacity + chunk batch count, refreshed with the chunk count.
+    logic [MERGE_FACTOR_WIDTH:0] merge_need_q;
     logic load_base_group_q, acc_group_q;
 
     count_t gemm_wave_q;
@@ -121,7 +151,7 @@ module new_static_uopparse #(
     outstanding_t gemm_count_q [2];
 
     count_t load_wave_q;
-    count_t load_a_q, load_b_q;
+    load_idx_t load_a_q, load_b_q;
     logic load_active_q, load_issue_done_q, load_ready_q;
     outstanding_t load_count_q;
 
@@ -139,7 +169,8 @@ module new_static_uopparse #(
     count_t next_bm_q, next_bn_q, next_batch_idx_q;
     count_t next_block_m_base_q, next_block_n_base_q;
     count_t next_merge_base_q, next_merge_count_q;
-    count_t next_merge_batch_base_q, next_merge_batch_count_q;
+    count_t next_merge_batch_base_q;
+    merge_count_t next_merge_batch_count_q;
     logic next_load_base_group_q, next_acc_group_q;
 
     function automatic count_t ceil_m_tiles(input logic [DIM_WIDTH-1:0] v);
@@ -162,40 +193,267 @@ module new_static_uopparse #(
         return v;
     endfunction
 
+    function automatic logic load_less(input load_idx_t a, input load_idx_t b);
+        return a < b;
+    endfunction
+
+    // GEMM/OUTPUT block-local indices are bounded by the block width too, so
+    // the issue conditions use the same narrow compare instead of a full
+    // count-width magnitude compare.
+    function automatic logic idx_less(input count_t a, input count_t b);
+        return load_idx_t'(a) < load_idx_t'(b);
+    endfunction
+
+    function automatic logic idx_at_least(input count_t a, input count_t b);
+        return load_idx_t'(a) >= load_idx_t'(b);
+    endfunction
+
+    // Magnitude compare with the two halves evaluated in parallel: the ripple
+    // only spans half the count width before the halves are combined.
+    localparam int COUNT_HALF = (DIM_WIDTH + 1) / 2;
+
+    function automatic logic count_less(input count_t a, input count_t b);
+        logic hi_lt;
+        logic hi_eq;
+        logic lo_lt;
+        begin
+            hi_lt = a[DIM_WIDTH:COUNT_HALF] < b[DIM_WIDTH:COUNT_HALF];
+            hi_eq = a[DIM_WIDTH:COUNT_HALF] == b[DIM_WIDTH:COUNT_HALF];
+            lo_lt = a[COUNT_HALF-1:0] < b[COUNT_HALF-1:0];
+            return hi_lt || (hi_eq && lo_lt);
+        end
+    endfunction
+
+    // min(top - end_pos, limit) for a "tiles left in this row/column" count.
+    // Both the subtrahend and the limit are bounded by the block width, so the
+    // exact result only needs a high-bit equality check plus a narrow low-bit
+    // subtract: a full-width subtract followed by a comparator is not needed.
+    localparam int REMAIN_LOW =
+        (BLOCK_M_WIDTH > BLOCK_N_WIDTH) ? BLOCK_M_WIDTH : BLOCK_N_WIDTH;
+
+    function automatic count_t remain_min_limit(
+        input count_t top,
+        input count_t end_pos,
+        input count_t limit
+    );
+        logic same_high;
+        logic low_ge;
+        logic [REMAIN_LOW-1:0] diff_low;
+        begin
+            same_high = (top[DIM_WIDTH:REMAIN_LOW] ==
+                         end_pos[DIM_WIDTH:REMAIN_LOW]);
+            low_ge = (top[REMAIN_LOW-1:0] >= end_pos[REMAIN_LOW-1:0]);
+            diff_low = top[REMAIN_LOW-1:0] - end_pos[REMAIN_LOW-1:0];
+            if (same_high && low_ge && (diff_low < limit[REMAIN_LOW-1:0])) begin
+                return count_t'(diff_low);
+            end
+            return limit;
+        end
+    endfunction
+
     // Merge mode is reserved for combining at least two independent batch
     // instances.  A single batch with several output tiles must use the
     // ordinary BM x BN Cartesian block; treating those tiles as merge entries
     // would load the same A tile once per output tile.
     function automatic logic merge_enabled(
         input logic [DIM_WIDTH-1:0] batch_count,
-        input count_t               tiles_per_batch
+        input merge_product_t       tiles_per_batch
     );
         begin
-            return (batch_count > 1) && (tiles_per_batch != 0) &&
-                (tiles_per_batch <= count_t'(MERGE_CAP >> 1));
+            return (batch_count > 1) && (tiles_per_batch != '0) &&
+                (tiles_per_batch <= merge_product_t'(MERGE_CAP >> 1));
         end
     endfunction
 
-    // Return the largest number of complete batches fitting in one merge
-    // chunk.  tiles_per_batch is runtime data, but both the result and search
-    // range are bounded by MERGE_CAP, so constant-coefficient compares replace
-    // the former variable division.
-    function automatic count_t merge_batch_capacity(
-        input count_t tiles_per_batch
+    // Tile counts are 17 bit wide, but every merge decision only depends on
+    // whether tiles_per_batch = tiles_m * tiles_n is inside [1, MERGE_CAP].
+    // Clamping both factors to MERGE_CAP before the product therefore gives a
+    // small multiplier whose result is exact whenever the true product is in
+    // range, and is guaranteed to be above the cap otherwise.
+
+    // Any set bit above the clamp field already means the value is over the
+    // cap, so the compare only needs an OR reduction of the high bits plus a
+    // narrow compare on the low field instead of a full width magnitude
+    // compare against MERGE_CAP.
+    function automatic logic [MERGE_FACTOR_WIDTH-1:0] merge_factor_clamp(
+        input count_t value
     );
-        count_t capacity;
         begin
-            capacity = '0;
-            if ((tiles_per_batch != 0) &&
-                (tiles_per_batch <= count_t'(MERGE_CAP))) begin
-                for (int batches = 1; batches <= MERGE_CAP; batches++) begin
-                    if ((count_t'(batches) * tiles_per_batch) <=
-                        count_t'(MERGE_CAP)) begin
-                        capacity = count_t'(batches);
+            if ((value[DIM_WIDTH:MERGE_FACTOR_WIDTH] != '0) ||
+                (value[MERGE_FACTOR_WIDTH-1:0] >
+                 MERGE_FACTOR_WIDTH'(MERGE_CAP))) begin
+                return MERGE_FACTOR_WIDTH'(MERGE_CAP + 1);
+            end
+            return MERGE_FACTOR_WIDTH'(value);
+        end
+    endfunction
+
+    function automatic merge_product_t merge_tiles_per_batch(
+        input count_t tiles_m,
+        input count_t tiles_n
+    );
+        begin
+            return merge_factor_clamp(tiles_m) * merge_factor_clamp(tiles_n);
+        end
+    endfunction
+
+    // tiles_per_batch is the clamped product, so it fits MERGE_FACTOR_WIDTH
+    // bits.  The capacity is a pure function of that narrow value, so it is
+    // built as a one-hot decode plus a masked OR instead of a compare network
+    // followed by an adder tree.
+    localparam int MERGE_LUT_SIZE = MERGE_CAP + 2;
+
+    function automatic merge_count_t merge_capacity_entry(input int idx);
+        begin
+            if ((idx >= 1) && (idx <= MERGE_CAP)) begin
+                return merge_count_t'(MERGE_CAP / idx);
+            end
+            return merge_count_t'(0);
+        end
+    endfunction
+
+    function automatic merge_count_t merge_batch_capacity(
+        input merge_product_t tiles_per_batch
+    );
+        logic [MERGE_LUT_SIZE-1:0] hit;
+        logic [MERGE_LUT_SIZE-1:0] terms;
+        merge_count_t cap;
+        begin
+            for (int t = 0; t < MERGE_LUT_SIZE; t++) begin
+                hit[t] = (tiles_per_batch == merge_product_t'(t));
+            end
+            for (int b = 0; b < MERGE_COUNT_WIDTH; b++) begin
+                for (int t = 0; t < MERGE_LUT_SIZE; t++) begin
+                    if (((merge_capacity_entry(t) >> b) & 1) != 0) begin
+                        terms[t] = hit[t];
+                    end else begin
+                        terms[t] = 1'b0;
                     end
                 end
+                cap[b] = |terms;
+            end
+            return cap;
+        end
+    endfunction
+
+    always_comb begin
+        merge_batch_count_pre_comb =
+            ((batch_q[DIM_WIDTH-1:MERGE_FACTOR_WIDTH] == 0) &&
+             (batch_q[MERGE_FACTOR_WIDTH-1:0] <
+              MERGE_FACTOR_WIDTH'(merge_capacity_q))) ?
+            merge_count_t'(batch_q[MERGE_FACTOR_WIDTH-1:0]) :
+            merge_capacity_q;
+        merge_count_pre_comb = merge_tile_count(
+            merge_batch_count_pre_comb, merge_tiles_per_batch_q);
+        merge_need_pre_comb = (MERGE_FACTOR_WIDTH+1)'(merge_capacity_q) +
+            (MERGE_FACTOR_WIDTH+1)'(merge_batch_count_pre_comb);
+    end
+
+    // More batches left after the current merge chunk?
+    function automatic logic merge_chunk_has_more(
+        input count_t remaining, input count_t chunk_count
+    );
+        begin
+            return (remaining[DIM_WIDTH:MERGE_FACTOR_WIDTH] != '0) ||
+                   (remaining[MERGE_FACTOR_WIDTH-1:0] >
+                    chunk_count[MERGE_FACTOR_WIDTH-1:0]);
+        end
+    endfunction
+
+    // Batch count of the next merge chunk, i.e. min(remaining - chunk_count,
+    // capacity).  The result is at most MERGE_CAP, so a high-bit test plus a
+    // narrow subtract replaces a full width subtract/min chain.  An
+    // underflowing difference keeps the historical "clamped to capacity"
+    // result.  "need" = chunk_count + capacity is kept in a register that is
+    // refreshed whenever the chunk count changes, so the addition is not on
+    // the per-cycle path.
+    function automatic merge_count_t merge_next_chunk_batches(
+        input count_t remaining,
+        input count_t chunk_count,
+        input merge_count_t capacity,
+        input logic [MERGE_FACTOR_WIDTH:0] need
+    );
+        begin
+            if ((remaining[DIM_WIDTH:MERGE_FACTOR_WIDTH] == '0) &&
+                ((MERGE_FACTOR_WIDTH+1)'(remaining[MERGE_FACTOR_WIDTH-1:0]) >=
+                 (MERGE_FACTOR_WIDTH+1)'(chunk_count[MERGE_FACTOR_WIDTH-1:0])) &&
+                ((MERGE_FACTOR_WIDTH+1)'(remaining[MERGE_FACTOR_WIDTH-1:0]) <
+                 need)) begin
+                return merge_count_t'(
+                    remaining[MERGE_FACTOR_WIDTH-1:0] -
+                    chunk_count[MERGE_FACTOR_WIDTH-1:0]);
             end
             return capacity;
+        end
+    endfunction
+
+    // Same clamp, but applied directly to a raw command dimension: the tile
+    // count exceeds the cap exactly when the dimension exceeds cap << shift, so
+    // the test only needs a high-bit OR plus a narrow compare, and the low tile
+    // count is a narrow add plus a low-bit reduction.
+    function automatic logic [MERGE_FACTOR_WIDTH-1:0] merge_factor_clamp_m(
+        input logic [DIM_WIDTH-1:0] value
+    );
+        localparam int SHIFT = SUBTILE_M_SHIFT;
+        logic [MERGE_COUNT_WIDTH-1:0] tiles;
+        begin
+            if ((value[DIM_WIDTH-1:MERGE_COUNT_WIDTH+SHIFT] != '0) ||
+                (value[MERGE_COUNT_WIDTH+SHIFT-1:0] >
+                 (MERGE_COUNT_WIDTH+SHIFT)'(MERGE_CAP << SHIFT))) begin
+                return MERGE_FACTOR_WIDTH'(MERGE_CAP + 1);
+            end
+            tiles = MERGE_COUNT_WIDTH'(value[MERGE_COUNT_WIDTH+SHIFT-1:SHIFT]) +
+                    MERGE_COUNT_WIDTH'(
+                        |(value & DIM_WIDTH'((1 << SHIFT) - 1)));
+            return MERGE_FACTOR_WIDTH'(tiles);
+        end
+    endfunction
+
+    function automatic logic [MERGE_FACTOR_WIDTH-1:0] merge_factor_clamp_n(
+        input logic [DIM_WIDTH-1:0] value
+    );
+        localparam int SHIFT = SUBTILE_N_SHIFT;
+        logic [MERGE_COUNT_WIDTH-1:0] tiles;
+        begin
+            if ((value[DIM_WIDTH-1:MERGE_COUNT_WIDTH+SHIFT] != '0) ||
+                (value[MERGE_COUNT_WIDTH+SHIFT-1:0] >
+                 (MERGE_COUNT_WIDTH+SHIFT)'(MERGE_CAP << SHIFT))) begin
+                return MERGE_FACTOR_WIDTH'(MERGE_CAP + 1);
+            end
+            tiles = MERGE_COUNT_WIDTH'(value[MERGE_COUNT_WIDTH+SHIFT-1:SHIFT]) +
+                    MERGE_COUNT_WIDTH'(
+                        |(value & DIM_WIDTH'((1 << SHIFT) - 1)));
+            return MERGE_FACTOR_WIDTH'(tiles);
+        end
+    endfunction
+
+    function automatic merge_product_t merge_tiles_per_batch_dim(
+        input logic [DIM_WIDTH-1:0] dim_m,
+        input logic [DIM_WIDTH-1:0] dim_n
+    );
+        begin
+            return merge_factor_clamp_m(dim_m) * merge_factor_clamp_n(dim_n);
+        end
+    endfunction
+
+    // merge_count = batch_count * tiles_per_batch is bounded by MERGE_CAP, so
+    // both factors fit in the clamp field and the product stays small.
+    // The batch count of a chunk is already clamped to MERGE_CAP by
+    // merge_next_chunk_batches / the command path, so this only has to clamp
+    // the (narrow) tiles_per_batch factor.
+    function automatic count_t merge_tile_count(
+        input merge_count_t batch_count,
+        input merge_product_t tiles_per_batch
+    );
+        logic [MERGE_FACTOR_WIDTH-1:0] factor_b;
+        logic [MERGE_FACTOR_WIDTH-1:0] factor_t;
+        begin
+            // No clamp needed on either factor: batch_count is already capped
+            // at capacity, and when tiles_per_batch is out of range the
+            // capacity (hence the batch count) is zero.
+            factor_b = MERGE_FACTOR_WIDTH'(batch_count);
+            factor_t = MERGE_FACTOR_WIDTH'(tiles_per_batch);
+            return count_t'(factor_b * factor_t);
         end
     endfunction
 
@@ -236,21 +494,30 @@ module new_static_uopparse #(
     endfunction
 
     count_t cmd_tm_comb, cmd_tn_comb, cmd_tk_comb;
-    count_t cmd_tiles_per_batch_comb;
-    count_t cmd_merge_capacity_comb, cmd_merge_batch_count_comb;
+    merge_product_t cmd_tiles_per_batch_comb;
+    merge_count_t cmd_merge_capacity_comb;
+    merge_count_t cmd_merge_batch_count_comb;
     logic cmd_merge_enabled_comb;
 
     always_comb begin
         cmd_tm_comb = ceil_m_tiles(cmd_m_i);
         cmd_tn_comb = ceil_n_tiles(cmd_n_i);
         cmd_tk_comb = ceil_k_tiles(cmd_k_i);
-        cmd_tiles_per_batch_comb = cmd_tm_comb * cmd_tn_comb;
+        cmd_tiles_per_batch_comb =
+            merge_tiles_per_batch_dim(cmd_m_i, cmd_n_i);
         cmd_merge_capacity_comb =
             merge_batch_capacity(cmd_tiles_per_batch_comb);
         cmd_merge_enabled_comb =
             merge_enabled(cmd_batch_i, cmd_tiles_per_batch_comb);
-        cmd_merge_batch_count_comb = min_count(
-            count_t'(cmd_batch_i), cmd_merge_capacity_comb);
+        // min(batch_count, capacity) with capacity <= MERGE_CAP: any high bit
+        // in the batch count already wins, so only the low field needs the
+        // compare.
+        cmd_merge_batch_count_comb =
+            ((cmd_batch_i[DIM_WIDTH-1:MERGE_FACTOR_WIDTH] == '0) &&
+             (cmd_batch_i[MERGE_FACTOR_WIDTH-1:0] <
+              MERGE_FACTOR_WIDTH'(cmd_merge_capacity_comb))) ?
+            merge_count_t'(cmd_batch_i[MERGE_FACTOR_WIDTH-1:0]) :
+            cmd_merge_capacity_comb;
     end
 
     wire load_fire = load_valid_o && load_ready_i;
@@ -272,13 +539,34 @@ module new_static_uopparse #(
 
     // Next-block descriptor calculation.  The parser walks N blocks first,
     // then M blocks, then batches; merge mode walks a flat batch-tile list.
+    count_t merge_chunk_count_comb;
+    logic [MERGE_FACTOR_WIDTH:0] merge_chunk_need_comb;
     logic next_exists_comb;
+    logic following_exists_comb;
     count_t next_bm_comb, next_bn_comb, next_batch_idx_comb;
     count_t next_mbase_comb, next_nbase_comb;
     count_t next_merge_base_comb, next_merge_count_comb;
-    count_t next_merge_batch_base_comb, next_merge_batch_count_comb;
-    count_t merge_tiles_per_batch_comb, merge_capacity_comb;
+    count_t next_merge_batch_base_comb;
+    merge_count_t next_merge_batch_count_comb;
+    // tiles_per_batch and the merge capacity depend only on the accepted
+    // command (they are functions of tm_q/tn_q), so they are captured once in
+    // the command cycle.  Keeping them out of the runtime descriptor cone
+    // removes a clamp, a multiply and the capacity decode from the
+    // load-bound path.
+    merge_product_t merge_tiles_per_batch_q;
+    merge_count_t merge_capacity_q;
+    // Tile count of the block that the final K-wave preloads.  It is captured
+    // when the current block starts, so the preload bound no longer has to be
+    // recomputed inside the load-issue cone.
+    merge_count_t fwd_merge_count_q;
+    logic fwd_exists_q;
+    count_t fwd_bm_q, fwd_bn_q;
+    count_t block_m_end_comb, block_n_end_comb;
     always_comb begin
+        // During PRELOAD the chunk descriptor has not been captured yet, so
+        // read the PRELOAD-time value there.
+        merge_chunk_count_comb = count_t'(merge_batch_count_q);
+        merge_chunk_need_comb = merge_need_q;
         next_exists_comb = 1'b0;
         next_bm_comb = bm_q; next_bn_comb = bn_q;
         next_batch_idx_comb = batch_idx_q;
@@ -287,43 +575,68 @@ module new_static_uopparse #(
         next_merge_count_comb = merge_count_q;
         next_merge_batch_base_comb = merge_batch_base_q;
         next_merge_batch_count_comb = merge_batch_count_q;
-        merge_tiles_per_batch_comb = tm_q * tn_q;
-        merge_capacity_comb =
-            merge_batch_capacity(merge_tiles_per_batch_comb);
+        block_m_end_comb = block_m_end_q;
+        block_n_end_comb = block_n_end_q;
 
         if (merge_mode_q) begin
-            if (merge_batch_base_q + merge_batch_count_q < count_t'(batch_q)) begin
+            if (merge_chunk_has_more(merge_batch_rem_q,
+                                     merge_chunk_count_comb)) begin
                 next_exists_comb = 1'b1;
                 next_merge_base_comb = merge_base_q + merge_count_q;
                 next_merge_batch_base_comb =
-                    merge_batch_base_q + merge_batch_count_q;
-                next_merge_batch_count_comb = min_count(
-                    count_t'(batch_q) - next_merge_batch_base_comb,
-                    merge_capacity_comb);
+                    merge_batch_base_q + merge_chunk_count_comb;
+                next_merge_batch_count_comb = merge_next_chunk_batches(
+                    merge_batch_rem_q, merge_chunk_count_comb,
+                    merge_capacity_q, merge_chunk_need_comb);
                 next_merge_count_comb =
-                    next_merge_batch_count_comb * merge_tiles_per_batch_comb;
+                    merge_tile_count(next_merge_batch_count_comb,
+                                     merge_tiles_per_batch_q);
             end
-        end else if (block_n_base_q + bn_q < tn_q) begin
+        end else if (count_less(block_n_end_comb, tn_q)) begin
             next_exists_comb = 1'b1;
-            next_nbase_comb = block_n_base_q + bn_q;
-            next_bn_comb = min_count(tn_q - next_nbase_comb, bn_limit_q);
-        end else if (block_m_base_q + bm_q < tm_q) begin
+            next_nbase_comb = block_n_end_comb;
+            next_bm_comb = bm_q;
+            next_bn_comb = remain_min_limit(tn_q, block_n_end_comb,
+                                            bn_limit_q);
+        end else if (count_less(block_m_end_comb, tm_q)) begin
             next_exists_comb = 1'b1;
-            next_mbase_comb = block_m_base_q + bm_q;
+            next_mbase_comb = block_m_end_comb;
             next_nbase_comb = 0;
-            next_bm_comb = min_count(tm_q - next_mbase_comb, bm_limit_q);
-            next_bn_comb = min_count(tn_q, bn_limit_q);
+            next_bm_comb = remain_min_limit(tm_q, block_m_end_comb,
+                                            bm_limit_q);
+            next_bn_comb = bn_limit_q;
         end else if (batch_idx_q + 1 < batch_q) begin
             next_exists_comb = 1'b1;
             next_batch_idx_comb = batch_idx_q + 1'b1;
             next_mbase_comb = 0;
             next_nbase_comb = 0;
-            next_bm_comb = min_count(tm_q, bm_limit_q);
-            next_bn_comb = min_count(tn_q, bn_limit_q);
+            next_bm_comb = bm_limit_q;
+            next_bn_comb = bn_limit_q;
+        end
+    end
+
+    // At a TK=1 boundary the descriptor in next_*_q becomes current at the
+    // edge, while LOAD immediately starts looking one block farther ahead.
+    // Register just the existence decision at that edge so load_valid_o does
+    // not depend combinationally on the following descriptor calculation.
+    always_comb begin
+        if (merge_mode_q) begin
+            following_exists_comb = merge_chunk_has_more(
+                merge_batch_rem_q - count_t'(next_merge_batch_count_q),
+                count_t'(next_merge_batch_count_q));
+        end else begin
+            following_exists_comb =
+                count_less(next_block_n_base_q + next_bn_q, tn_q) ||
+                count_less(next_block_m_base_q + next_bm_q, tm_q) ||
+                ((next_batch_idx_q + 1'b1) < count_t'(batch_q));
         end
     end
 
     logic load_from_next_comb, load_next_exists_comb;
+    // Load-issue bounds are selected once and then compared with the split
+    // comparator, so the bound mux does not sit in front of a full-width
+    // ripple compare.
+    load_idx_t load_a_bound, load_b_bound;
     logic load_next_block_wave0_comb;
     count_t load_bm_comb, load_bn_comb, load_batch_comb;
     count_t load_mbase_comb, load_nbase_comb, load_merge_count_comb;
@@ -335,7 +648,7 @@ module new_static_uopparse #(
         load_next_block_wave0_comb = (state_q == WAVE) &&
             (gemm_wave_q + 1 >= tk_q);
         load_next_exists_comb = (state_q == OUTPUT_PRELOAD) ?
-            next_exists_q : next_exists_comb;
+            next_exists_q : fwd_exists_q;
         if (state_q == OUTPUT_PRELOAD) begin
             load_bm_comb = next_bm_q;
             load_bn_comb = next_bn_q;
@@ -346,12 +659,12 @@ module new_static_uopparse #(
             load_merge_batch_base_comb = next_merge_batch_base_q;
             load_group_comb = next_load_base_group_q;
         end else if (load_from_next_comb) begin
-            load_bm_comb = next_bm_comb;
-            load_bn_comb = next_bn_comb;
+            load_bm_comb = fwd_bm_q;
+            load_bn_comb = fwd_bn_q;
             load_batch_comb = next_batch_idx_comb;
             load_mbase_comb = next_mbase_comb;
             load_nbase_comb = next_nbase_comb;
-            load_merge_count_comb = next_merge_count_comb;
+            load_merge_count_comb = fwd_merge_count_q;
             load_merge_batch_base_comb = next_merge_batch_base_comb;
             // wave 0 of the next block is written opposite the final GEMM's
             // operand half, independent of whether TK is odd or even.
@@ -371,36 +684,74 @@ module new_static_uopparse #(
     // Decode only the offset inside a merge chunk.  It is bounded by
     // MERGE_CAP, unlike the old global flattened index, so a finite bank of
     // constant-coefficient comparisons is sufficient for batch/M/N recovery.
-    count_t load_merge_local_idx_comb;
-    count_t load_merge_batch_offset_comb;
-    count_t load_merge_in_batch_comb;
+    //
+    // floor(value / divisor) with a bounded quotient is expanded as the
+    // population count of nested "value >= k * divisor" compares, which
+    // replaces the former serial compare/subtract/mux chain with a parallel
+    // compare/add network.
+    // floor(value / divisor) for value <= MERGE_CAP.  The divisor is clamped
+    // to the product field width first: any divisor above the cap makes every
+    // "k * divisor <= value" test false, which is exactly the wanted result,
+    // and it keeps the compare network in the narrow field.
+    function automatic merge_count_t merge_bounded_quotient(
+        input merge_product_t value,
+        input count_t divisor
+    );
+        logic [MERGE_CAP-1:0] fits;
+        merge_count_t part [MERGE_CAP];
+        merge_product_t divisor_clamped;
+        begin
+            divisor_clamped =
+                ((divisor[DIM_WIDTH:MERGE_FACTOR_WIDTH] != '0) ||
+                 (divisor[MERGE_FACTOR_WIDTH-1:0] >
+                  MERGE_FACTOR_WIDTH'(MERGE_CAP))) ?
+                merge_product_t'(MERGE_CAP + 1) : merge_product_t'(divisor);
+            fits = '0;
+            for (int i = 0; i < MERGE_CAP; i++) begin
+                part[i] = '0;
+            end
+            for (int k = 1; k < MERGE_CAP; k++) begin
+                // A zero divisor keeps the historical "all offsets fit"
+                // result; merge mode never runs with an empty tile shape.
+                fits[k-1] = (divisor == '0) ? 1'b1 :
+                    (value >= merge_product_t'(k) * divisor_clamped);
+            end
+            for (int i = 0; i < MERGE_CAP - 1; i++) begin
+                part[i] = merge_count_t'(fits[i]);
+            end
+            for (int step = 1; step < MERGE_CAP - 1; step <<= 1) begin
+                for (int i = 0; i + step < MERGE_CAP - 1; i += 2 * step) begin
+                    part[i] = part[i] + part[i + step];
+                end
+            end
+            return part[0];
+        end
+    endfunction
+
+    merge_product_t load_merge_local_idx_comb;
+    merge_count_t load_merge_batch_offset_comb;
+    merge_product_t load_merge_in_batch_comb;
     count_t load_merge_batch_comb;
-    count_t load_merge_m_comb, load_merge_n_comb;
+    merge_count_t load_merge_m_comb, load_merge_n_comb;
     always_comb begin
         load_merge_local_idx_comb =
-            (load_a_q < load_merge_count_comb) ? load_a_q : load_b_q;
-        load_merge_batch_offset_comb = '0;
-        load_merge_in_batch_comb = load_merge_local_idx_comb;
-        for (int batch_off = 1; batch_off < MERGE_CAP; batch_off++) begin
-            if (load_merge_local_idx_comb >=
-                count_t'(batch_off) * merge_tiles_per_batch_comb) begin
-                load_merge_batch_offset_comb = count_t'(batch_off);
-                load_merge_in_batch_comb = load_merge_local_idx_comb -
-                    count_t'(batch_off) * merge_tiles_per_batch_comb;
-            end
-        end
+            ((load_a_q < load_idx_t'(load_merge_count_comb)) ?
+             merge_product_t'(load_a_q) : merge_product_t'(load_b_q));
+        load_merge_batch_offset_comb = merge_bounded_quotient(
+            load_merge_local_idx_comb,
+            count_t'(merge_tiles_per_batch_q));
+        load_merge_in_batch_comb = merge_product_t'(
+            load_merge_local_idx_comb -
+            merge_product_t'(load_merge_batch_offset_comb *
+                             merge_tiles_per_batch_q));
 
         load_merge_batch_comb =
-            load_merge_batch_base_comb + load_merge_batch_offset_comb;
-        load_merge_m_comb = '0;
-        load_merge_n_comb = load_merge_in_batch_comb;
-        for (int m_off = 1; m_off < MERGE_CAP; m_off++) begin
-            if (load_merge_in_batch_comb >= count_t'(m_off) * tn_q) begin
-                load_merge_m_comb = count_t'(m_off);
-                load_merge_n_comb = load_merge_in_batch_comb -
-                    count_t'(m_off) * tn_q;
-            end
-        end
+            load_merge_batch_base_comb + count_t'(load_merge_batch_offset_comb);
+        load_merge_m_comb =
+            merge_bounded_quotient(load_merge_in_batch_comb, tn_q);
+        load_merge_n_comb = merge_count_t'(
+            load_merge_in_batch_comb -
+            merge_product_t'(load_merge_m_comb * tn_q));
     end
 
     logic gemm_from_next_comb;
@@ -420,7 +771,20 @@ module new_static_uopparse #(
     end
 
     always_comb begin
-        load_valid_o = 1'b0;
+        // load_active_q and load_issue_done_q already describe whether the
+        // current registered issue sequence has work remaining.  Keeping
+        // valid on this local state prevents address/merge/next-block logic
+        // from entering load_fire and the outstanding-count feedback path.
+        load_a_bound = load_idx_t'(load_from_next_comb ?
+            (merge_mode_q ? load_merge_count_comb : load_bm_comb) :
+            (merge_mode_q ? merge_count_q : bm_q));
+        load_b_bound = load_idx_t'(load_from_next_comb ?
+            (merge_mode_q ? load_merge_count_comb : load_bn_comb) :
+            (merge_mode_q ? merge_count_q : bn_q));
+        load_valid_o = load_active_q &&
+            !load_issue_done_q &&
+            ((state_q == PRELOAD) || (state_q == WAVE) ||
+             (state_q == OUTPUT_PRELOAD));
         load_is_b_o = 1'b0;
         // The final GEMM wave preloads the next block's wave 0.  In that
         // special case the address and parity must use wave zero explicitly;
@@ -449,35 +813,30 @@ module new_static_uopparse #(
         if (load_active_q && (!load_from_next_comb || load_next_exists_comb) &&
             ((state_q == PRELOAD) || (state_q == WAVE) ||
              (state_q == OUTPUT_PRELOAD)) && !load_issue_done_q) begin
-            if (load_a_q < (load_from_next_comb ?
-                            (merge_mode_q ? load_merge_count_comb : load_bm_comb) :
-                            (merge_mode_q ? merge_count_q : bm_q))) begin
-                load_valid_o = 1'b1;
+            if (load_less(load_a_q, load_a_bound)) begin
                 load_is_b_o = 1'b0;
                 if (merge_mode_q) begin
                     load_addr_o = a_base_q +
                         addr_count(load_merge_batch_comb) *
                         addr_count(tm_q) * addr_count(tk_q) +
-                        addr_count(load_merge_m_comb) *
+                        addr_count(count_t'(load_merge_m_comb)) *
                         addr_count(tk_q) +
                         addr_count(load_next_block_wave0_comb ? 0 : load_wave_q);
-                    load_abufidx_o = abuf_slot(load_group_o, load_a_q);
+                    load_abufidx_o = abuf_slot(load_group_o, count_t'(load_a_q));
                     load_valid_rows_o = valid_rows(
-                        load_merge_m_comb, m_q, SUBTILE_M);
+                        count_t'(load_merge_m_comb), m_q, SUBTILE_M);
                 end else begin
                     load_addr_o = a_base_q +
                         addr_count(load_batch_comb) * addr_count(tm_q) *
                         addr_count(tk_q) +
-                        (addr_count(load_mbase_comb) + addr_count(load_a_q)) *
+                        (addr_count(load_mbase_comb) + addr_count(count_t'(load_a_q))) *
                         addr_count(tk_q) + addr_count(load_wave_q);
-                    load_abufidx_o = abuf_slot(load_group_o, load_a_q);
+                    load_abufidx_o = abuf_slot(load_group_o, count_t'(load_a_q));
                     load_valid_rows_o = valid_rows(
-                        load_mbase_comb + load_a_q, m_q, SUBTILE_M);
+                        load_mbase_comb + count_t'(load_a_q), m_q,
+                        SUBTILE_M);
                 end
-            end else if (load_b_q < (load_from_next_comb ?
-                                     (merge_mode_q ? load_merge_count_comb : load_bn_comb) :
-                                     (merge_mode_q ? merge_count_q : bn_q))) begin
-                load_valid_o = 1'b1;
+            end else if (load_less(load_b_q, load_b_bound)) begin
                 load_is_b_o = 1'b1;
                 if (merge_mode_q) begin
                     load_addr_o = b_base_q +
@@ -485,27 +844,28 @@ module new_static_uopparse #(
                         addr_count(tk_q) * addr_count(tn_q) +
                         addr_count(load_next_block_wave0_comb ? 0 : load_wave_q) *
                         addr_count(tn_q) +
-                        addr_count(load_merge_n_comb);
-                    load_bbufidx_o = bbuf_slot(load_group_o, load_b_q);
+                        addr_count(count_t'(load_merge_n_comb));
+                    load_bbufidx_o = bbuf_slot(load_group_o, count_t'(load_b_q));
                     load_valid_rows_o = valid_rows(
-                        load_merge_n_comb, n_q, SUBTILE_N);
+                        count_t'(load_merge_n_comb), n_q, SUBTILE_N);
                 end else begin
                     load_addr_o = b_base_q +
                         addr_count(load_batch_comb) * addr_count(tk_q) *
                         addr_count(tn_q) +
                         addr_count(load_next_block_wave0_comb ? 0 : load_wave_q) *
                         addr_count(tn_q) +
-                        addr_count(load_nbase_comb) + addr_count(load_b_q);
-                    load_bbufidx_o = bbuf_slot(load_group_o, load_b_q);
+                        addr_count(load_nbase_comb) + addr_count(count_t'(load_b_q));
+                    load_bbufidx_o = bbuf_slot(load_group_o, count_t'(load_b_q));
                     load_valid_rows_o = valid_rows(
-                        load_nbase_comb + load_b_q, n_q, SUBTILE_N);
+                        load_nbase_comb + count_t'(load_b_q), n_q, SUBTILE_N);
                 end
             end
         end
 
         if (((state_q == WAVE) || gemm_from_next_comb) && !gemm_sent_q &&
-            (merge_mode_q ? (gemm_m_q < gemm_merge_count_comb) :
-             (gemm_m_q < gemm_bm_comb && gemm_n_q < gemm_bn_comb))) begin
+            (merge_mode_q ? idx_less(gemm_m_q, gemm_merge_count_comb) :
+             (idx_less(gemm_m_q, gemm_bm_comb) &&
+              idx_less(gemm_n_q, gemm_bn_comb)))) begin
             gemm_valid_o = 1'b1;
             gemm_abufidx_o = abuf_slot(gemm_group_o, gemm_m_q);
             gemm_bbufidx_o = bbuf_slot(gemm_group_o,
@@ -516,8 +876,9 @@ module new_static_uopparse #(
 
         if ((state_q == OUTPUT_PRELOAD) && !output_issue_done_q &&
             (gemm_count_q[0] == 0) &&
-            (merge_mode_q ? (output_m_q < output_merge_count_q) :
-             (output_m_q < output_bm_q && output_n_q < output_bn_q))) begin
+            (merge_mode_q ? idx_less(output_m_q, output_merge_count_q) :
+             (idx_less(output_m_q, output_bm_q) &&
+              idx_less(output_n_q, output_bn_q)))) begin
             output_valid_o = 1'b1;
             output_addr_o = c_base_q +
                 (merge_mode_q ?
@@ -543,6 +904,14 @@ module new_static_uopparse #(
             load_active_q <= 1'b0;
             load_issue_done_q <= 1'b0;
             load_ready_q <= 1'b0;
+            block_m_end_q <= '0;
+            block_n_end_q <= '0;
+            merge_tiles_per_batch_q <= '0;
+            merge_capacity_q <= '0;
+            fwd_merge_count_q <= '0;
+            fwd_exists_q <= 1'b0;
+            fwd_bm_q <= '0;
+            fwd_bn_q <= '0;
             gemm_sent_q <= 1'b0;
             output_issue_done_q <= 1'b1;
             output_bm_q <= '0; output_bn_q <= '0;
@@ -553,6 +922,8 @@ module new_static_uopparse #(
             next_exists_q <= 1'b0;
             merge_batch_base_q <= '0;
             merge_batch_count_q <= '0;
+            merge_batch_rem_q <= '0;
+            merge_need_q <= '0;
             next_merge_batch_base_q <= '0;
             next_merge_batch_count_q <= '0;
             bm_limit_q <= '0;
@@ -598,16 +969,24 @@ module new_static_uopparse #(
                 // blocks to the actual tile shape before emitting any uops.
                 bm_q <= min_count(cmd_tm_comb, count_t'(block_m_i));
                 bn_q <= min_count(cmd_tn_comb, count_t'(block_n_i));
+                block_m_end_q <= min_count(cmd_tm_comb, count_t'(block_m_i));
+                block_n_end_q <= min_count(cmd_tn_comb, count_t'(block_n_i));
                 bm_limit_q <= min_count(cmd_tm_comb, count_t'(block_m_i));
                 bn_limit_q <= min_count(cmd_tn_comb, count_t'(block_n_i));
                 batch_idx_q <= 0; block_m_base_q <= 0; block_n_base_q <= 0;
                 merge_mode_q <= cmd_merge_enabled_comb;
                 merge_base_q <= 0;
                 merge_count_q <= cmd_merge_enabled_comb ?
-                    cmd_merge_batch_count_comb * cmd_tiles_per_batch_comb : '0;
+                    merge_tile_count(cmd_merge_batch_count_comb,
+                                     cmd_tiles_per_batch_comb) : '0;
                 merge_batch_base_q <= '0;
                 merge_batch_count_q <= cmd_merge_enabled_comb ?
                     cmd_merge_batch_count_comb : '0;
+                merge_batch_rem_q <= count_t'(cmd_batch_i);
+                merge_need_q <= (MERGE_FACTOR_WIDTH+1)'(cmd_merge_capacity_comb) +
+                    (MERGE_FACTOR_WIDTH+1)'(cmd_merge_batch_count_comb);
+                merge_tiles_per_batch_q <= cmd_tiles_per_batch_comb;
+                merge_capacity_q <= cmd_merge_capacity_comb;
                 load_base_group_q <= 1'b0; acc_group_q <= 1'b0;
                 load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
                 load_active_q <= 1'b1; load_issue_done_q <= 1'b0; load_ready_q <= 1'b0;
@@ -619,43 +998,64 @@ module new_static_uopparse #(
                 if (load_fire) begin
                     if (!load_is_b_o) load_a_q <= load_a_q + 1'b1;
                     else load_b_q <= load_b_q + 1'b1;
-                    if ((!load_is_b_o && load_a_q + 1 >=
-                         (load_from_next_comb ? (merge_mode_q ? load_merge_count_comb : load_bm_comb) :
-                                                 (merge_mode_q ? merge_count_q : bm_q)) &&
-                         load_b_q >= (load_from_next_comb ? (merge_mode_q ? load_merge_count_comb : load_bn_comb) :
-                                                               (merge_mode_q ? merge_count_q : bn_q))) ||
-                        (load_is_b_o && load_b_q + 1 >=
-                         (load_from_next_comb ? (merge_mode_q ? load_merge_count_comb : load_bn_comb) :
-                                                 (merge_mode_q ? merge_count_q : bn_q)) &&
-                         load_a_q >= (load_from_next_comb ? (merge_mode_q ? load_merge_count_comb : load_bm_comb) :
-                                                               (merge_mode_q ? merge_count_q : bm_q)))) begin
+                    if ((!load_is_b_o &&
+                         !load_less(load_a_q + LOAD_IDX_WIDTH'(1), load_a_bound) &&
+                         !load_less(load_b_q, load_b_bound)) ||
+                        (load_is_b_o &&
+                         !load_less(load_b_q + LOAD_IDX_WIDTH'(1), load_b_bound) &&
+                         !load_less(load_a_q, load_a_bound))) begin
                         load_issue_done_q <= 1'b1;
                     end
                 end
 
                 if (gemm_fire) begin
                     gemm_sent_q <= merge_mode_q ?
-                        (gemm_m_q + 1 >= gemm_merge_count_comb) :
-                        ((gemm_m_q + 1 >= gemm_bm_comb) &&
-                         (gemm_n_q + 1 >= gemm_bn_comb));
-                    if (merge_mode_q || gemm_n_q + 1 >= gemm_bn_comb) begin
+                        idx_at_least(gemm_m_q + 1'b1, gemm_merge_count_comb) :
+                        (idx_at_least(gemm_m_q + 1'b1, gemm_bm_comb) &&
+                         idx_at_least(gemm_n_q + 1'b1, gemm_bn_comb));
+                    if (merge_mode_q || idx_at_least(gemm_n_q + 1'b1,
+                                                     gemm_bn_comb)) begin
                         gemm_m_q <= gemm_m_q + 1'b1; gemm_n_q <= 0;
                     end else gemm_n_q <= gemm_n_q + 1'b1;
                 end
                 if (output_fire) begin
-                    if (merge_mode_q || output_n_q + 1 >= output_bn_q) begin
+                    if (merge_mode_q || idx_at_least(output_n_q + 1'b1,
+                                                     output_bn_q)) begin
                         output_m_q <= output_m_q + 1'b1; output_n_q <= 0;
                     end else output_n_q <= output_n_q + 1'b1;
-                    if ((!merge_mode_q && output_m_q + 1 >= output_bm_q &&
-                         output_n_q + 1 >= output_bn_q) ||
+                    if ((!merge_mode_q &&
+                         idx_at_least(output_m_q + 1'b1, output_bm_q) &&
+                         idx_at_least(output_n_q + 1'b1, output_bn_q)) ||
                         (merge_mode_q &&
-                         output_m_q + 1 >= output_merge_count_q))
+                         idx_at_least(output_m_q + 1'b1,
+                                      output_merge_count_q)))
                         output_issue_done_q <= 1'b1;
                 end
                 if ((state_q == PRELOAD) && load_issue_done_q && load_count_q == 0) begin
                     gemm_wave_q <= 0; gemm_m_q <= 0; gemm_n_q <= 0;
                     gemm_sent_q <= 1'b0;
                     load_ready_q <= 1'b0;
+                    // Values the final wave will need are already known here.
+                    fwd_merge_count_q <= next_merge_count_comb;
+                    fwd_exists_q <= next_exists_comb;
+                    // Descriptor one step past the block that just became
+                    // current, evaluated on the committed values.
+                    if (count_less(next_block_n_base_q + next_bn_q, tn_q)) begin
+                        fwd_bn_q <= remain_min_limit(
+                            tn_q, next_block_n_base_q + next_bn_q, bn_limit_q);
+                        fwd_bm_q <= next_bm_q;
+                    end else if (count_less(next_block_m_base_q + next_bm_q,
+                                           tm_q)) begin
+                        fwd_bn_q <= bn_limit_q;
+                        fwd_bm_q <= remain_min_limit(
+                            tm_q, next_block_m_base_q + next_bm_q, bm_limit_q);
+                    end else begin
+                        fwd_bn_q <= bn_limit_q;
+                        fwd_bm_q <= bm_limit_q;
+                    end
+                    fwd_bm_q <= next_bm_comb;
+                    fwd_bn_q <= next_bn_comb;
+
                     if (tk_q > 1) begin
                         load_wave_q <= 1; load_a_q <= 0; load_b_q <= 0;
                         load_active_q <= 1'b1; load_issue_done_q <= 1'b0;
@@ -731,10 +1131,28 @@ module new_static_uopparse #(
                     batch_idx_q <= next_batch_idx_q;
                     block_m_base_q <= next_block_m_base_q;
                     block_n_base_q <= next_block_n_base_q;
+                    block_m_end_q <= next_block_m_base_q + next_bm_q;
+                    block_n_end_q <= next_block_n_base_q + next_bn_q;
                     merge_base_q <= next_merge_base_q;
                     merge_count_q <= next_merge_count_q;
                     merge_batch_base_q <= next_merge_batch_base_q;
                     merge_batch_count_q <= next_merge_batch_count_q;
+                    // Consumption happens on the chunk that is being retired.
+                    merge_batch_rem_q <= merge_batch_rem_q -
+                        count_t'(merge_batch_count_q);
+                    merge_need_q <= (MERGE_FACTOR_WIDTH+1)'(merge_capacity_q) +
+                        (MERGE_FACTOR_WIDTH+1)'(next_merge_batch_count_q);
+                    // Same quantities for the block that just became current.
+                    fwd_merge_count_q <= merge_count_t'(merge_tile_count(
+                        merge_next_chunk_batches(
+                            merge_batch_rem_q -
+                                count_t'(merge_batch_count_q),
+                            count_t'(next_merge_batch_count_q),
+                            merge_capacity_q,
+                            (MERGE_FACTOR_WIDTH+1)'(merge_capacity_q) +
+                                (MERGE_FACTOR_WIDTH+1)'(next_merge_batch_count_q)),
+                        merge_tiles_per_batch_q));
+                    fwd_exists_q <= next_exists_comb;
                     load_base_group_q <= next_load_base_group_q;
                     acc_group_q <= next_acc_group_q;
                     load_ready_q <= 1'b0;
@@ -744,9 +1162,17 @@ module new_static_uopparse #(
                         gemm_wave_q <= 1;
                         gemm_m_q <= 0; gemm_n_q <= 0;
                         gemm_sent_q <= 1'b0;
-                        if (tk_q > 2) load_wave_q <= 2;
-                        else load_wave_q <= 0;
-                        load_active_q <= 1'b1; load_issue_done_q <= 1'b0;
+                        if (tk_q > 2) begin
+                            load_wave_q <= 2;
+                            load_active_q <= 1'b1;
+                        end else begin
+                            // For TK=2, waves 0 and 1 of the committed block
+                            // are already resident.  Only preload again when a
+                            // block exists after the one being committed.
+                            load_wave_q <= 0;
+                            load_active_q <= following_exists_comb;
+                        end
+                        load_issue_done_q <= 1'b0;
                     end else begin
                         // wave 0 was already executed in this boundary group;
                         // WAVE now represents its completed final K-wave while
@@ -755,7 +1181,7 @@ module new_static_uopparse #(
                         gemm_m_q <= 0; gemm_n_q <= 0;
                         gemm_sent_q <= 1'b1;
                         load_wave_q <= 0;
-                        load_active_q <= 1'b1;
+                        load_active_q <= following_exists_comb;
                     end
                     state_q <= WAVE;
                 end else if ((state_q == OUTPUT_PRELOAD) && !next_exists_q &&

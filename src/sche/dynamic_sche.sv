@@ -104,6 +104,11 @@ module dynamic_sche #(
     logic [$clog2(LOAD_QUEUE_DEPTH + 1)-1:0] load_count_q;
     gemm_uop_t gemm_q [SLOT_COUNT][GEMM_SLOT_DEPTH];
     logic [GEMM_PTR_WIDTH-1:0] gemm_rd_q [SLOT_COUNT];
+    // Registered operand indices of the current queue head.  They mirror
+    // gemm_q[s][gemm_rd_q[s]] and keep the head read mux (whose select nets
+    // fan out over the whole queue) out of the slot-ready decision path.
+    logic [ABUF_PHYS_IDX_WIDTH-1:0] head_abuf_q [SLOT_COUNT];
+    logic [BBUF_PHYS_IDX_WIDTH-1:0] head_bbuf_q [SLOT_COUNT];
     logic [GEMM_PTR_WIDTH-1:0] gemm_wr_q [SLOT_COUNT];
     logic [$clog2(GEMM_SLOT_DEPTH + 1)-1:0] gemm_count_q [SLOT_COUNT];
     logic gemm_buf_valid_q [SLOT_COUNT];
@@ -124,12 +129,112 @@ module dynamic_sche #(
     gemm_uop_t selected_gemm;
     logic selected_output_valid;
     logic [PACC_PHYS_IDX_WIDTH-1:0] selected_output_pacc;
+    logic [PACC_PHYS_SIZE-1:0] output_eligible;
+    logic [PACC_PHYS_SIZE-1:0] output_at_or_above_rr;
+    logic [PACC_PHYS_SIZE-1:0] output_eligible_high;
+    logic [PACC_PHYS_SIZE-1:0] output_select_onehot;
+    logic output_eligible_high_valid;
+    logic [SLOT_COUNT-1:0] gemm_slot_valid;
+    logic [SLOT_COUNT-1:0] gemm_slot_at_or_above_rr;
+    logic [SLOT_COUNT-1:0] gemm_slot_valid_high;
+    logic [SLOT_COUNT-1:0] gemm_slot_select_onehot;
+    logic gemm_slot_valid_high_valid;
     logic input_pacc_in_range;
     logic input_abuf_in_range;
     logic input_bbuf_in_range;
     logic input_slot_in_range;
     logic [SLOT_IDX_WIDTH-1:0] input_slot;
     logic load_fire, gemm_fire, output_fire, input_fire;
+
+    localparam int SLOT_ACC_SHIFT = $clog2(SLOT_ACC_COUNT);
+
+    // Round-robin arbitration needs "least significant set bit" of a rotated
+    // ready bitmap and a one-hot to binary re-encoding.  Both are written as
+    // explicit balanced networks: a log-depth prefix OR replaces the
+    // "value & (~value + 1)" form (whose wide incrementer mapped to a long
+    // carry chain), and each index bit is a masked OR reduction instead of an
+    // accumulating OR chain that a synthesizer may keep serial.
+    function automatic logic [PACC_PHYS_SIZE-1:0] output_lowest_bit(
+        input logic [PACC_PHYS_SIZE-1:0] value
+    );
+        logic [PACC_PHYS_SIZE-1:0] prefix;
+        logic [PACC_PHYS_SIZE-1:0] lower_any;
+        logic [PACC_PHYS_SIZE-1:0] tmp;
+        begin
+            prefix = value;
+            for (int step = 1; step < PACC_PHYS_SIZE; step <<= 1) begin
+                for (int i = 0; i < PACC_PHYS_SIZE; i++) begin
+                    tmp[i] = (i >= step) ? (prefix[i] | prefix[i - step])
+                                         : prefix[i];
+                end
+                prefix = tmp;
+            end
+            for (int i = 0; i < PACC_PHYS_SIZE; i++) begin
+                lower_any[i] = (i == 0) ? 1'b0 : prefix[i - 1];
+            end
+            return value & ~lower_any;
+        end
+    endfunction
+
+    function automatic logic [PACC_PHYS_IDX_WIDTH-1:0] output_index_encode(
+        input logic [PACC_PHYS_SIZE-1:0] onehot
+    );
+        logic [PACC_PHYS_SIZE-1:0] terms [PACC_PHYS_IDX_WIDTH];
+        logic [PACC_PHYS_IDX_WIDTH-1:0] index;
+        begin
+            for (int bit_pos = 0; bit_pos < PACC_PHYS_IDX_WIDTH; bit_pos++) begin
+                terms[bit_pos] = '0;
+                for (int idx = 0; idx < PACC_PHYS_SIZE; idx++) begin
+                    if (((idx >> bit_pos) & 1) != 0) begin
+                        terms[bit_pos][idx] = onehot[idx];
+                    end
+                end
+                index[bit_pos] = |terms[bit_pos];
+            end
+            return index;
+        end
+    endfunction
+
+    function automatic logic [SLOT_COUNT-1:0] gemm_slot_lowest_bit(
+        input logic [SLOT_COUNT-1:0] value
+    );
+        logic [SLOT_COUNT-1:0] prefix;
+        logic [SLOT_COUNT-1:0] lower_any;
+        logic [SLOT_COUNT-1:0] tmp;
+        begin
+            prefix = value;
+            for (int step = 1; step < SLOT_COUNT; step <<= 1) begin
+                for (int i = 0; i < SLOT_COUNT; i++) begin
+                    tmp[i] = (i >= step) ? (prefix[i] | prefix[i - step])
+                                         : prefix[i];
+                end
+                prefix = tmp;
+            end
+            for (int i = 0; i < SLOT_COUNT; i++) begin
+                lower_any[i] = (i == 0) ? 1'b0 : prefix[i - 1];
+            end
+            return value & ~lower_any;
+        end
+    endfunction
+
+    function automatic logic [SLOT_IDX_WIDTH-1:0] gemm_slot_index_encode(
+        input logic [SLOT_COUNT-1:0] onehot
+    );
+        logic [SLOT_COUNT-1:0] terms [SLOT_IDX_WIDTH];
+        logic [SLOT_IDX_WIDTH-1:0] index;
+        begin
+            for (int bit_pos = 0; bit_pos < SLOT_IDX_WIDTH; bit_pos++) begin
+                terms[bit_pos] = '0;
+                for (int idx = 0; idx < SLOT_COUNT; idx++) begin
+                    if (((idx >> bit_pos) & 1) != 0) begin
+                        terms[bit_pos][idx] = onehot[idx];
+                    end
+                end
+                index[bit_pos] = |terms[bit_pos];
+            end
+            return index;
+        end
+    endfunction
 
     function automatic logic [LOAD_PTR_WIDTH-1:0] load_inc(
         input logic [LOAD_PTR_WIDTH-1:0] ptr
@@ -153,14 +258,9 @@ module dynamic_sche #(
         input_pacc_in_range = int'(uop_paccidx_i) < PACC_PHYS_SIZE;
         input_abuf_in_range = int'(uop_abufidx_i) < ABUF_PHYS_SIZE;
         input_bbuf_in_range = int'(uop_bbufidx_i) < BBUF_PHYS_SIZE;
-        // Decode floor(pacc/SLOT_ACC_COUNT) with constant boundaries.  The
-        // original int division could otherwise become a 32-bit signed divider.
-        input_slot = '0;
-        for (int slot_idx = 1; slot_idx < SLOT_COUNT; slot_idx++) begin
-            if (int'(uop_paccidx_i) >= slot_idx * SLOT_ACC_COUNT) begin
-                input_slot = SLOT_IDX_WIDTH'(slot_idx);
-            end
-        end
+        // SLOT_ACC_COUNT is a power of two, so the slot is just the upper
+        // portion of the PACC index.  This avoids a serial boundary decoder.
+        input_slot = SLOT_IDX_WIDTH'(uop_paccidx_i >> SLOT_ACC_SHIFT);
         input_slot_in_range = int'(input_slot) < SLOT_COUNT;
 
         uop_ready_o = 1'b0;
@@ -197,27 +297,32 @@ module dynamic_sche #(
     end
     assign load_fire = load_valid_o && load_ready_i;
 
-    // A cheap rotating-priority scan gives each active slot service without a
-    // full age matrix.  Only per-slot pipeline registers participate in
-    // arbitration; a FIFO head reaches that register one cycle earlier.
+    // Rotate the valid bitmap so bit zero is the round-robin start, isolate
+    // the least-significant set bit, then OR-encode its index.  This gives the
+    // synthesizer a structured arithmetic/OR network instead of the explicit
+    // serial priority chain produced by "!selected_valid" in a loop.
     always_comb begin
-        selected_gemm_valid = 1'b0;
-        selected_gemm_slot = '0;
-        selected_gemm = '0;
-        for (int offset = 0; offset < SLOT_COUNT; offset++) begin
-            logic [SLOT_IDX_WIDTH-1:0] slot;
-            int slot_unwrapped;
-            slot_unwrapped = int'(gemm_rr_q) + offset;
-            if (slot_unwrapped >= SLOT_COUNT) begin
-                slot_unwrapped = slot_unwrapped - SLOT_COUNT;
-            end
-            slot = SLOT_IDX_WIDTH'(slot_unwrapped);
-            if (!selected_gemm_valid && gemm_buf_valid_q[slot]) begin
-                selected_gemm_valid = 1'b1;
-                selected_gemm_slot = SLOT_IDX_WIDTH'(slot);
-                selected_gemm = gemm_buf_q[slot];
-            end
+        for (int slot_idx = 0; slot_idx < SLOT_COUNT; slot_idx++) begin
+            gemm_slot_valid[slot_idx] = gemm_buf_valid_q[slot_idx];
         end
+        // Keep the bitmap in place and mask off the slots below the
+        // round-robin pointer: the winner is the lowest set bit at or above
+        // the pointer, or - only when that half is empty - the lowest set bit
+        // of the whole bitmap.  This removes both the wide barrel rotate and
+        // the final "pointer + offset" modulo add from the arbiter.
+        for (int slot_idx = 0; slot_idx < SLOT_COUNT; slot_idx++) begin
+            gemm_slot_at_or_above_rr[slot_idx] =
+                (slot_idx >= int'(gemm_rr_q));
+        end
+        gemm_slot_valid_high = gemm_slot_valid & gemm_slot_at_or_above_rr;
+        gemm_slot_valid_high_valid = |gemm_slot_valid_high;
+        gemm_slot_select_onehot = gemm_slot_lowest_bit(
+            gemm_slot_valid_high_valid ? gemm_slot_valid_high
+                                       : gemm_slot_valid);
+        selected_gemm_valid = |gemm_slot_valid;
+        selected_gemm_slot = gemm_slot_index_encode(gemm_slot_select_onehot);
+        selected_gemm = selected_gemm_valid ?
+            gemm_buf_q[int'(selected_gemm_slot)] : '0;
     end
     assign gemm_valid_o = selected_gemm_valid;
     assign gemm_abufidx_o = selected_gemm.abuf;
@@ -227,23 +332,26 @@ module dynamic_sche #(
     assign gemm_fire = gemm_valid_o && gemm_ready_i;
 
     always_comb begin
-        selected_output_valid = 1'b0;
-        selected_output_pacc = '0;
-        for (int offset = 0; offset < PACC_PHYS_SIZE; offset++) begin
-            logic [PACC_PHYS_IDX_WIDTH-1:0] pacc;
-            int pacc_unwrapped;
-            pacc_unwrapped = int'(output_rr_q) + offset;
-            if (pacc_unwrapped >= PACC_PHYS_SIZE) begin
-                pacc_unwrapped = pacc_unwrapped - PACC_PHYS_SIZE;
-            end
-            pacc = PACC_PHYS_IDX_WIDTH'(pacc_unwrapped);
-            if (!selected_output_valid && output_pending_q[pacc] &&
+        for (int pacc = 0; pacc < PACC_PHYS_SIZE; pacc++) begin
+            output_eligible[pacc] = output_pending_q[pacc] &&
                 !output_issued_q[pacc] && (acc_use_count_q[pacc] == '0) &&
-                acc_ready_q[pacc]) begin
-                selected_output_valid = 1'b1;
-                selected_output_pacc = PACC_PHYS_IDX_WIDTH'(pacc);
-            end
+                acc_ready_q[pacc];
         end
+
+        // Same masked round-robin as the GEMM slot arbiter: the encoded
+        // one-hot index is the PACC index directly, so no rotate and no
+        // pointer-add are needed.
+        for (int pacc_idx = 0; pacc_idx < PACC_PHYS_SIZE; pacc_idx++) begin
+            output_at_or_above_rr[pacc_idx] =
+                (pacc_idx >= int'(output_rr_q));
+        end
+        output_eligible_high = output_eligible & output_at_or_above_rr;
+        output_eligible_high_valid = |output_eligible_high;
+        output_select_onehot = output_lowest_bit(
+            output_eligible_high_valid ? output_eligible_high
+                                       : output_eligible);
+        selected_output_valid = |output_eligible;
+        selected_output_pacc = output_index_encode(output_select_onehot);
     end
     assign output_valid_o = selected_output_valid;
     assign output_paccidx_o = selected_output_pacc;
@@ -261,6 +369,8 @@ module dynamic_sche #(
             for (int s = 0; s < SLOT_COUNT; s++) begin
                 gemm_rd_q[s] <= '0;
                 gemm_wr_q[s] <= '0;
+                head_abuf_q[s] <= '0;
+                head_bbuf_q[s] <= '0;
                 gemm_count_q[s] <= '0;
                 gemm_buf_valid_q[s] <= 1'b0;
                 gemm_buf_q[s] <= '0;
@@ -307,7 +417,8 @@ module dynamic_sche #(
                     (int'(input_slot) == s);
                 head = gemm_q[s][int'(gemm_rd_q[s])];
                 fill_here = !gemm_buf_valid_q[s] && (gemm_count_q[s] != '0) &&
-                    abuf_ready_q[int'(head.abuf)] && bbuf_ready_q[int'(head.bbuf)];
+                    abuf_ready_q[int'(head_abuf_q[s])] &&
+                    bbuf_ready_q[int'(head_bbuf_q[s])];
                 if (enqueue_here) begin
                     gemm_q[s][int'(gemm_wr_q[s])] <= '{
                         abuf: uop_abufidx_i, bbuf: uop_bbufidx_i,
@@ -318,6 +429,23 @@ module dynamic_sche #(
                     gemm_rd_q[s] <= gemm_inc(gemm_rd_q[s]);
                     gemm_buf_q[s] <= head;
                     gemm_buf_valid_q[s] <= 1'b1;
+                    // The new head is the next queue entry, except when this
+                    // cycle also enqueues into a slot that held exactly one
+                    // entry: then the write lands exactly on the next head.
+                    if (enqueue_here &&
+                        (gemm_count_q[s] == $clog2(GEMM_SLOT_DEPTH + 1)'(1))) begin
+                        head_abuf_q[s] <= uop_abufidx_i;
+                        head_bbuf_q[s] <= uop_bbufidx_i;
+                    end else begin
+                        head_abuf_q[s] <=
+                            gemm_q[s][int'(gemm_inc(gemm_rd_q[s]))].abuf;
+                        head_bbuf_q[s] <=
+                            gemm_q[s][int'(gemm_inc(gemm_rd_q[s]))].bbuf;
+                    end
+                end else if (enqueue_here && (gemm_count_q[s] == '0)) begin
+                    // First entry of an empty queue becomes its head.
+                    head_abuf_q[s] <= uop_abufidx_i;
+                    head_bbuf_q[s] <= uop_bbufidx_i;
                 end
                 if (gemm_fire && (int'(selected_gemm_slot) == s)) begin
                     gemm_buf_valid_q[s] <= 1'b0;

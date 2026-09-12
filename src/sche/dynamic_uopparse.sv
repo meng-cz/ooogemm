@@ -125,13 +125,13 @@ module dynamic_uopparse_core #(
             tile_count_t'((dim & DIM_WIDTH'(SUBTILE_K - 1)) != '0);
     endfunction
 
-    function automatic tile_count_t min_int_tile(
+    function automatic tile_count_t min_tile_count(
         input tile_count_t value,
-        input int          limit
+        input tile_count_t limit
     );
         begin
-            if (value > tile_count_t'(limit)) begin
-                return tile_count_t'(limit);
+            if (value > limit) begin
+                return limit;
             end
             return value;
         end
@@ -219,6 +219,8 @@ module dynamic_uopparse_core #(
     tile_count_t next_batch_comb;
     logic command_has_tiles_comb;
     logic has_next_block_comb;
+    tile_count_t block_m_end_comb;
+    tile_count_t block_n_end_comb;
 
     always_comb begin
         cmd_tm_comb = ceil_tiles(cmd_m_i);
@@ -230,30 +232,42 @@ module dynamic_uopparse_core #(
     end
 
     always_comb begin
+        block_m_end_comb = block_m_base_q + block_m_q;
+        block_n_end_comb = block_n_base_q + block_n_q;
+
         next_batch_comb = batch_q;
-        if ((block_n_base_q + block_n_q) < tn_q) begin
+        next_block_m_base_comb = block_m_base_q;
+        next_block_n_base_comb = block_n_base_q;
+        next_block_m_comb = block_m_q;
+        next_block_n_comb = block_n_q;
+        has_next_block_comb = 1'b0;
+
+        // Compute each advance case from the current registered descriptor.
+        // In particular, an N advance keeps block_m_q directly; it no longer
+        // passes block_n_q through the base-select/subtract/min chain on the
+        // way to block_m_q's D input.
+        if (block_n_end_comb < tn_q) begin
             next_block_m_base_comb = block_m_base_q;
-            next_block_n_base_comb = block_n_base_q + block_n_q;
+            next_block_n_base_comb = block_n_end_comb;
+            next_block_m_comb = block_m_q;
+            next_block_n_comb = min_tile_count(
+                tn_q - block_n_end_comb, block_n_limit_q);
             has_next_block_comb = 1'b1;
-        end else if ((block_m_base_q + block_m_q) < tm_q) begin
-            next_block_m_base_comb = block_m_base_q + block_m_q;
+        end else if (block_m_end_comb < tm_q) begin
+            next_block_m_base_comb = block_m_end_comb;
             next_block_n_base_comb = '0;
+            next_block_m_comb = min_tile_count(
+                tm_q - block_m_end_comb, block_m_limit_q);
+            next_block_n_comb = block_n_limit_q;
             has_next_block_comb = 1'b1;
         end else if ((batch_q + 1'b1) < batch_count_q) begin
             next_batch_comb = batch_q + 1'b1;
             next_block_m_base_comb = '0;
             next_block_n_base_comb = '0;
+            next_block_m_comb = block_m_limit_q;
+            next_block_n_comb = block_n_limit_q;
             has_next_block_comb = 1'b1;
-        end else begin
-            next_block_m_base_comb = '0;
-            next_block_n_base_comb = '0;
-            has_next_block_comb = 1'b0;
         end
-
-        next_block_m_comb = min_int_tile(tm_q - next_block_m_base_comb,
-                                         int'(block_m_limit_q));
-        next_block_n_comb = min_int_tile(tn_q - next_block_n_base_comb,
-                                         int'(block_n_limit_q));
     end
 
     assign cmd_ready_o = (state_q == ST_IDLE);
@@ -361,10 +375,14 @@ module dynamic_uopparse_core #(
                     batch_q <= '0;
                     block_m_base_q <= '0;
                     block_n_base_q <= '0;
-                    block_m_limit_q <= min_int_tile(cmd_tm_comb, int'(block_m_i));
-                    block_n_limit_q <= min_int_tile(cmd_tn_comb, int'(block_n_i));
-                    block_m_q <= min_int_tile(cmd_tm_comb, int'(block_m_i));
-                    block_n_q <= min_int_tile(cmd_tn_comb, int'(block_n_i));
+                    block_m_limit_q <= min_tile_count(
+                        cmd_tm_comb, tile_count_t'(block_m_i));
+                    block_n_limit_q <= min_tile_count(
+                        cmd_tn_comb, tile_count_t'(block_n_i));
+                    block_m_q <= min_tile_count(
+                        cmd_tm_comb, tile_count_t'(block_m_i));
+                    block_n_q <= min_tile_count(
+                        cmd_tn_comb, tile_count_t'(block_n_i));
                     k_tile_q <= '0;
                     load_idx_q <= '0;
                     gemm_m_idx_q <= '0;
