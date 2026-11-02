@@ -142,4 +142,7 @@ Thumbs.db
 .codex/
 .agents/
 
+# Local-only ablation smoke results; full experiment data follows repository policy.
+/data/ablation/smoke/
+
 

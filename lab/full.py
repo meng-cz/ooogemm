@@ -24,6 +24,7 @@ from typing import Any
 
 
 LAB_DIR = Path(__file__).resolve().parent
+JOBS_PER_BUILD = 4
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ EXPERIMENTS = (
     Experiment("rect_static", LAB_DIR / "rect_static/run_axis_sweeps.py"),
     Experiment("rect_dynamic", LAB_DIR / "rect_dynamic/run_axis_sweeps.py"),
     Experiment("static_staticmn", LAB_DIR / "static_staticmn/run_axis_sweeps.py"),
+    Experiment("ablation", LAB_DIR / "ablation/run_experiments.py"),
 )
 
 
@@ -77,16 +79,26 @@ def load_runner(experiment: Experiment) -> ModuleType:
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Build and run all static, dynamic, rectangular, and static-MN "
-            "GEMM experiment sweeps."
+            "Build and run GEMM axis sweeps and isolated latency, idle, "
+            "and capacity ablations."
         )
     )
+    parser.add_argument(
+        "--experiments", default="all",
+        help="comma-separated experiment names, or all (includes ablation)",
+    )
+    parser.add_argument("--ablation-profile", choices=("full", "smoke"), default="full")
+    parser.add_argument("--ablation-config", type=Path, default=LAB_DIR / "ablation/defaults.json")
+    parser.add_argument("--ablation-studies", default="latency,idle,capacity")
+    parser.add_argument("--ablation-trace", action="store_true")
+    parser.add_argument("--ablation-data-root", type=Path, default=LAB_DIR.parent / "data/ablation")
     parser.add_argument(
         "-j",
         "--jobs",
         type=int,
         default=int(os.environ.get("JOBS", "12")),
-        help="maximum number of simulation subprocesses running in parallel",
+        help=("simulation parallelism; prebuild runs max(1, jobs // 4) "
+              "hardware builds, each with four compiler workers"),
     )
     parser.add_argument(
         "--count",
@@ -173,6 +185,11 @@ def runner_args(module: ModuleType, args: argparse.Namespace) -> argparse.Namesp
         "no_prebuild",
     ):
         setattr(result, name, getattr(args, name))
+    for name in ("ablation_profile", "ablation_config", "ablation_studies", "ablation_trace"):
+        if hasattr(result, name):
+            setattr(result, name, getattr(args, name))
+    if hasattr(result, "ablation_profile"):
+        result.data_root = args.ablation_data_root
     return result
 
 
@@ -184,7 +201,13 @@ def collect_work(
     work: list[WorkItem] = []
     all_tasks: dict[str, list[Any]] = {}
     modules: dict[str, ModuleType] = {}
+    selected = set(args.experiments.replace(",", " ").split())
+    known = {experiment.name for experiment in EXPERIMENTS}
+    if not selected or (selected != {"all"} and selected - known):
+        raise ValueError(f"--experiments must select all or names from {sorted(known)}")
     for experiment in EXPERIMENTS:
+        if selected != {"all"} and experiment.name not in selected:
+            continue
         module = load_runner(experiment)
         exp_args = runner_args(module, args)
         tasks = module.build_all_tasks(exp_args)
@@ -204,7 +227,42 @@ def item_command(item: WorkItem) -> list[str]:
 
 def item_env(item: WorkItem, args: argparse.Namespace) -> dict[str, str]:
     exp_args = runner_args(item.module, args)
-    return item.module.make_env(exp_args, item.task.hw)
+    env = item.module.make_env(exp_args, item.task.hw)
+    if not args.no_prebuild:
+        # --rebuild belongs to the completed build phase. Rebuilding again in
+        # concurrent simulation workers would race on the shared executable.
+        env["REBUILD"] = "0"
+    return env
+
+
+def collect_build_work(
+    args: argparse.Namespace,
+    all_tasks: dict[str, list[Any]],
+    modules: dict[str, ModuleType],
+) -> list[WorkItem]:
+    """Retain one representative per experiment/hardware build target."""
+    if args.no_prebuild:
+        return []
+    work = []
+    for experiment in EXPERIMENTS:
+        if experiment.name not in all_tasks:
+            continue
+        module = modules[experiment.name]
+        seen = set()
+        for task in all_tasks[experiment.name]:
+            if task.hw in seen:
+                continue
+            # Preserve legacy prebuild semantics; ablations only require
+            # hardware with missing results, unless --force was requested.
+            if hasattr(module, "task_complete") and not args.force and module.task_complete(task):
+                continue
+            seen.add(task.hw)
+            work.append(WorkItem(experiment, module, task))
+    return work
+
+
+def build_workers(args: argparse.Namespace, work: list[WorkItem]) -> int:
+    return min(len(work), max(1, args.jobs // JOBS_PER_BUILD))
 
 
 def prepare_result_dirs(work: list[WorkItem]) -> None:
@@ -214,11 +272,17 @@ def prepare_result_dirs(work: list[WorkItem]) -> None:
 
 
 def print_dry_run(
-    all_tasks: dict[str, list[Any]], pending: list[WorkItem], print_lock: threading.Lock
+    args: argparse.Namespace, all_tasks: dict[str, list[Any]],
+    modules: dict[str, ModuleType], pending: list[WorkItem], print_lock: threading.Lock
 ) -> None:
+    builds = collect_build_work(args, all_tasks, modules)
     with print_lock:
         print("full: dry-run; no build or simulation subprocess will be started", flush=True)
+        print(f"full: build_plan builds={len(builds)} parallel_builds={build_workers(args, builds)} "
+              f"jobs_per_build={JOBS_PER_BUILD}", flush=True)
         for experiment in EXPERIMENTS:
+            if experiment.name not in all_tasks:
+                continue
             tasks = all_tasks[experiment.name]
             hardware = sorted(
                 {task.hw for task in tasks},
@@ -254,33 +318,36 @@ def prebuild(
             print("full: explicit prebuild disabled", flush=True)
         return True
 
-    failed = False
-    for experiment in EXPERIMENTS:
-        module = modules[experiment.name]
-        exp_args = runner_args(module, args)
+    work = collect_build_work(args, all_tasks, modules)
+    with print_lock:
+        print(f"full: build_plan builds={len(work)} parallel_builds={build_workers(args, work)} "
+              f"jobs_per_build={JOBS_PER_BUILD}", flush=True)
+    if not work:
+        return True
+
+    def run_build(index: int, item: WorkItem) -> bool:
+        exp_args = runner_args(item.module, args)
         # The existing runners historically skipped their prebuild helper when
         # jobs <= 1.  full.py owns the phase ordering, so force that helper to
         # execute even when the simulation pool has only one worker.
         exp_args.jobs = max(2, args.jobs)
+        exp_args.build_jobs = JOBS_PER_BUILD
         exp_args.dry_run = False
         exp_args.no_prebuild = False
-        tasks = all_tasks[experiment.name]
-        if not tasks:
-            continue
         with print_lock:
             print(
-                f"full: build_start experiment={experiment.name} "
-                f"tasks={len(tasks)}",
+                f"full: build_start order={index}/{len(work)} experiment={item.experiment.name} "
+                f"hardware={item.task.hw!r} jobs_per_build={JOBS_PER_BUILD}",
                 flush=True,
             )
         started = time.monotonic()
         try:
-            ok = module.prebuild_hardware(exp_args, tasks, print_lock)
+            ok = item.module.prebuild_hardware(exp_args, [item.task], print_lock)
         except Exception as exc:
             ok = False
             with print_lock:
                 print(
-                    f"full: build_exception experiment={experiment.name} "
+                    f"full: build_exception experiment={item.experiment.name} "
                     f"error={exc!r}",
                     file=sys.stderr,
                     flush=True,
@@ -289,12 +356,25 @@ def prebuild(
         with print_lock:
             status = "done" if ok else "failed"
             print(
-                f"full: build_{status} experiment={experiment.name} "
+                f"full: build_{status} order={index}/{len(work)} experiment={item.experiment.name} "
                 f"elapsed_sec={elapsed:.1f}",
                 flush=True,
             )
-        if not ok:
-            failed = True
+        return ok
+
+    failed = False
+    with ThreadPoolExecutor(max_workers=build_workers(args, work),
+                            thread_name_prefix="ooogemm-build") as executor:
+        futures = [executor.submit(run_build, index, item)
+                   for index, item in enumerate(work, start=1)]
+        try:
+            for future in as_completed(futures):
+                if not future.result():
+                    failed = True
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
     return not failed
 
 
@@ -382,6 +462,9 @@ def run_one(
 
 def main() -> int:
     args = make_parser().parse_args()
+    if args.ablation_profile == "smoke" and set(args.experiments.replace(",", " ").split()) != {"ablation"}:
+        print("full: smoke requires --experiments ablation to keep validation bounded", file=sys.stderr)
+        return 2
     if args.jobs <= 0:
         print("full: --jobs must be positive", file=sys.stderr)
         return 2
@@ -395,11 +478,13 @@ def main() -> int:
         print(f"full: failed to generate tasks: {exc}", file=sys.stderr)
         return 1
 
-    prepare_result_dirs(all_work)
     pending = [
         item
         for item in all_work
-        if args.force or not item.task.out_file.exists()
+        if args.force or not (
+            item.module.task_complete(item.task)
+            if hasattr(item.module, "task_complete") else item.task.out_file.exists()
+        )
     ]
     skipped = len(all_work) - len(pending)
     print(
@@ -410,12 +495,13 @@ def main() -> int:
 
     print_lock = threading.Lock()
     if args.dry_run:
-        print_dry_run(all_tasks, pending, print_lock)
+        print_dry_run(args, all_tasks, modules, pending, print_lock)
         return 0
 
-    # Build every executable represented by the five experiment task sets,
-    # including executables whose result files already exist.  This keeps the
-    # build phase explicit and independent from result-file reuse.
+    prepare_result_dirs(all_work)
+
+    # Legacy runners retain their explicit build phase, including hardware
+    # with existing results. The ablation runner builds pending hardware only.
     if not prebuild(args, all_tasks, modules, print_lock):
         print("full: prebuild failed; simulations were not started", file=sys.stderr)
         return 1

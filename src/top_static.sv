@@ -62,6 +62,9 @@ module top_static #(
     output logic [ADDR_WIDTH-1:0] store_mem_wr_addr_o,
     output logic [STORE_MEM_DATA_WIDTH-1:0] store_mem_wr_data_o,
     output logic cmd_done_valid_o
+`ifdef OOOGEMM_ABLATION
+    `include "perf_ports.svh"
+`endif
 );
     import uopparse_pkg::*;
 
@@ -324,6 +327,9 @@ module top_static #(
         .getacc_idx(store_getacc_idx), .getacc_data_valid(sa_getacc_data_valid),
         .getacc_data(sa_getacc_data));
 
+`ifdef OOOGEMM_ABLATION
+    `include "perf_static.svh"
+`endif
 endmodule
 
 `default_nettype wire

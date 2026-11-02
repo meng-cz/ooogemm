@@ -1,0 +1,26 @@
+{
+  "shapes": [[16,1024,1024], [64,1024,1024], [256,256,256], [64,64,1024], [64,1024,64], [64,64,64]],
+  "hardware": [
+    {"lane":1,"width":64,"a":8,"b":8,"acc":8,"store_rows":1,"slot_acc_count":1},
+    {"lane":4,"width":32,"a":16,"b":16,"acc":32,"store_rows":2,"slot_acc_count":2},
+    {"lane":16,"width":16,"a":32,"b":32,"acc":128,"store_rows":4,"slot_acc_count":4}
+  ],
+  "subtile_k":32,
+  "load_data_width":1024,
+  "latency_lanes":[4],
+  "latency_shapes":[[16,1024,1024],[256,256,256],[64,64,64]],
+  "delay_means":[32,128],
+  "seeds":[1,2,3],
+  "capacity_lanes":[4],
+  "capacity_shapes":[[16,1024,1024],[256,256,256]],
+  "physical_ratios":[[3,4],[1,1],[3,2]],
+  "logical_ratios":[[1,4],[1,2],[3,4]],
+  "cross_physical_ratios":[[3,4],[3,2]],
+  "cross_logical_ratios":[[1,4],[3,4]],
+  "capacity_stress_mean":32,
+  "capacity_stress_seed":1,
+  "capacity_stress_physical_ratio":[3,4],
+  "capacity_stress_logical_ratio":[3,4],
+  "timeout_seconds":14400,
+  "build_jobs":4
+}

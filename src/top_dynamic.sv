@@ -6,6 +6,8 @@ module top_dynamic #(
  parameter int PACC_NUM=24, ADDR_WIDTH=32, DIM_WIDTH=16, STORE_ROWS_PER_CYCLE=1,
  parameter int ABUF_LOGIC_SIZE=ABUF_SIZE/2, BBUF_LOGIC_SIZE=BBUF_SIZE/2,
  parameter int PACC_LOGIC_SIZE=16,
+ parameter bit GEMM_IN_ORDER=1'b0,
+ parameter int SCHED_SLOT_ACC_COUNT=(PACC_NUM<=16)?1:(PACC_NUM<=32)?2:4,
  parameter int LANE_IDX_WIDTH=(LANE_NUM<=1)?1:$clog2(LANE_NUM),
  parameter int ABUF_IDX_WIDTH=(ABUF_SIZE<=1)?1:$clog2(ABUF_SIZE),
  parameter int BBUF_IDX_WIDTH=(BBUF_SIZE<=1)?1:$clog2(BBUF_SIZE),
@@ -38,6 +40,9 @@ module top_dynamic #(
  output logic store_mem_wr_valid_o,input logic store_mem_wr_ready_i,
  output logic [ADDR_WIDTH-1:0] store_mem_wr_addr_o,
  output logic [STORE_MEM_DATA_WIDTH-1:0] store_mem_wr_data_o
+`ifdef OOOGEMM_ABLATION
+ `include "perf_ports.svh"
+`endif
 );
  import uopparse_pkg::*;
  logic blocksel_cmd_ready, blocksel_gemm_valid, blocksel_gemm_ready;
@@ -73,7 +78,7 @@ module top_dynamic #(
  logic gv,gr; logic [ABUF_IDX_WIDTH-1:0] gab; logic [BBUF_IDX_WIDTH-1:0] gbb; logic [PACC_IDX_WIDTH-1:0] gpc; logic gacc;
  logic ov,orr; logic [ADDR_WIDTH-1:0] oa; logic [PACC_IDX_WIDTH-1:0] opc;
  logic ga_done,so_done; logic [PACC_IDX_WIDTH-1:0] ga_done_idx,so_done_idx;
- dynamic_sche #(.ABUF_PHYS_SIZE(ABUF_SIZE),.BBUF_PHYS_SIZE(BBUF_SIZE),.PACC_PHYS_SIZE(PACC_NUM),.ADDR_WIDTH(ADDR_WIDTH),.LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH)) sche(.clk,.rst_n,.uop_valid_i(rv),.uop_ready_o(rr),.uop_type_i(rt),.uop_addr_i(ra),.uop_abufidx_i(rab),.uop_bbufidx_i(rbb),.uop_paccidx_i(rpc),.uop_valid_rows_i(rrow),.uop_accum_i(racc),.load_valid_o(lv),.load_ready_i(lr),.load_type_o(lt),.load_addr_o(la),.load_abufidx_o(lab),.load_bbufidx_o(lbb),.load_valid_rows_o(lrows),.gemm_valid_o(gv),.gemm_ready_i(gr),.gemm_abufidx_o(gab),.gemm_bbufidx_o(gbb),.gemm_paccidx_o(gpc),.gemm_accum_o(gacc),.output_valid_o(ov),.output_ready_i(orr),.output_addr_o(oa),.output_paccidx_o(opc),.load_a_done_valid_i(load_a_done),.load_a_done_phys_i(load_a_done_idx),.load_b_done_valid_i(load_b_done),.load_b_done_phys_i(load_b_done_idx),.gemm_done_valid_i(ga_done),.gemm_done_paccidx_i(ga_done_idx),.output_done_valid_i(so_done),.output_done_paccidx_i(so_done_idx));
+ dynamic_sche #(.GEMM_IN_ORDER(GEMM_IN_ORDER),.SLOT_ACC_COUNT(SCHED_SLOT_ACC_COUNT),.ABUF_PHYS_SIZE(ABUF_SIZE),.BBUF_PHYS_SIZE(BBUF_SIZE),.PACC_PHYS_SIZE(PACC_NUM),.ADDR_WIDTH(ADDR_WIDTH),.LOAD_ROWS_WIDTH(LOAD_ROWS_WIDTH)) sche(.clk,.rst_n,.uop_valid_i(rv),.uop_ready_o(rr),.uop_type_i(rt),.uop_addr_i(ra),.uop_abufidx_i(rab),.uop_bbufidx_i(rbb),.uop_paccidx_i(rpc),.uop_valid_rows_i(rrow),.uop_accum_i(racc),.load_valid_o(lv),.load_ready_i(lr),.load_type_o(lt),.load_addr_o(la),.load_abufidx_o(lab),.load_bbufidx_o(lbb),.load_valid_rows_o(lrows),.gemm_valid_o(gv),.gemm_ready_i(gr),.gemm_abufidx_o(gab),.gemm_bbufidx_o(gbb),.gemm_paccidx_o(gpc),.gemm_accum_o(gacc),.output_valid_o(ov),.output_ready_i(orr),.output_addr_o(oa),.output_paccidx_o(opc),.load_a_done_valid_i(load_a_done),.load_a_done_phys_i(load_a_done_idx),.load_b_done_valid_i(load_b_done),.load_b_done_phys_i(load_b_done_idx),.gemm_done_valid_i(ga_done),.gemm_done_paccidx_i(ga_done_idx),.output_done_valid_i(so_done),.output_done_paccidx_i(so_done_idx));
  logic awv,bwv; logic [ABUF_IDX_WIDTH-1:0] awi; logic [BBUF_IDX_WIDTH-1:0] bwi; logic [SUBTILE_M-1:0] awen; logic [SUBTILE_N-1:0] bwen; logic [ROW8_WIDTH-1:0] awd[SUBTILE_M],bwd[SUBTILE_N];
  loadunit #(.SA_WIDTH(SA_WIDTH),.SUBTILE_M(SUBTILE_M),.SUBTILE_N(SUBTILE_N),.SUBTILE_K(SUBTILE_K),.ABUF_SIZE(ABUF_SIZE),.BBUF_SIZE(BBUF_SIZE),.ADDR_WIDTH(ADDR_WIDTH),.ABUF_IDX_WIDTH(ABUF_IDX_WIDTH),.BBUF_IDX_WIDTH(BBUF_IDX_WIDTH),.BUS_ID_WIDTH(LOAD_BUS_ID_WIDTH),.ROWS_LEFT_WIDTH(LOAD_ROWS_WIDTH),.ROW_DATA_WIDTH(ROW8_WIDTH),.LOAD_DATA_WIDTH(LOAD_DATA_WIDTH)) lu(.clk,.rst_n,.uop_valid_i(lv),.uop_ready_o(lr),.uop_is_b_i(lt==UOP_LOAD_B),.uop_addr_i(la),.uop_abufidx_i(lab),.uop_bbufidx_i(lbb),.uop_valid_rows_i(lrows),.mem_req_valid_o(load_mem_req_valid_o),.mem_req_ready_i(load_mem_req_ready_i),.mem_req_addr_o(load_mem_req_addr_o),.mem_req_id_o(load_mem_req_id_o),.mem_rsp_valid_i(load_mem_rsp_valid_i),.mem_rsp_ready_o(load_mem_rsp_ready_o),.mem_rsp_id_i(load_mem_rsp_id_i),.mem_rsp_data_i(load_mem_rsp_data_i),.abuf_wr_valid_o(awv),.abuf_wr_idx_o(awi),.abuf_wr_bank_en_o(awen),.abuf_wr_data_o(awd),.bbuf_wr_valid_o(bwv),.bbuf_wr_idx_o(bwi),.bbuf_wr_bank_en_o(bwen),.bbuf_wr_data_o(bwd),.abuf_ready_valid_o(load_a_done),.abuf_ready_idx_o(load_a_done_idx),.bbuf_ready_valid_o(load_b_done),.bbuf_ready_idx_o(load_b_done_idx));
  logic arv,brv,aru,bru; logic [ABUF_IDX_WIDTH-1:0] ari; logic [BBUF_IDX_WIDTH-1:0] bri; logic [ROW8_WIDTH-1:0] ard[SUBTILE_M],brd[SUBTILE_N];
@@ -246,5 +251,8 @@ module top_dynamic #(
  assign so_done_idx=output_complete ? output_id_fifo[int'(output_id_rd_q)] : '0;
  assign acc_done=output_complete;
  assign acc_done_idx=so_done_idx;
+`ifdef OOOGEMM_ABLATION
+ `include "perf_dynamic.svh"
+`endif
 endmodule
 `default_nettype wire

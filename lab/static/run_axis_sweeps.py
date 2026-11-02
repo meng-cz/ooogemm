@@ -289,6 +289,7 @@ def prebuild_hardware(args: argparse.Namespace, tasks: list[Task], print_lock: t
     for hw in hardware:
         env = make_env(args, hw)
         env["BUILD_ONLY"] = "1"
+        env["VERILATOR_JOBS"] = str(getattr(args, "build_jobs", os.environ.get("VERILATOR_JOBS", "4")))
         log_file = args.log_dir.resolve() / f"prebuild_{hardware_tag(hw)}.log"
         cmd = [
             str(SCRIPT_DIR / "static.sh"),

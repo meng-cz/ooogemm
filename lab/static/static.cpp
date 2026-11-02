@@ -17,6 +17,10 @@
 #include <sys/types.h>
 #include <vector>
 
+#ifdef OOOGEMM_ABLATION
+#include "experiment.hpp"
+#endif
+
 namespace {
 
 #ifndef SA_WIDTH_TEST
@@ -90,6 +94,9 @@ struct Options {
     int count = 1;
     uint64_t max_cycles = 0;
     uint32_t load_rsp_delay = 4;
+#ifdef OOOGEMM_ABLATION
+    ablation::Options experiment;
+#endif
     std::string out_path;
     std::string out_dir;
 };
@@ -208,6 +215,10 @@ public:
     void run() {
         reset();
         run_until_done();
+#ifdef OOOGEMM_ABLATION
+        experiment_stats_.write(opt_.experiment, last_completion_cycle_ - first_issue_cycle_ + 1,
+            expected_mac(), throughput_per_kcycle_, latency_kcycle_, input_bus_util_, output_bus_util_);
+#endif
         write_result();
         std::cout << "static_lab: passed"
                   << " L=" << kLaneNum
@@ -227,6 +238,14 @@ private:
     static constexpr uint32_t kBBase = 0x00020000u;
     static constexpr uint32_t kCBase = 0x00030000u;
 
+#ifdef OOOGEMM_ABLATION
+    ablation::Stats experiment_stats_;
+    ablation::ResponseSelector response_selector_;
+    uint64_t expected_mac() const {
+        return uint64_t(ceil_div(opt_.m, kSaWidth))*ceil_div(opt_.n, kSaWidth)*
+            ceil_div(opt_.k, kSubtileK)*kSubtileK*kSaWidth*kSaWidth*opt_.count;
+    }
+#endif
     Options opt_;
     Vtop_static dut_;
     uint64_t cycle_ = 0;
@@ -344,6 +363,9 @@ private:
         dut_.load_mem_req_ready_i = 1;
         dut_.store_mem_wr_ready_i = 1;
 
+#ifdef OOOGEMM_ABLATION
+        const int rsp_index = response_selector_.select(pending_rsp_, cycle_);
+#else
         int rsp_index = -1;
         for (size_t i = 0; i < pending_rsp_.size(); ++i) {
             if (pending_rsp_[i].due <= cycle_) {
@@ -351,6 +373,7 @@ private:
                 break;
             }
         }
+#endif
         Rsp rsp;
         if (rsp_index >= 0) {
             rsp = pending_rsp_[static_cast<size_t>(rsp_index)];
@@ -370,6 +393,11 @@ private:
         const uint32_t req_id_fire = static_cast<uint32_t>(dut_.load_mem_req_id_o);
         const uint32_t wr_addr_fire = static_cast<uint32_t>(dut_.store_mem_wr_addr_o);
 
+#ifdef OOOGEMM_ABLATION
+        if (next_cmd_ > 0 || cmd_fire)
+            experiment_stats_.sample(dut_, opt_.experiment, cycle_, kLaneNum, kSaWidth, expected_mac());
+        if (wr_fire) experiment_stats_.store(dut_, wr_addr_fire, kSaWidth*STORE_ROWS_PER_CYCLE_TEST);
+#endif
         dut_.clk = 1;
         dut_.eval();
 
@@ -382,7 +410,11 @@ private:
         }
         if (req_fire) {
             Rsp new_rsp;
+#ifdef OOOGEMM_ABLATION
+            new_rsp.due = cycle_ + experiment_stats_.request(opt_.experiment, req_addr_fire, req_id_fire, cycle_);
+#else
             new_rsp.due = cycle_ + opt_.load_rsp_delay;
+#endif
             new_rsp.id = req_id_fire;
             new_rsp.data = make_load_data(req_addr_fire);
             pending_rsp_.push_back(new_rsp);
@@ -391,6 +423,10 @@ private:
             if (rsp_index < 0) {
                 fail("response fired without a selected pending response");
             }
+#ifdef OOOGEMM_ABLATION
+            experiment_stats_.response(rsp.id, cycle_);
+            response_selector_.accepted();
+#endif
             pending_rsp_.erase(pending_rsp_.begin() + rsp_index);
             ++input_bus_payload_cycles_;
         }
@@ -524,6 +560,10 @@ Options parse_options(int argc, char** argv) {
             opt.max_cycles = parse_u64_arg(arg, "max-cycles");
         } else if (arg.rfind("--load-rsp-delay=", 0) == 0) {
             opt.load_rsp_delay = static_cast<uint32_t>(parse_u64_arg(arg, "load-rsp-delay"));
+#ifdef OOOGEMM_ABLATION
+        } else if (ablation::parse_option(arg, opt.experiment)) {
+            // Shared ablation-only options.
+#endif
         }
     }
     return opt;

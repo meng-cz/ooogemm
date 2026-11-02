@@ -18,6 +18,8 @@ module dynamic_sche #(
     parameter int LOAD_ROWS_WIDTH = 6,
     parameter int LOAD_QUEUE_DEPTH = 16,
     parameter int GEMM_SLOT_DEPTH = 16,
+    // Ablation: preserve every queue and wakeup, restrict only GEMM arbitration.
+    parameter bit GEMM_IN_ORDER = 1'b0,
     // Keep fine-grain PACC parallelism for small arrays, then reduce slot
     // count as the PACC file grows.  The value remains overrideable.
     parameter int SLOT_ACC_COUNT = (PACC_PHYS_SIZE <= 16) ? 1 :
@@ -131,6 +133,53 @@ module dynamic_sche #(
     logic [SLOT_IDX_WIDTH-1:0] input_slot;
     logic load_fire, gemm_fire, output_fire, input_fire;
 
+    localparam int ORDER_DEPTH = SLOT_COUNT * (GEMM_SLOT_DEPTH + 1);
+    localparam int ORDER_PTR_WIDTH = (ORDER_DEPTH <= 1) ? 1 : $clog2(ORDER_DEPTH);
+    wire order_pending;
+    wire [SLOT_IDX_WIDTH-1:0] order_head_slot;
+    generate
+        if (GEMM_IN_ORDER) begin : gen_gemm_order
+            logic [SLOT_IDX_WIDTH-1:0] slots [ORDER_DEPTH];
+            logic [ORDER_PTR_WIDTH-1:0] rd_q, wr_q;
+            logic [$clog2(ORDER_DEPTH + 1)-1:0] count_q;
+            wire push = input_fire && (uop_type_i == UOP_GEMM);
+            assign order_pending = (count_q != '0);
+            assign order_head_slot = slots[rd_q];
+            function automatic logic [ORDER_PTR_WIDTH-1:0] advance(
+                input logic [ORDER_PTR_WIDTH-1:0] ptr
+            );
+                return (int'(ptr) == ORDER_DEPTH - 1) ? '0 : ptr + 1'b1;
+            endfunction
+            always_ff @(posedge clk or negedge rst_n) begin
+                if (!rst_n) begin
+                    rd_q <= '0;
+                    wr_q <= '0;
+                    count_q <= '0;
+                end else begin
+                    if (push) begin
+                        slots[wr_q] <= input_slot;
+                        wr_q <= advance(wr_q);
+                        assert (int'(count_q) < ORDER_DEPTH)
+                            else $fatal(1, "GEMM order tracker overflow");
+                    end
+                    if (gemm_fire) begin
+                        rd_q <= advance(rd_q);
+                        assert (order_pending && selected_gemm_slot == order_head_slot)
+                            else $fatal(1, "GEMM bypassed the oldest admitted GEMM");
+                    end
+                    case ({push, gemm_fire})
+                        2'b10: count_q <= count_q + 1'b1;
+                        2'b01: count_q <= count_q - 1'b1;
+                        default: begin end
+                    endcase
+                end
+            end
+        end else begin : gen_gemm_unordered
+            assign order_pending = 1'b0;
+            assign order_head_slot = '0;
+        end
+    endgenerate
+
     function automatic logic [LOAD_PTR_WIDTH-1:0] load_inc(
         input logic [LOAD_PTR_WIDTH-1:0] ptr
     );
@@ -212,7 +261,8 @@ module dynamic_sche #(
                 slot_unwrapped = slot_unwrapped - SLOT_COUNT;
             end
             slot = SLOT_IDX_WIDTH'(slot_unwrapped);
-            if (!selected_gemm_valid && gemm_buf_valid_q[slot]) begin
+            if (!selected_gemm_valid && gemm_buf_valid_q[slot] &&
+                (!GEMM_IN_ORDER || (order_pending && slot == order_head_slot))) begin
                 selected_gemm_valid = 1'b1;
                 selected_gemm_slot = SLOT_IDX_WIDTH'(slot);
                 selected_gemm = gemm_buf_q[slot];
