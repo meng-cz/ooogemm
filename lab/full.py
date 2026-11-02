@@ -82,6 +82,7 @@ def make_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument(
+        "-j",
         "--jobs",
         type=int,
         default=int(os.environ.get("JOBS", "12")),

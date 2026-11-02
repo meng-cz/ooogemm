@@ -230,6 +230,9 @@ def build_all_tasks(args: argparse.Namespace) -> list[Task]:
     log_dir = args.log_dir.resolve()
     lab_dirs = {
         "labM": data_root / "labM",
+        "labM64N": data_root / "labM64N",
+        "labM64K": data_root / "labM64K",
+        "labM64NK": data_root / "labM64NK",
         "labN": data_root / "labN",
         "labK": data_root / "labK",
     }
@@ -242,7 +245,7 @@ def build_all_tasks(args: argparse.Namespace) -> list[Task]:
         log_file = log_dir / log_filename(axis, hw, m, n, k, args.count)
         tasks.append(Task(axis, hw, m, n, k, args.count, out_dir, out_file, log_file))
 
-    # Point-major order keeps the three hardware configurations interleaved.
+    # Point-major order keeps the hardware configurations interleaved.
     for m in m_values:
         for hw in hardware:
             add("labM", hw, m, args.n_default, args.k_default)
@@ -254,6 +257,16 @@ def build_all_tasks(args: argparse.Namespace) -> list[Task]:
     for k in k_values:
         for hw in hardware:
             add("labK", hw, args.m_default, args.n_default, k)
+
+    # Append the fixed-N/K M sweeps, preserving the original sweep order.
+    for axis, n, k in (
+        ("labM64N", 64, 1024),
+        ("labM64K", 1024, 64),
+        ("labM64NK", 64, 64),
+    ):
+        for m in m_values:
+            for hw in hardware:
+                add(axis, hw, m, n, k)
 
     return tasks
 

@@ -1,0 +1,4 @@
+throughput=0.462813(GEMM cmd per KCycle)
+latency=4.628540(KCycle)
+input_bus_util=0.961142(payload cycle per cycle)
+output_bus_util=0.014810(payload cycle per cycle)

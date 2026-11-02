@@ -1,0 +1,641 @@
+LOAD_A igroup=0 cycle=4 group=0 addr=0x00010000 abuf=0 rows=8
+LOAD_A igroup=0 cycle=5 group=0 addr=0x00010004 abuf=1 rows=8
+LOAD_B igroup=0 cycle=6 group=0 addr=0x00020000 bbuf=0 rows=8
+LOAD_B igroup=0 cycle=7 group=0 addr=0x00020001 bbuf=1 rows=8
+
+LOAD_A igroup=1 cycle=12 group=1 addr=0x00010001 abuf=8 rows=8
+GEMM   igroup=1 cycle=12 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+LOAD_A igroup=1 cycle=13 group=1 addr=0x00010005 abuf=9 rows=8
+GEMM   igroup=1 cycle=13 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+LOAD_B igroup=1 cycle=14 group=1 addr=0x00020008 bbuf=8 rows=8
+GEMM   igroup=1 cycle=14 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+LOAD_B igroup=1 cycle=15 group=1 addr=0x00020009 bbuf=9 rows=8
+GEMM   igroup=1 cycle=15 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+
+LOAD_A igroup=2 cycle=24 group=0 addr=0x00010002 abuf=0 rows=8
+GEMM   igroup=2 cycle=24 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=2 cycle=25 group=0 addr=0x00010006 abuf=1 rows=8
+GEMM   igroup=2 cycle=25 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=2 cycle=26 group=0 addr=0x00020010 bbuf=0 rows=8
+GEMM   igroup=2 cycle=26 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=2 cycle=27 group=0 addr=0x00020011 bbuf=1 rows=8
+GEMM   igroup=2 cycle=27 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=3 cycle=36 group=1 addr=0x00010003 abuf=8 rows=8
+GEMM   igroup=3 cycle=36 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=3 cycle=37 group=1 addr=0x00010007 abuf=9 rows=8
+GEMM   igroup=3 cycle=37 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=3 cycle=38 group=1 addr=0x00020018 bbuf=8 rows=8
+GEMM   igroup=3 cycle=38 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=3 cycle=39 group=1 addr=0x00020019 bbuf=9 rows=8
+GEMM   igroup=3 cycle=39 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=4 cycle=48 group=0 addr=0x00010000 abuf=0 rows=8
+GEMM   igroup=4 cycle=48 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=4 cycle=49 group=0 addr=0x00010004 abuf=1 rows=8
+GEMM   igroup=4 cycle=49 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=4 cycle=50 group=0 addr=0x00020002 bbuf=0 rows=8
+GEMM   igroup=4 cycle=50 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=4 cycle=51 group=0 addr=0x00020003 bbuf=1 rows=8
+GEMM   igroup=4 cycle=51 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=5 cycle=60 group=1 addr=0x00010001 abuf=8 rows=8
+GEMM   igroup=5 cycle=60 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=5 cycle=60 group=0 addr=0x00030000 pacc=0
+LOAD_A igroup=5 cycle=61 group=1 addr=0x00010005 abuf=9 rows=8
+GEMM   igroup=5 cycle=61 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=5 cycle=61 group=0 addr=0x00030001 pacc=1
+LOAD_B igroup=5 cycle=62 group=1 addr=0x0002000a bbuf=8 rows=8
+GEMM   igroup=5 cycle=62 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=5 cycle=62 group=0 addr=0x00030008 pacc=2
+LOAD_B igroup=5 cycle=63 group=1 addr=0x0002000b bbuf=9 rows=8
+GEMM   igroup=5 cycle=63 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=5 cycle=63 group=0 addr=0x00030009 pacc=3
+
+LOAD_A igroup=6 cycle=72 group=0 addr=0x00010002 abuf=0 rows=8
+GEMM   igroup=6 cycle=72 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=6 cycle=73 group=0 addr=0x00010006 abuf=1 rows=8
+GEMM   igroup=6 cycle=73 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=6 cycle=74 group=0 addr=0x00020012 bbuf=0 rows=8
+GEMM   igroup=6 cycle=74 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=6 cycle=75 group=0 addr=0x00020013 bbuf=1 rows=8
+GEMM   igroup=6 cycle=75 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=7 cycle=84 group=1 addr=0x00010003 abuf=8 rows=8
+GEMM   igroup=7 cycle=84 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=7 cycle=85 group=1 addr=0x00010007 abuf=9 rows=8
+GEMM   igroup=7 cycle=85 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=7 cycle=86 group=1 addr=0x0002001a bbuf=8 rows=8
+GEMM   igroup=7 cycle=86 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=7 cycle=87 group=1 addr=0x0002001b bbuf=9 rows=8
+GEMM   igroup=7 cycle=87 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+LOAD_A igroup=8 cycle=96 group=0 addr=0x00010000 abuf=0 rows=8
+GEMM   igroup=8 cycle=96 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=8 cycle=97 group=0 addr=0x00010004 abuf=1 rows=8
+GEMM   igroup=8 cycle=97 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=8 cycle=98 group=0 addr=0x00020004 bbuf=0 rows=8
+GEMM   igroup=8 cycle=98 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=8 cycle=99 group=0 addr=0x00020005 bbuf=1 rows=8
+GEMM   igroup=8 cycle=99 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=9 cycle=108 group=1 addr=0x00010001 abuf=8 rows=8
+GEMM   igroup=9 cycle=108 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+OUTPUT igroup=9 cycle=108 group=1 addr=0x00030002 pacc=4
+LOAD_A igroup=9 cycle=109 group=1 addr=0x00010005 abuf=9 rows=8
+GEMM   igroup=9 cycle=109 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+OUTPUT igroup=9 cycle=109 group=1 addr=0x00030003 pacc=5
+LOAD_B igroup=9 cycle=110 group=1 addr=0x0002000c bbuf=8 rows=8
+GEMM   igroup=9 cycle=110 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+OUTPUT igroup=9 cycle=110 group=1 addr=0x0003000a pacc=6
+LOAD_B igroup=9 cycle=111 group=1 addr=0x0002000d bbuf=9 rows=8
+GEMM   igroup=9 cycle=111 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+OUTPUT igroup=9 cycle=111 group=1 addr=0x0003000b pacc=7
+
+LOAD_A igroup=10 cycle=120 group=0 addr=0x00010002 abuf=0 rows=8
+GEMM   igroup=10 cycle=120 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=10 cycle=121 group=0 addr=0x00010006 abuf=1 rows=8
+GEMM   igroup=10 cycle=121 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=10 cycle=122 group=0 addr=0x00020014 bbuf=0 rows=8
+GEMM   igroup=10 cycle=122 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=10 cycle=123 group=0 addr=0x00020015 bbuf=1 rows=8
+GEMM   igroup=10 cycle=123 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=11 cycle=132 group=1 addr=0x00010003 abuf=8 rows=8
+GEMM   igroup=11 cycle=132 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=11 cycle=133 group=1 addr=0x00010007 abuf=9 rows=8
+GEMM   igroup=11 cycle=133 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=11 cycle=134 group=1 addr=0x0002001c bbuf=8 rows=8
+GEMM   igroup=11 cycle=134 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=11 cycle=135 group=1 addr=0x0002001d bbuf=9 rows=8
+GEMM   igroup=11 cycle=135 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=12 cycle=144 group=0 addr=0x00010000 abuf=0 rows=8
+GEMM   igroup=12 cycle=144 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=12 cycle=145 group=0 addr=0x00010004 abuf=1 rows=8
+GEMM   igroup=12 cycle=145 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=12 cycle=146 group=0 addr=0x00020006 bbuf=0 rows=8
+GEMM   igroup=12 cycle=146 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=12 cycle=147 group=0 addr=0x00020007 bbuf=1 rows=8
+GEMM   igroup=12 cycle=147 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=13 cycle=156 group=1 addr=0x00010001 abuf=8 rows=8
+GEMM   igroup=13 cycle=156 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=13 cycle=156 group=0 addr=0x00030004 pacc=0
+LOAD_A igroup=13 cycle=157 group=1 addr=0x00010005 abuf=9 rows=8
+GEMM   igroup=13 cycle=157 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=13 cycle=157 group=0 addr=0x00030005 pacc=1
+LOAD_B igroup=13 cycle=158 group=1 addr=0x0002000e bbuf=8 rows=8
+GEMM   igroup=13 cycle=158 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=13 cycle=158 group=0 addr=0x0003000c pacc=2
+LOAD_B igroup=13 cycle=159 group=1 addr=0x0002000f bbuf=9 rows=8
+GEMM   igroup=13 cycle=159 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=13 cycle=159 group=0 addr=0x0003000d pacc=3
+
+LOAD_A igroup=14 cycle=168 group=0 addr=0x00010002 abuf=0 rows=8
+GEMM   igroup=14 cycle=168 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=14 cycle=169 group=0 addr=0x00010006 abuf=1 rows=8
+GEMM   igroup=14 cycle=169 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=14 cycle=170 group=0 addr=0x00020016 bbuf=0 rows=8
+GEMM   igroup=14 cycle=170 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=14 cycle=171 group=0 addr=0x00020017 bbuf=1 rows=8
+GEMM   igroup=14 cycle=171 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=15 cycle=180 group=1 addr=0x00010003 abuf=8 rows=8
+GEMM   igroup=15 cycle=180 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=15 cycle=181 group=1 addr=0x00010007 abuf=9 rows=8
+GEMM   igroup=15 cycle=181 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=15 cycle=182 group=1 addr=0x0002001e bbuf=8 rows=8
+GEMM   igroup=15 cycle=182 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=15 cycle=183 group=1 addr=0x0002001f bbuf=9 rows=8
+GEMM   igroup=15 cycle=183 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+LOAD_A igroup=16 cycle=192 group=0 addr=0x00010008 abuf=0 rows=8
+GEMM   igroup=16 cycle=192 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=16 cycle=193 group=0 addr=0x0001000c abuf=1 rows=8
+GEMM   igroup=16 cycle=193 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=16 cycle=194 group=0 addr=0x00020000 bbuf=0 rows=8
+GEMM   igroup=16 cycle=194 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=16 cycle=195 group=0 addr=0x00020001 bbuf=1 rows=8
+GEMM   igroup=16 cycle=195 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=17 cycle=204 group=1 addr=0x00010009 abuf=8 rows=8
+GEMM   igroup=17 cycle=204 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+OUTPUT igroup=17 cycle=204 group=1 addr=0x00030006 pacc=4
+LOAD_A igroup=17 cycle=205 group=1 addr=0x0001000d abuf=9 rows=8
+GEMM   igroup=17 cycle=205 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+OUTPUT igroup=17 cycle=205 group=1 addr=0x00030007 pacc=5
+LOAD_B igroup=17 cycle=206 group=1 addr=0x00020008 bbuf=8 rows=8
+GEMM   igroup=17 cycle=206 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+OUTPUT igroup=17 cycle=206 group=1 addr=0x0003000e pacc=6
+LOAD_B igroup=17 cycle=207 group=1 addr=0x00020009 bbuf=9 rows=8
+GEMM   igroup=17 cycle=207 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+OUTPUT igroup=17 cycle=207 group=1 addr=0x0003000f pacc=7
+
+LOAD_A igroup=18 cycle=216 group=0 addr=0x0001000a abuf=0 rows=8
+GEMM   igroup=18 cycle=216 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=18 cycle=217 group=0 addr=0x0001000e abuf=1 rows=8
+GEMM   igroup=18 cycle=217 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=18 cycle=218 group=0 addr=0x00020010 bbuf=0 rows=8
+GEMM   igroup=18 cycle=218 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=18 cycle=219 group=0 addr=0x00020011 bbuf=1 rows=8
+GEMM   igroup=18 cycle=219 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=19 cycle=228 group=1 addr=0x0001000b abuf=8 rows=8
+GEMM   igroup=19 cycle=228 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=19 cycle=229 group=1 addr=0x0001000f abuf=9 rows=8
+GEMM   igroup=19 cycle=229 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=19 cycle=230 group=1 addr=0x00020018 bbuf=8 rows=8
+GEMM   igroup=19 cycle=230 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=19 cycle=231 group=1 addr=0x00020019 bbuf=9 rows=8
+GEMM   igroup=19 cycle=231 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=20 cycle=240 group=0 addr=0x00010008 abuf=0 rows=8
+GEMM   igroup=20 cycle=240 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=20 cycle=241 group=0 addr=0x0001000c abuf=1 rows=8
+GEMM   igroup=20 cycle=241 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=20 cycle=242 group=0 addr=0x00020002 bbuf=0 rows=8
+GEMM   igroup=20 cycle=242 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=20 cycle=243 group=0 addr=0x00020003 bbuf=1 rows=8
+GEMM   igroup=20 cycle=243 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=21 cycle=252 group=1 addr=0x00010009 abuf=8 rows=8
+GEMM   igroup=21 cycle=252 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=21 cycle=252 group=0 addr=0x00030010 pacc=0
+LOAD_A igroup=21 cycle=253 group=1 addr=0x0001000d abuf=9 rows=8
+GEMM   igroup=21 cycle=253 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=21 cycle=253 group=0 addr=0x00030011 pacc=1
+LOAD_B igroup=21 cycle=254 group=1 addr=0x0002000a bbuf=8 rows=8
+GEMM   igroup=21 cycle=254 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=21 cycle=254 group=0 addr=0x00030018 pacc=2
+LOAD_B igroup=21 cycle=255 group=1 addr=0x0002000b bbuf=9 rows=8
+GEMM   igroup=21 cycle=255 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=21 cycle=255 group=0 addr=0x00030019 pacc=3
+
+LOAD_A igroup=22 cycle=264 group=0 addr=0x0001000a abuf=0 rows=8
+GEMM   igroup=22 cycle=264 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=22 cycle=265 group=0 addr=0x0001000e abuf=1 rows=8
+GEMM   igroup=22 cycle=265 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=22 cycle=266 group=0 addr=0x00020012 bbuf=0 rows=8
+GEMM   igroup=22 cycle=266 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=22 cycle=267 group=0 addr=0x00020013 bbuf=1 rows=8
+GEMM   igroup=22 cycle=267 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=23 cycle=276 group=1 addr=0x0001000b abuf=8 rows=8
+GEMM   igroup=23 cycle=276 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=23 cycle=277 group=1 addr=0x0001000f abuf=9 rows=8
+GEMM   igroup=23 cycle=277 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=23 cycle=278 group=1 addr=0x0002001a bbuf=8 rows=8
+GEMM   igroup=23 cycle=278 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=23 cycle=279 group=1 addr=0x0002001b bbuf=9 rows=8
+GEMM   igroup=23 cycle=279 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+LOAD_A igroup=24 cycle=288 group=0 addr=0x00010008 abuf=0 rows=8
+GEMM   igroup=24 cycle=288 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=24 cycle=289 group=0 addr=0x0001000c abuf=1 rows=8
+GEMM   igroup=24 cycle=289 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=24 cycle=290 group=0 addr=0x00020004 bbuf=0 rows=8
+GEMM   igroup=24 cycle=290 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=24 cycle=291 group=0 addr=0x00020005 bbuf=1 rows=8
+GEMM   igroup=24 cycle=291 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=25 cycle=300 group=1 addr=0x00010009 abuf=8 rows=8
+GEMM   igroup=25 cycle=300 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+OUTPUT igroup=25 cycle=300 group=1 addr=0x00030012 pacc=4
+LOAD_A igroup=25 cycle=301 group=1 addr=0x0001000d abuf=9 rows=8
+GEMM   igroup=25 cycle=301 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+OUTPUT igroup=25 cycle=301 group=1 addr=0x00030013 pacc=5
+LOAD_B igroup=25 cycle=302 group=1 addr=0x0002000c bbuf=8 rows=8
+GEMM   igroup=25 cycle=302 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+OUTPUT igroup=25 cycle=302 group=1 addr=0x0003001a pacc=6
+LOAD_B igroup=25 cycle=303 group=1 addr=0x0002000d bbuf=9 rows=8
+GEMM   igroup=25 cycle=303 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+OUTPUT igroup=25 cycle=303 group=1 addr=0x0003001b pacc=7
+
+LOAD_A igroup=26 cycle=312 group=0 addr=0x0001000a abuf=0 rows=8
+GEMM   igroup=26 cycle=312 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=26 cycle=313 group=0 addr=0x0001000e abuf=1 rows=8
+GEMM   igroup=26 cycle=313 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=26 cycle=314 group=0 addr=0x00020014 bbuf=0 rows=8
+GEMM   igroup=26 cycle=314 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=26 cycle=315 group=0 addr=0x00020015 bbuf=1 rows=8
+GEMM   igroup=26 cycle=315 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=27 cycle=324 group=1 addr=0x0001000b abuf=8 rows=8
+GEMM   igroup=27 cycle=324 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=27 cycle=325 group=1 addr=0x0001000f abuf=9 rows=8
+GEMM   igroup=27 cycle=325 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=27 cycle=326 group=1 addr=0x0002001c bbuf=8 rows=8
+GEMM   igroup=27 cycle=326 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=27 cycle=327 group=1 addr=0x0002001d bbuf=9 rows=8
+GEMM   igroup=27 cycle=327 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=28 cycle=336 group=0 addr=0x00010008 abuf=0 rows=8
+GEMM   igroup=28 cycle=336 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=28 cycle=337 group=0 addr=0x0001000c abuf=1 rows=8
+GEMM   igroup=28 cycle=337 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=28 cycle=338 group=0 addr=0x00020006 bbuf=0 rows=8
+GEMM   igroup=28 cycle=338 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=28 cycle=339 group=0 addr=0x00020007 bbuf=1 rows=8
+GEMM   igroup=28 cycle=339 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=29 cycle=348 group=1 addr=0x00010009 abuf=8 rows=8
+GEMM   igroup=29 cycle=348 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=29 cycle=348 group=0 addr=0x00030014 pacc=0
+LOAD_A igroup=29 cycle=349 group=1 addr=0x0001000d abuf=9 rows=8
+GEMM   igroup=29 cycle=349 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=29 cycle=349 group=0 addr=0x00030015 pacc=1
+LOAD_B igroup=29 cycle=350 group=1 addr=0x0002000e bbuf=8 rows=8
+GEMM   igroup=29 cycle=350 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=29 cycle=350 group=0 addr=0x0003001c pacc=2
+LOAD_B igroup=29 cycle=351 group=1 addr=0x0002000f bbuf=9 rows=8
+GEMM   igroup=29 cycle=351 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=29 cycle=351 group=0 addr=0x0003001d pacc=3
+
+LOAD_A igroup=30 cycle=360 group=0 addr=0x0001000a abuf=0 rows=8
+GEMM   igroup=30 cycle=360 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=30 cycle=361 group=0 addr=0x0001000e abuf=1 rows=8
+GEMM   igroup=30 cycle=361 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=30 cycle=362 group=0 addr=0x00020016 bbuf=0 rows=8
+GEMM   igroup=30 cycle=362 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=30 cycle=363 group=0 addr=0x00020017 bbuf=1 rows=8
+GEMM   igroup=30 cycle=363 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=31 cycle=372 group=1 addr=0x0001000b abuf=8 rows=8
+GEMM   igroup=31 cycle=372 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=31 cycle=373 group=1 addr=0x0001000f abuf=9 rows=8
+GEMM   igroup=31 cycle=373 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=31 cycle=374 group=1 addr=0x0002001e bbuf=8 rows=8
+GEMM   igroup=31 cycle=374 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=31 cycle=375 group=1 addr=0x0002001f bbuf=9 rows=8
+GEMM   igroup=31 cycle=375 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+LOAD_A igroup=32 cycle=384 group=0 addr=0x00010010 abuf=0 rows=8
+GEMM   igroup=32 cycle=384 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=32 cycle=385 group=0 addr=0x00010014 abuf=1 rows=8
+GEMM   igroup=32 cycle=385 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=32 cycle=386 group=0 addr=0x00020000 bbuf=0 rows=8
+GEMM   igroup=32 cycle=386 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=32 cycle=387 group=0 addr=0x00020001 bbuf=1 rows=8
+GEMM   igroup=32 cycle=387 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=33 cycle=396 group=1 addr=0x00010011 abuf=8 rows=8
+GEMM   igroup=33 cycle=396 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+OUTPUT igroup=33 cycle=396 group=1 addr=0x00030016 pacc=4
+LOAD_A igroup=33 cycle=397 group=1 addr=0x00010015 abuf=9 rows=8
+GEMM   igroup=33 cycle=397 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+OUTPUT igroup=33 cycle=397 group=1 addr=0x00030017 pacc=5
+LOAD_B igroup=33 cycle=398 group=1 addr=0x00020008 bbuf=8 rows=8
+GEMM   igroup=33 cycle=398 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+OUTPUT igroup=33 cycle=398 group=1 addr=0x0003001e pacc=6
+LOAD_B igroup=33 cycle=399 group=1 addr=0x00020009 bbuf=9 rows=8
+GEMM   igroup=33 cycle=399 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+OUTPUT igroup=33 cycle=399 group=1 addr=0x0003001f pacc=7
+
+LOAD_A igroup=34 cycle=408 group=0 addr=0x00010012 abuf=0 rows=8
+GEMM   igroup=34 cycle=408 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=34 cycle=409 group=0 addr=0x00010016 abuf=1 rows=8
+GEMM   igroup=34 cycle=409 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=34 cycle=410 group=0 addr=0x00020010 bbuf=0 rows=8
+GEMM   igroup=34 cycle=410 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=34 cycle=411 group=0 addr=0x00020011 bbuf=1 rows=8
+GEMM   igroup=34 cycle=411 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=35 cycle=420 group=1 addr=0x00010013 abuf=8 rows=8
+GEMM   igroup=35 cycle=420 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=35 cycle=421 group=1 addr=0x00010017 abuf=9 rows=8
+GEMM   igroup=35 cycle=421 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=35 cycle=422 group=1 addr=0x00020018 bbuf=8 rows=8
+GEMM   igroup=35 cycle=422 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=35 cycle=423 group=1 addr=0x00020019 bbuf=9 rows=8
+GEMM   igroup=35 cycle=423 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=36 cycle=432 group=0 addr=0x00010010 abuf=0 rows=8
+GEMM   igroup=36 cycle=432 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=36 cycle=433 group=0 addr=0x00010014 abuf=1 rows=8
+GEMM   igroup=36 cycle=433 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=36 cycle=434 group=0 addr=0x00020002 bbuf=0 rows=8
+GEMM   igroup=36 cycle=434 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=36 cycle=435 group=0 addr=0x00020003 bbuf=1 rows=8
+GEMM   igroup=36 cycle=435 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=37 cycle=444 group=1 addr=0x00010011 abuf=8 rows=8
+GEMM   igroup=37 cycle=444 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=37 cycle=444 group=0 addr=0x00030020 pacc=0
+LOAD_A igroup=37 cycle=445 group=1 addr=0x00010015 abuf=9 rows=8
+GEMM   igroup=37 cycle=445 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=37 cycle=445 group=0 addr=0x00030021 pacc=1
+LOAD_B igroup=37 cycle=446 group=1 addr=0x0002000a bbuf=8 rows=8
+GEMM   igroup=37 cycle=446 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=37 cycle=446 group=0 addr=0x00030028 pacc=2
+LOAD_B igroup=37 cycle=447 group=1 addr=0x0002000b bbuf=9 rows=8
+GEMM   igroup=37 cycle=447 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=37 cycle=447 group=0 addr=0x00030029 pacc=3
+
+LOAD_A igroup=38 cycle=456 group=0 addr=0x00010012 abuf=0 rows=8
+GEMM   igroup=38 cycle=456 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=38 cycle=457 group=0 addr=0x00010016 abuf=1 rows=8
+GEMM   igroup=38 cycle=457 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=38 cycle=458 group=0 addr=0x00020012 bbuf=0 rows=8
+GEMM   igroup=38 cycle=458 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=38 cycle=459 group=0 addr=0x00020013 bbuf=1 rows=8
+GEMM   igroup=38 cycle=459 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=39 cycle=468 group=1 addr=0x00010013 abuf=8 rows=8
+GEMM   igroup=39 cycle=468 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=39 cycle=469 group=1 addr=0x00010017 abuf=9 rows=8
+GEMM   igroup=39 cycle=469 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=39 cycle=470 group=1 addr=0x0002001a bbuf=8 rows=8
+GEMM   igroup=39 cycle=470 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=39 cycle=471 group=1 addr=0x0002001b bbuf=9 rows=8
+GEMM   igroup=39 cycle=471 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+LOAD_A igroup=40 cycle=480 group=0 addr=0x00010010 abuf=0 rows=8
+GEMM   igroup=40 cycle=480 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=40 cycle=481 group=0 addr=0x00010014 abuf=1 rows=8
+GEMM   igroup=40 cycle=481 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=40 cycle=482 group=0 addr=0x00020004 bbuf=0 rows=8
+GEMM   igroup=40 cycle=482 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=40 cycle=483 group=0 addr=0x00020005 bbuf=1 rows=8
+GEMM   igroup=40 cycle=483 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=41 cycle=492 group=1 addr=0x00010011 abuf=8 rows=8
+GEMM   igroup=41 cycle=492 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+OUTPUT igroup=41 cycle=492 group=1 addr=0x00030022 pacc=4
+LOAD_A igroup=41 cycle=493 group=1 addr=0x00010015 abuf=9 rows=8
+GEMM   igroup=41 cycle=493 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+OUTPUT igroup=41 cycle=493 group=1 addr=0x00030023 pacc=5
+LOAD_B igroup=41 cycle=494 group=1 addr=0x0002000c bbuf=8 rows=8
+GEMM   igroup=41 cycle=494 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+OUTPUT igroup=41 cycle=494 group=1 addr=0x0003002a pacc=6
+LOAD_B igroup=41 cycle=495 group=1 addr=0x0002000d bbuf=9 rows=8
+GEMM   igroup=41 cycle=495 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+OUTPUT igroup=41 cycle=495 group=1 addr=0x0003002b pacc=7
+
+LOAD_A igroup=42 cycle=504 group=0 addr=0x00010012 abuf=0 rows=8
+GEMM   igroup=42 cycle=504 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=42 cycle=505 group=0 addr=0x00010016 abuf=1 rows=8
+GEMM   igroup=42 cycle=505 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=42 cycle=506 group=0 addr=0x00020014 bbuf=0 rows=8
+GEMM   igroup=42 cycle=506 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=42 cycle=507 group=0 addr=0x00020015 bbuf=1 rows=8
+GEMM   igroup=42 cycle=507 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=43 cycle=516 group=1 addr=0x00010013 abuf=8 rows=8
+GEMM   igroup=43 cycle=516 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=43 cycle=517 group=1 addr=0x00010017 abuf=9 rows=8
+GEMM   igroup=43 cycle=517 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=43 cycle=518 group=1 addr=0x0002001c bbuf=8 rows=8
+GEMM   igroup=43 cycle=518 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=43 cycle=519 group=1 addr=0x0002001d bbuf=9 rows=8
+GEMM   igroup=43 cycle=519 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=44 cycle=528 group=0 addr=0x00010010 abuf=0 rows=8
+GEMM   igroup=44 cycle=528 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=44 cycle=529 group=0 addr=0x00010014 abuf=1 rows=8
+GEMM   igroup=44 cycle=529 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=44 cycle=530 group=0 addr=0x00020006 bbuf=0 rows=8
+GEMM   igroup=44 cycle=530 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=44 cycle=531 group=0 addr=0x00020007 bbuf=1 rows=8
+GEMM   igroup=44 cycle=531 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=45 cycle=540 group=1 addr=0x00010011 abuf=8 rows=8
+GEMM   igroup=45 cycle=540 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=45 cycle=540 group=0 addr=0x00030024 pacc=0
+LOAD_A igroup=45 cycle=541 group=1 addr=0x00010015 abuf=9 rows=8
+GEMM   igroup=45 cycle=541 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=45 cycle=541 group=0 addr=0x00030025 pacc=1
+LOAD_B igroup=45 cycle=542 group=1 addr=0x0002000e bbuf=8 rows=8
+GEMM   igroup=45 cycle=542 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=45 cycle=542 group=0 addr=0x0003002c pacc=2
+LOAD_B igroup=45 cycle=543 group=1 addr=0x0002000f bbuf=9 rows=8
+GEMM   igroup=45 cycle=543 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=45 cycle=543 group=0 addr=0x0003002d pacc=3
+
+LOAD_A igroup=46 cycle=552 group=0 addr=0x00010012 abuf=0 rows=8
+GEMM   igroup=46 cycle=552 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=46 cycle=553 group=0 addr=0x00010016 abuf=1 rows=8
+GEMM   igroup=46 cycle=553 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=46 cycle=554 group=0 addr=0x00020016 bbuf=0 rows=8
+GEMM   igroup=46 cycle=554 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=46 cycle=555 group=0 addr=0x00020017 bbuf=1 rows=8
+GEMM   igroup=46 cycle=555 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=47 cycle=564 group=1 addr=0x00010013 abuf=8 rows=8
+GEMM   igroup=47 cycle=564 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=47 cycle=565 group=1 addr=0x00010017 abuf=9 rows=8
+GEMM   igroup=47 cycle=565 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=47 cycle=566 group=1 addr=0x0002001e bbuf=8 rows=8
+GEMM   igroup=47 cycle=566 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=47 cycle=567 group=1 addr=0x0002001f bbuf=9 rows=8
+GEMM   igroup=47 cycle=567 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+LOAD_A igroup=48 cycle=576 group=0 addr=0x00010018 abuf=0 rows=8
+GEMM   igroup=48 cycle=576 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=48 cycle=577 group=0 addr=0x0001001c abuf=1 rows=8
+GEMM   igroup=48 cycle=577 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=48 cycle=578 group=0 addr=0x00020000 bbuf=0 rows=8
+GEMM   igroup=48 cycle=578 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=48 cycle=579 group=0 addr=0x00020001 bbuf=1 rows=8
+GEMM   igroup=48 cycle=579 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=49 cycle=588 group=1 addr=0x00010019 abuf=8 rows=8
+GEMM   igroup=49 cycle=588 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+OUTPUT igroup=49 cycle=588 group=1 addr=0x00030026 pacc=4
+LOAD_A igroup=49 cycle=589 group=1 addr=0x0001001d abuf=9 rows=8
+GEMM   igroup=49 cycle=589 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+OUTPUT igroup=49 cycle=589 group=1 addr=0x00030027 pacc=5
+LOAD_B igroup=49 cycle=590 group=1 addr=0x00020008 bbuf=8 rows=8
+GEMM   igroup=49 cycle=590 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+OUTPUT igroup=49 cycle=590 group=1 addr=0x0003002e pacc=6
+LOAD_B igroup=49 cycle=591 group=1 addr=0x00020009 bbuf=9 rows=8
+GEMM   igroup=49 cycle=591 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+OUTPUT igroup=49 cycle=591 group=1 addr=0x0003002f pacc=7
+
+LOAD_A igroup=50 cycle=600 group=0 addr=0x0001001a abuf=0 rows=8
+GEMM   igroup=50 cycle=600 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=50 cycle=601 group=0 addr=0x0001001e abuf=1 rows=8
+GEMM   igroup=50 cycle=601 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=50 cycle=602 group=0 addr=0x00020010 bbuf=0 rows=8
+GEMM   igroup=50 cycle=602 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=50 cycle=603 group=0 addr=0x00020011 bbuf=1 rows=8
+GEMM   igroup=50 cycle=603 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=51 cycle=612 group=1 addr=0x0001001b abuf=8 rows=8
+GEMM   igroup=51 cycle=612 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=51 cycle=613 group=1 addr=0x0001001f abuf=9 rows=8
+GEMM   igroup=51 cycle=613 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=51 cycle=614 group=1 addr=0x00020018 bbuf=8 rows=8
+GEMM   igroup=51 cycle=614 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=51 cycle=615 group=1 addr=0x00020019 bbuf=9 rows=8
+GEMM   igroup=51 cycle=615 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=52 cycle=624 group=0 addr=0x00010018 abuf=0 rows=8
+GEMM   igroup=52 cycle=624 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=52 cycle=625 group=0 addr=0x0001001c abuf=1 rows=8
+GEMM   igroup=52 cycle=625 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=52 cycle=626 group=0 addr=0x00020002 bbuf=0 rows=8
+GEMM   igroup=52 cycle=626 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=52 cycle=627 group=0 addr=0x00020003 bbuf=1 rows=8
+GEMM   igroup=52 cycle=627 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=53 cycle=636 group=1 addr=0x00010019 abuf=8 rows=8
+GEMM   igroup=53 cycle=636 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=53 cycle=636 group=0 addr=0x00030030 pacc=0
+LOAD_A igroup=53 cycle=637 group=1 addr=0x0001001d abuf=9 rows=8
+GEMM   igroup=53 cycle=637 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=53 cycle=637 group=0 addr=0x00030031 pacc=1
+LOAD_B igroup=53 cycle=638 group=1 addr=0x0002000a bbuf=8 rows=8
+GEMM   igroup=53 cycle=638 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=53 cycle=638 group=0 addr=0x00030038 pacc=2
+LOAD_B igroup=53 cycle=639 group=1 addr=0x0002000b bbuf=9 rows=8
+GEMM   igroup=53 cycle=639 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=53 cycle=639 group=0 addr=0x00030039 pacc=3
+
+LOAD_A igroup=54 cycle=648 group=0 addr=0x0001001a abuf=0 rows=8
+GEMM   igroup=54 cycle=648 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=54 cycle=649 group=0 addr=0x0001001e abuf=1 rows=8
+GEMM   igroup=54 cycle=649 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=54 cycle=650 group=0 addr=0x00020012 bbuf=0 rows=8
+GEMM   igroup=54 cycle=650 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=54 cycle=651 group=0 addr=0x00020013 bbuf=1 rows=8
+GEMM   igroup=54 cycle=651 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=55 cycle=660 group=1 addr=0x0001001b abuf=8 rows=8
+GEMM   igroup=55 cycle=660 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=55 cycle=661 group=1 addr=0x0001001f abuf=9 rows=8
+GEMM   igroup=55 cycle=661 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=55 cycle=662 group=1 addr=0x0002001a bbuf=8 rows=8
+GEMM   igroup=55 cycle=662 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=55 cycle=663 group=1 addr=0x0002001b bbuf=9 rows=8
+GEMM   igroup=55 cycle=663 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+LOAD_A igroup=56 cycle=672 group=0 addr=0x00010018 abuf=0 rows=8
+GEMM   igroup=56 cycle=672 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=56 cycle=673 group=0 addr=0x0001001c abuf=1 rows=8
+GEMM   igroup=56 cycle=673 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=56 cycle=674 group=0 addr=0x00020004 bbuf=0 rows=8
+GEMM   igroup=56 cycle=674 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=56 cycle=675 group=0 addr=0x00020005 bbuf=1 rows=8
+GEMM   igroup=56 cycle=675 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=57 cycle=684 group=1 addr=0x00010019 abuf=8 rows=8
+GEMM   igroup=57 cycle=684 group=0 abuf=0 bbuf=0 pacc=0 accum=0
+OUTPUT igroup=57 cycle=684 group=1 addr=0x00030032 pacc=4
+LOAD_A igroup=57 cycle=685 group=1 addr=0x0001001d abuf=9 rows=8
+GEMM   igroup=57 cycle=685 group=0 abuf=0 bbuf=1 pacc=1 accum=0
+OUTPUT igroup=57 cycle=685 group=1 addr=0x00030033 pacc=5
+LOAD_B igroup=57 cycle=686 group=1 addr=0x0002000c bbuf=8 rows=8
+GEMM   igroup=57 cycle=686 group=0 abuf=1 bbuf=0 pacc=2 accum=0
+OUTPUT igroup=57 cycle=686 group=1 addr=0x0003003a pacc=6
+LOAD_B igroup=57 cycle=687 group=1 addr=0x0002000d bbuf=9 rows=8
+GEMM   igroup=57 cycle=687 group=0 abuf=1 bbuf=1 pacc=3 accum=0
+OUTPUT igroup=57 cycle=687 group=1 addr=0x0003003b pacc=7
+
+LOAD_A igroup=58 cycle=696 group=0 addr=0x0001001a abuf=0 rows=8
+GEMM   igroup=58 cycle=696 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=58 cycle=697 group=0 addr=0x0001001e abuf=1 rows=8
+GEMM   igroup=58 cycle=697 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=58 cycle=698 group=0 addr=0x00020014 bbuf=0 rows=8
+GEMM   igroup=58 cycle=698 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=58 cycle=699 group=0 addr=0x00020015 bbuf=1 rows=8
+GEMM   igroup=58 cycle=699 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=59 cycle=708 group=1 addr=0x0001001b abuf=8 rows=8
+GEMM   igroup=59 cycle=708 group=0 abuf=0 bbuf=0 pacc=0 accum=1
+LOAD_A igroup=59 cycle=709 group=1 addr=0x0001001f abuf=9 rows=8
+GEMM   igroup=59 cycle=709 group=0 abuf=0 bbuf=1 pacc=1 accum=1
+LOAD_B igroup=59 cycle=710 group=1 addr=0x0002001c bbuf=8 rows=8
+GEMM   igroup=59 cycle=710 group=0 abuf=1 bbuf=0 pacc=2 accum=1
+LOAD_B igroup=59 cycle=711 group=1 addr=0x0002001d bbuf=9 rows=8
+GEMM   igroup=59 cycle=711 group=0 abuf=1 bbuf=1 pacc=3 accum=1
+
+LOAD_A igroup=60 cycle=720 group=0 addr=0x00010018 abuf=0 rows=8
+GEMM   igroup=60 cycle=720 group=1 abuf=8 bbuf=8 pacc=0 accum=1
+LOAD_A igroup=60 cycle=721 group=0 addr=0x0001001c abuf=1 rows=8
+GEMM   igroup=60 cycle=721 group=1 abuf=8 bbuf=9 pacc=1 accum=1
+LOAD_B igroup=60 cycle=722 group=0 addr=0x00020006 bbuf=0 rows=8
+GEMM   igroup=60 cycle=722 group=1 abuf=9 bbuf=8 pacc=2 accum=1
+LOAD_B igroup=60 cycle=723 group=0 addr=0x00020007 bbuf=1 rows=8
+GEMM   igroup=60 cycle=723 group=1 abuf=9 bbuf=9 pacc=3 accum=1
+
+LOAD_A igroup=61 cycle=732 group=1 addr=0x00010019 abuf=8 rows=8
+GEMM   igroup=61 cycle=732 group=0 abuf=0 bbuf=0 pacc=4 accum=0
+OUTPUT igroup=61 cycle=732 group=0 addr=0x00030034 pacc=0
+LOAD_A igroup=61 cycle=733 group=1 addr=0x0001001d abuf=9 rows=8
+GEMM   igroup=61 cycle=733 group=0 abuf=0 bbuf=1 pacc=5 accum=0
+OUTPUT igroup=61 cycle=733 group=0 addr=0x00030035 pacc=1
+LOAD_B igroup=61 cycle=734 group=1 addr=0x0002000e bbuf=8 rows=8
+GEMM   igroup=61 cycle=734 group=0 abuf=1 bbuf=0 pacc=6 accum=0
+OUTPUT igroup=61 cycle=734 group=0 addr=0x0003003c pacc=2
+LOAD_B igroup=61 cycle=735 group=1 addr=0x0002000f bbuf=9 rows=8
+GEMM   igroup=61 cycle=735 group=0 abuf=1 bbuf=1 pacc=7 accum=0
+OUTPUT igroup=61 cycle=735 group=0 addr=0x0003003d pacc=3
+
+LOAD_A igroup=62 cycle=744 group=0 addr=0x0001001a abuf=0 rows=8
+GEMM   igroup=62 cycle=744 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+LOAD_A igroup=62 cycle=745 group=0 addr=0x0001001e abuf=1 rows=8
+GEMM   igroup=62 cycle=745 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+LOAD_B igroup=62 cycle=746 group=0 addr=0x00020016 bbuf=0 rows=8
+GEMM   igroup=62 cycle=746 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+LOAD_B igroup=62 cycle=747 group=0 addr=0x00020017 bbuf=1 rows=8
+GEMM   igroup=62 cycle=747 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+LOAD_A igroup=63 cycle=756 group=1 addr=0x0001001b abuf=8 rows=8
+GEMM   igroup=63 cycle=756 group=0 abuf=0 bbuf=0 pacc=4 accum=1
+LOAD_A igroup=63 cycle=757 group=1 addr=0x0001001f abuf=9 rows=8
+GEMM   igroup=63 cycle=757 group=0 abuf=0 bbuf=1 pacc=5 accum=1
+LOAD_B igroup=63 cycle=758 group=1 addr=0x0002001e bbuf=8 rows=8
+GEMM   igroup=63 cycle=758 group=0 abuf=1 bbuf=0 pacc=6 accum=1
+LOAD_B igroup=63 cycle=759 group=1 addr=0x0002001f bbuf=9 rows=8
+GEMM   igroup=63 cycle=759 group=0 abuf=1 bbuf=1 pacc=7 accum=1
+
+GEMM   igroup=64 cycle=768 group=1 abuf=8 bbuf=8 pacc=4 accum=1
+GEMM   igroup=64 cycle=769 group=1 abuf=8 bbuf=9 pacc=5 accum=1
+GEMM   igroup=64 cycle=770 group=1 abuf=9 bbuf=8 pacc=6 accum=1
+GEMM   igroup=64 cycle=771 group=1 abuf=9 bbuf=9 pacc=7 accum=1
+
+OUTPUT igroup=65 cycle=780 group=1 addr=0x00030036 pacc=4
+OUTPUT igroup=65 cycle=781 group=1 addr=0x00030037 pacc=5
+OUTPUT igroup=65 cycle=782 group=1 addr=0x0003003e pacc=6
+OUTPUT igroup=65 cycle=783 group=1 addr=0x0003003f pacc=7
