@@ -21,6 +21,6 @@
   "capacity_stress_seed":1,
   "capacity_stress_physical_ratio":[3,4],
   "capacity_stress_logical_ratio":[3,4],
-  "timeout_seconds":14400,
+  "timeout_seconds":115200,
   "build_jobs":4
 }

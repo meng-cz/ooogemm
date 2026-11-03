@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--spec', required=True)
     parser.add_argument('--out-dir', type=Path, required=True)
     parser.add_argument('--studies', default='')
-    parser.add_argument('--timeout', type=int, default=14400)
+    parser.add_argument('--timeout', type=int, default=115200)
     args = parser.parse_args()
     spec = json.loads(args.spec)
     hw = Hardware(**spec['hardware'])

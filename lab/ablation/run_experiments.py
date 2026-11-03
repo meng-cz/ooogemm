@@ -34,7 +34,7 @@ class Task:
     out_file: Path
     log_file: Path
     trace: bool = False
-    timeout: int = 14400
+    timeout: int = 115200
 
     @property
     def axis(self):
