@@ -479,12 +479,15 @@ module paccreg #(
             s6_cur_aligned <= '0;
             s6_in_aligned <= '0;
         end else begin
+`ifndef SYNTHESIS
+            // Simulation-only protocol check; $error has no hardware mapping.
             for (int i = 0; i < 3; i++) begin
                 if (valid_i && recent_valid_q[i] &&
                     (paccidx_i == recent_paccidx_q[i])) begin
                     $error("paccreg input protocol violation: submissions to the same paccidx must be four cycles apart");
                 end
             end
+`endif
 
             recent_valid_q[2] <= recent_valid_q[1];
             recent_valid_q[1] <= recent_valid_q[0];

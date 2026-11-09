@@ -86,6 +86,7 @@ urgReport/
 *.lef
 *.lib
 *.sdc
+!/synth/openroad/BigPE_L4_ACC32/constraint.sdc
 *.spef
 *.sdf
 *.sdf.gz

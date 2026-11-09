@@ -1,0 +1,7 @@
+module,kind,depth,width,capacity_bits,read_ports,write_ports,read_latency_cycles,same_address_read_write,L16W16_instances,L16W16_total_bits,L1W64_instances,L1W64_total_bits,L4W32_instances,L4W32_total_bits,dynamic_L16W16_full_instances,dynamic_L16W16_full_total_bits,dynamic_L1W64_full_instances,dynamic_L1W64_full_total_bits,dynamic_L4W32_full_instances,dynamic_L4W32_full_total_bits,static_L16W16_full_instances,static_L16W16_full_total_bits,static_L1W64_full_instances,static_L1W64_full_total_bits,static_L4W32_full_instances,static_L4W32_full_total_bits
+sram1r1w__D16_W256__d4473c7e3fcd,sram1r1w,16,256,4096,1,1,1,READ_FIRST,0,0,0,0,0,0,0,0,0,0,64,262144,0,0,0,0,64,262144
+sram1r1w__D32_W256__fe9070aab4db,sram1r1w,32,256,8192,1,1,1,READ_FIRST,0,0,0,0,0,0,32,262144,0,0,0,0,32,262144,0,0,0,0
+sram1r1w__D8_W256__99188397ff91,sram1r1w,8,256,2048,1,1,1,READ_FIRST,0,0,0,0,0,0,0,0,128,262144,0,0,0,0,128,262144,0,0
+sram2r1w__D128_W50__88b2538a53dc,sram2r1w,128,50,6400,2,1,1,READ_FIRST,256,1638400,0,0,0,0,256,1638400,0,0,0,0,256,1638400,0,0,0,0
+sram2r1w__D32_W50__f2836cc4b5a3,sram2r1w,32,50,1600,2,1,1,READ_FIRST,0,0,0,0,1024,1638400,0,0,0,0,1024,1638400,0,0,0,0,1024,1638400
+sram2r1w__D8_W50__03de8313fe79,sram2r1w,8,50,400,2,1,1,READ_FIRST,0,0,4096,1638400,0,0,0,0,4096,1638400,0,0,0,0,4096,1638400,0,0
