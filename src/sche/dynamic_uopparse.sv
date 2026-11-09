@@ -21,6 +21,12 @@
 //
 // BlockM/BlockN are selected by blocksel upstream.  This module only expands
 // the supplied block into LOAD/GEMM/OUTPUT uops.
+//
+// Timing: command setup registers the three batch strides once.  Each uop
+// then uses a prepare cycle to register independent address products and
+// metadata, followed by a valid/ready issue cycle with only a balanced address
+// sum at the output.  A stalled uop holds every field; the next uop is prepared
+// after its predecessor handshakes (one uop every two cycles without stalls).
 
 `default_nettype none
 
@@ -107,7 +113,8 @@ module dynamic_uopparse_core #(
         ST_LOAD_A,
         ST_LOAD_B,
         ST_GEMM,
-        ST_OUTPUT
+        ST_OUTPUT,
+        ST_SETUP
     } state_t;
 
     function automatic tile_count_t ceil_tiles(input logic [DIM_WIDTH-1:0] dim);
@@ -137,15 +144,8 @@ module dynamic_uopparse_core #(
         end
     endfunction
 
-    function automatic logic [ADDR_WIDTH-1:0] addr_add_tile(
-        input logic [ADDR_WIDTH-1:0] base,
-        input tile_count_t           offset
-    );
-        logic [ADDR_WIDTH-1:0] addr_offset;
-        begin
-            addr_offset = ADDR_WIDTH'(offset);
-            return base + addr_offset;
-        end
+    function automatic logic [ADDR_WIDTH-1:0] addr_count(input tile_count_t value);
+        return ADDR_WIDTH'(value);
     endfunction
 
     function automatic logic [LOAD_ROWS_WIDTH-1:0] tile_valid_rows(
@@ -171,18 +171,6 @@ module dynamic_uopparse_core #(
         end
     endfunction
 
-    function automatic logic [PACC_IDX_WIDTH-1:0] pacc_of(
-        input tile_count_t local_m,
-        input tile_count_t local_n,
-        input tile_count_t block_n
-    );
-        tile_count_t pacc_full;
-        begin
-            pacc_full = (local_m * block_n) + local_n;
-            return pacc_full[PACC_IDX_WIDTH-1:0];
-        end
-    endfunction
-
     state_t state_q;
 
     logic [ADDR_WIDTH-1:0] a_base_q;
@@ -190,6 +178,7 @@ module dynamic_uopparse_core #(
     logic [ADDR_WIDTH-1:0] c_base_q;
     logic [DIM_WIDTH-1:0] m_dim_q;
     logic [DIM_WIDTH-1:0] n_dim_q;
+    logic [ADDR_WIDTH-1:0] a_batch_stride_q, b_batch_stride_q, c_batch_stride_q;
 
     tile_count_t tm_q;
     tile_count_t tn_q;
@@ -219,6 +208,18 @@ module dynamic_uopparse_core #(
     tile_count_t next_batch_comb;
     logic command_has_tiles_comb;
     logic has_next_block_comb;
+
+    typedef struct packed {
+        uop_type_e typ;
+        logic [ADDR_WIDTH-1:0] base, batch_offset, row_offset, offset;
+        logic [ABUF_IDX_WIDTH-1:0] abuf;
+        logic [BBUF_IDX_WIDTH-1:0] bbuf;
+        logic [PACC_IDX_WIDTH-1:0] pacc_row, pacc_col;
+        logic [LOAD_ROWS_WIDTH-1:0] valid_rows;
+        logic accum;
+    } prepared_uop_t;
+    prepared_uop_t prepared_d, prepared_q;
+    logic prepared_valid_q;
 
     always_comb begin
         cmd_tm_comb = ceil_tiles(cmd_m_i);
@@ -257,59 +258,62 @@ module dynamic_uopparse_core #(
     end
 
     assign cmd_ready_o = (state_q == ST_IDLE);
-    assign uop_valid_o = (state_q != ST_IDLE);
+    assign uop_valid_o = prepared_valid_q;
+    assign uop_type_o = prepared_q.typ;
+    assign uop_addr_o = (prepared_q.base + prepared_q.batch_offset) +
+                        (prepared_q.row_offset + prepared_q.offset);
+    assign uop_abufidx_o = prepared_q.abuf;
+    assign uop_bbufidx_o = prepared_q.bbuf;
+    assign uop_paccidx_o = prepared_q.pacc_row + prepared_q.pacc_col;
+    assign uop_valid_rows_o = prepared_q.valid_rows;
+    assign uop_accum_o = prepared_q.accum;
 
     always_comb begin
-        uop_type_o    = UOP_LOAD_A;
-        uop_addr_o    = '0;
-        uop_abufidx_o = '0;
-        uop_bbufidx_o = '0;
-        uop_paccidx_o = '0;
-        uop_valid_rows_o = '0;
-        uop_accum_o   = 1'b0;
+        prepared_d = '0;
+        prepared_d.typ = UOP_LOAD_A;
 
         unique case (state_q)
             ST_LOAD_A: begin
-                uop_type_o    = UOP_LOAD_A;
-                uop_addr_o    = addr_add_tile(
-                    a_base_q,
-                    (batch_q * tm_q * tk_q) +
-                    ((block_m_base_q + load_idx_q) * tk_q) + k_tile_q
-                );
-                uop_abufidx_o = load_idx_q[ABUF_IDX_WIDTH-1:0];
-                uop_valid_rows_o = tile_valid_rows(
+                prepared_d.typ = UOP_LOAD_A;
+                prepared_d.base = a_base_q;
+                prepared_d.batch_offset = addr_count(batch_q) * a_batch_stride_q;
+                prepared_d.row_offset = addr_count(block_m_base_q + load_idx_q) * addr_count(tk_q);
+                prepared_d.offset = addr_count(k_tile_q);
+                prepared_d.abuf = load_idx_q[ABUF_IDX_WIDTH-1:0];
+                prepared_d.valid_rows = tile_valid_rows(
                     m_dim_q, block_m_base_q + load_idx_q, SUBTILE_M);
             end
 
             ST_LOAD_B: begin
-                uop_type_o    = UOP_LOAD_B;
-                uop_addr_o    = addr_add_tile(
-                    b_base_q,
-                    (batch_q * tk_q * tn_q) +
-                    (k_tile_q * tn_q) + block_n_base_q + load_idx_q
-                );
-                uop_bbufidx_o = load_idx_q[BBUF_IDX_WIDTH-1:0];
-                uop_valid_rows_o = tile_valid_rows(
+                prepared_d.typ = UOP_LOAD_B;
+                prepared_d.base = b_base_q;
+                prepared_d.batch_offset = addr_count(batch_q) * b_batch_stride_q;
+                prepared_d.row_offset = addr_count(k_tile_q) * addr_count(tn_q);
+                prepared_d.offset = addr_count(block_n_base_q + load_idx_q);
+                prepared_d.bbuf = load_idx_q[BBUF_IDX_WIDTH-1:0];
+                prepared_d.valid_rows = tile_valid_rows(
                     n_dim_q, block_n_base_q + load_idx_q, SUBTILE_N);
             end
 
             ST_GEMM: begin
-                uop_type_o    = UOP_GEMM;
-                uop_abufidx_o = gemm_m_idx_q[ABUF_IDX_WIDTH-1:0];
-                uop_bbufidx_o = gemm_n_idx_q[BBUF_IDX_WIDTH-1:0];
-                uop_paccidx_o = pacc_of(gemm_m_idx_q, gemm_n_idx_q, block_n_q);
-                uop_accum_o   = (k_tile_q != '0);
+                prepared_d.typ = UOP_GEMM;
+                prepared_d.abuf = gemm_m_idx_q[ABUF_IDX_WIDTH-1:0];
+                prepared_d.bbuf = gemm_n_idx_q[BBUF_IDX_WIDTH-1:0];
+                prepared_d.pacc_row = PACC_IDX_WIDTH'(gemm_m_idx_q) *
+                                      PACC_IDX_WIDTH'(block_n_q);
+                prepared_d.pacc_col = PACC_IDX_WIDTH'(gemm_n_idx_q);
+                prepared_d.accum = (k_tile_q != '0);
             end
 
             ST_OUTPUT: begin
-                uop_type_o    = UOP_OUTPUT;
-                uop_addr_o    = addr_add_tile(
-                    c_base_q,
-                    (batch_q * tm_q * tn_q) +
-                    ((block_m_base_q + out_m_idx_q) * tn_q) +
-                    block_n_base_q + out_n_idx_q
-                );
-                uop_paccidx_o = pacc_of(out_m_idx_q, out_n_idx_q, block_n_q);
+                prepared_d.typ = UOP_OUTPUT;
+                prepared_d.base = c_base_q;
+                prepared_d.batch_offset = addr_count(batch_q) * c_batch_stride_q;
+                prepared_d.row_offset = addr_count(block_m_base_q + out_m_idx_q) * addr_count(tn_q);
+                prepared_d.offset = addr_count(block_n_base_q + out_n_idx_q);
+                prepared_d.pacc_row = PACC_IDX_WIDTH'(out_m_idx_q) *
+                                      PACC_IDX_WIDTH'(block_n_q);
+                prepared_d.pacc_col = PACC_IDX_WIDTH'(out_n_idx_q);
             end
 
             default: begin
@@ -319,6 +323,29 @@ module dynamic_uopparse_core #(
 
     wire cmd_fire = cmd_valid_i && cmd_ready_o;
     wire uop_fire = uop_valid_o && uop_ready_i;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            prepared_q <= '0;
+            prepared_valid_q <= 1'b0;
+            a_batch_stride_q <= '0;
+            b_batch_stride_q <= '0;
+            c_batch_stride_q <= '0;
+        end else begin
+            if (state_q == ST_SETUP) begin
+                a_batch_stride_q <= addr_count(tm_q) * addr_count(tk_q);
+                b_batch_stride_q <= addr_count(tk_q) * addr_count(tn_q);
+                c_batch_stride_q <= addr_count(tm_q) * addr_count(tn_q);
+            end
+            if (prepared_valid_q) begin
+                if (uop_ready_i) prepared_valid_q <= 1'b0;
+            end else if ((state_q == ST_LOAD_A) || (state_q == ST_LOAD_B) ||
+                         (state_q == ST_GEMM) || (state_q == ST_OUTPUT)) begin
+                prepared_q <= prepared_d;
+                prepared_valid_q <= 1'b1;
+            end
+        end
+    end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -348,7 +375,7 @@ module dynamic_uopparse_core #(
         end else begin
             if (state_q == ST_IDLE) begin
                 if (cmd_fire && command_has_tiles_comb) begin
-                    state_q <= ST_LOAD_A;
+                    state_q <= ST_SETUP;
                     a_base_q <= cmd_a_base_i;
                     b_base_q <= cmd_b_base_i;
                     c_base_q <= cmd_c_base_i;
@@ -372,6 +399,8 @@ module dynamic_uopparse_core #(
                     out_m_idx_q <= '0;
                     out_n_idx_q <= '0;
                 end
+            end else if (state_q == ST_SETUP) begin
+                state_q <= ST_LOAD_A;
             end else if (uop_fire) begin
                 unique case (state_q)
                     ST_LOAD_A: begin

@@ -17,6 +17,13 @@
 //     It is checked only before entering the block after that, when the PACC
 //     half being output would be reused by another wave-0 GEMM.
 //
+// Timing: command setup registers batch strides and merge geometry.  Each
+// independent stream alternates product/metadata preparation and valid/ready
+// issue, sustaining one uop per two cycles with stable fields under stalls.
+// Address outputs contain only balanced sums of registered partial results.
+// Next-block lookahead is registered, and merge coordinates advance with
+// LOAD handshakes rather than passing through combinational quotient decoders.
+//
 // LOAD/GEMM group ownership is deliberately implicit: the buffer index and
 // the wave/block parity already identify the physical ping-pong half.
 
@@ -98,7 +105,9 @@ module new_static_uopparse #(
 
     typedef logic [DIM_WIDTH:0] count_t;
     typedef logic [COUNT_WIDTH-1:0] outstanding_t;
-    typedef enum logic [2:0] {IDLE, PRELOAD, WAVE, OUTPUT_PRELOAD, DONE} state_t;
+    // Preserve the original state encodings used by performance probes.
+    typedef enum logic [3:0] {IDLE, PRELOAD, WAVE, OUTPUT_PRELOAD, DONE,
+                              SETUP_STRIDES, SETUP_MERGE, SETUP_CAPACITY, SETUP_BLOCK} state_t;
     state_t state_q;
 
     logic [ADDR_WIDTH-1:0] a_base_q, b_base_q, c_base_q;
@@ -162,43 +171,6 @@ module new_static_uopparse #(
         return v;
     endfunction
 
-    // Merge mode is reserved for combining at least two independent batch
-    // instances.  A single batch with several output tiles must use the
-    // ordinary BM x BN Cartesian block; treating those tiles as merge entries
-    // would load the same A tile once per output tile.
-    function automatic logic merge_enabled(
-        input logic [DIM_WIDTH-1:0] batch_count,
-        input count_t               tiles_per_batch
-    );
-        begin
-            return (batch_count > 1) && (tiles_per_batch != 0) &&
-                (tiles_per_batch <= count_t'(MERGE_CAP >> 1));
-        end
-    endfunction
-
-    // Return the largest number of complete batches fitting in one merge
-    // chunk.  tiles_per_batch is runtime data, but both the result and search
-    // range are bounded by MERGE_CAP, so constant-coefficient compares replace
-    // the former variable division.
-    function automatic count_t merge_batch_capacity(
-        input count_t tiles_per_batch
-    );
-        count_t capacity;
-        begin
-            capacity = '0;
-            if ((tiles_per_batch != 0) &&
-                (tiles_per_batch <= count_t'(MERGE_CAP))) begin
-                for (int batches = 1; batches <= MERGE_CAP; batches++) begin
-                    if ((count_t'(batches) * tiles_per_batch) <=
-                        count_t'(MERGE_CAP)) begin
-                        capacity = count_t'(batches);
-                    end
-                end
-            end
-            return capacity;
-        end
-    endfunction
-
     // Address offsets are expressed in tiles.  Widen each count before any
     // arithmetic so products cannot overflow count_t before reaching the
     // ADDR_WIDTH-wide memory address.
@@ -236,21 +208,43 @@ module new_static_uopparse #(
     endfunction
 
     count_t cmd_tm_comb, cmd_tn_comb, cmd_tk_comb;
-    count_t cmd_tiles_per_batch_comb;
-    count_t cmd_merge_capacity_comb, cmd_merge_batch_count_comb;
-    logic cmd_merge_enabled_comb;
+    logic [ADDR_WIDTH-1:0] a_batch_stride_q, b_batch_stride_q, c_batch_stride_q;
+    logic [2*(DIM_WIDTH+1)-1:0] tile_area_q;
+    count_t merge_tiles_per_batch_q, merge_capacity_q, merge_capacity_left_q;
 
     always_comb begin
         cmd_tm_comb = ceil_m_tiles(cmd_m_i);
         cmd_tn_comb = ceil_n_tiles(cmd_n_i);
         cmd_tk_comb = ceil_k_tiles(cmd_k_i);
-        cmd_tiles_per_batch_comb = cmd_tm_comb * cmd_tn_comb;
-        cmd_merge_capacity_comb =
-            merge_batch_capacity(cmd_tiles_per_batch_comb);
-        cmd_merge_enabled_comb =
-            merge_enabled(cmd_batch_i, cmd_tiles_per_batch_comb);
-        cmd_merge_batch_count_comb = min_count(
-            count_t'(cmd_batch_i), cmd_merge_capacity_comb);
+    end
+
+    // No cascaded variable multipliers: strides and the full-width tile area
+    // are computed once.  Merge capacity uses a short command-only subtract
+    // loop instead of a parallel constant-multiply/compare/priority bank.
+    wire merge_capacity_done = (merge_capacity_left_q < merge_tiles_per_batch_q) ||
+                               (merge_capacity_q >= count_t'(batch_q));
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            a_batch_stride_q <= '0;
+            b_batch_stride_q <= '0;
+            c_batch_stride_q <= '0;
+            tile_area_q <= '0;
+            merge_tiles_per_batch_q <= '0;
+            merge_capacity_q <= '0;
+            merge_capacity_left_q <= '0;
+        end else if (state_q == SETUP_STRIDES) begin
+            a_batch_stride_q <= addr_count(tm_q) * addr_count(tk_q);
+            b_batch_stride_q <= addr_count(tk_q) * addr_count(tn_q);
+            c_batch_stride_q <= addr_count(tm_q) * addr_count(tn_q);
+            tile_area_q <= (2*(DIM_WIDTH+1))'(tm_q) * (2*(DIM_WIDTH+1))'(tn_q);
+        end else if (state_q == SETUP_MERGE) begin
+            merge_tiles_per_batch_q <= count_t'(tile_area_q);
+            merge_capacity_q <= '0;
+            merge_capacity_left_q <= count_t'(MERGE_CAP);
+        end else if ((state_q == SETUP_CAPACITY) && !merge_capacity_done) begin
+            merge_capacity_left_q <= merge_capacity_left_q - merge_tiles_per_batch_q;
+            merge_capacity_q <= merge_capacity_q + 1'b1;
+        end
     end
 
     wire load_fire = load_valid_o && load_ready_i;
@@ -262,8 +256,8 @@ module new_static_uopparse #(
         (gemm_count_q[0] == 0) && (gemm_count_q[1] != 0);
     wire output_done_event = output_done_valid_i && (output_count_q != 0);
     wire wave_is_final = gemm_wave_q + 1 >= tk_q;
-    wire wave_group_swap_ready = (state_q == WAVE) && gemm_sent_q &&
-        (wave_is_final ? (!next_exists_comb || load_ready_q) : load_ready_q);
+    wire wave_group_swap_ready = (state_q == WAVE) && gemm_sent_q && lookahead_valid_q &&
+        (wave_is_final ? (!lookahead_exists_q || load_ready_q) : load_ready_q);
     wire kwave_advance = wave_group_swap_ready && wave_is_final &&
         output_issue_done_q && (output_count_q == 0);
     wire boundary_group_swap_ready = (state_q == OUTPUT_PRELOAD) &&
@@ -272,54 +266,87 @@ module new_static_uopparse #(
 
     // Next-block descriptor calculation.  The parser walks N blocks first,
     // then M blocks, then batches; merge mode walks a flat batch-tile list.
-    logic next_exists_comb;
-    count_t next_bm_comb, next_bn_comb, next_batch_idx_comb;
-    count_t next_mbase_comb, next_nbase_comb;
-    count_t next_merge_base_comb, next_merge_count_comb;
-    count_t next_merge_batch_base_comb, next_merge_batch_count_comb;
-    count_t merge_tiles_per_batch_comb, merge_capacity_comb;
+    logic lookahead_exists_q;
+    count_t lookahead_bm_q, lookahead_bn_q, lookahead_batch_idx_q;
+    count_t lookahead_mbase_q, lookahead_nbase_q;
+    count_t lookahead_merge_base_q, lookahead_merge_count_q;
+    count_t lookahead_merge_batch_base_q, lookahead_merge_batch_count_q;
+    logic next_exists_calc;
+    count_t next_bm_calc, next_bn_calc, next_batch_idx_calc;
+    count_t next_mbase_calc, next_nbase_calc;
+    count_t next_merge_base_calc, next_merge_count_calc;
+    count_t next_merge_batch_base_calc, next_merge_batch_count_calc;
     always_comb begin
-        next_exists_comb = 1'b0;
-        next_bm_comb = bm_q; next_bn_comb = bn_q;
-        next_batch_idx_comb = batch_idx_q;
-        next_mbase_comb = block_m_base_q; next_nbase_comb = block_n_base_q;
-        next_merge_base_comb = merge_base_q;
-        next_merge_count_comb = merge_count_q;
-        next_merge_batch_base_comb = merge_batch_base_q;
-        next_merge_batch_count_comb = merge_batch_count_q;
-        merge_tiles_per_batch_comb = tm_q * tn_q;
-        merge_capacity_comb =
-            merge_batch_capacity(merge_tiles_per_batch_comb);
+        next_exists_calc = 1'b0;
+        next_bm_calc = bm_q; next_bn_calc = bn_q;
+        next_batch_idx_calc = batch_idx_q;
+        next_mbase_calc = block_m_base_q; next_nbase_calc = block_n_base_q;
+        next_merge_base_calc = merge_base_q;
+        next_merge_count_calc = merge_count_q;
+        next_merge_batch_base_calc = merge_batch_base_q;
+        next_merge_batch_count_calc = merge_batch_count_q;
 
         if (merge_mode_q) begin
             if (merge_batch_base_q + merge_batch_count_q < count_t'(batch_q)) begin
-                next_exists_comb = 1'b1;
-                next_merge_base_comb = merge_base_q + merge_count_q;
-                next_merge_batch_base_comb =
+                next_exists_calc = 1'b1;
+                next_merge_base_calc = merge_base_q + merge_count_q;
+                next_merge_batch_base_calc =
                     merge_batch_base_q + merge_batch_count_q;
-                next_merge_batch_count_comb = min_count(
-                    count_t'(batch_q) - next_merge_batch_base_comb,
-                    merge_capacity_comb);
-                next_merge_count_comb =
-                    next_merge_batch_count_comb * merge_tiles_per_batch_comb;
+                next_merge_batch_count_calc = min_count(
+                    count_t'(batch_q) - next_merge_batch_base_calc,
+                    merge_capacity_q);
+                next_merge_count_calc =
+                    next_merge_batch_count_calc * merge_tiles_per_batch_q;
             end
         end else if (block_n_base_q + bn_q < tn_q) begin
-            next_exists_comb = 1'b1;
-            next_nbase_comb = block_n_base_q + bn_q;
-            next_bn_comb = min_count(tn_q - next_nbase_comb, bn_limit_q);
+            next_exists_calc = 1'b1;
+            next_nbase_calc = block_n_base_q + bn_q;
+            next_bn_calc = min_count(tn_q - next_nbase_calc, bn_limit_q);
         end else if (block_m_base_q + bm_q < tm_q) begin
-            next_exists_comb = 1'b1;
-            next_mbase_comb = block_m_base_q + bm_q;
-            next_nbase_comb = 0;
-            next_bm_comb = min_count(tm_q - next_mbase_comb, bm_limit_q);
-            next_bn_comb = min_count(tn_q, bn_limit_q);
+            next_exists_calc = 1'b1;
+            next_mbase_calc = block_m_base_q + bm_q;
+            next_nbase_calc = 0;
+            next_bm_calc = min_count(tm_q - next_mbase_calc, bm_limit_q);
+            next_bn_calc = min_count(tn_q, bn_limit_q);
         end else if (batch_idx_q + 1 < batch_q) begin
-            next_exists_comb = 1'b1;
-            next_batch_idx_comb = batch_idx_q + 1'b1;
-            next_mbase_comb = 0;
-            next_nbase_comb = 0;
-            next_bm_comb = min_count(tm_q, bm_limit_q);
-            next_bn_comb = min_count(tn_q, bn_limit_q);
+            next_exists_calc = 1'b1;
+            next_batch_idx_calc = batch_idx_q + 1'b1;
+            next_mbase_calc = 0;
+            next_nbase_calc = 0;
+            next_bm_calc = min_count(tm_q, bm_limit_q);
+            next_bn_calc = min_count(tn_q, bn_limit_q);
+        end
+    end
+
+    logic lookahead_valid_q;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            lookahead_valid_q <= 1'b0;
+            lookahead_batch_idx_q <= '0;
+            lookahead_bm_q <= '0;
+            lookahead_bn_q <= '0;
+            lookahead_exists_q <= '0;
+            lookahead_mbase_q <= '0;
+            lookahead_merge_base_q <= '0;
+            lookahead_merge_batch_base_q <= '0;
+            lookahead_merge_batch_count_q <= '0;
+            lookahead_merge_count_q <= '0;
+            lookahead_nbase_q <= '0;
+        end else if ((state_q == SETUP_BLOCK) || boundary_group_swap_ready) begin
+            lookahead_valid_q <= 1'b0;
+        end else if (!lookahead_valid_q &&
+                     ((state_q == PRELOAD) || (state_q == WAVE))) begin
+            lookahead_valid_q <= 1'b1;
+            lookahead_batch_idx_q <= next_batch_idx_calc;
+            lookahead_bm_q <= next_bm_calc;
+            lookahead_bn_q <= next_bn_calc;
+            lookahead_exists_q <= next_exists_calc;
+            lookahead_mbase_q <= next_mbase_calc;
+            lookahead_merge_base_q <= next_merge_base_calc;
+            lookahead_merge_batch_base_q <= next_merge_batch_base_calc;
+            lookahead_merge_batch_count_q <= next_merge_batch_count_calc;
+            lookahead_merge_count_q <= next_merge_count_calc;
+            lookahead_nbase_q <= next_nbase_calc;
         end
     end
 
@@ -335,7 +362,7 @@ module new_static_uopparse #(
         load_next_block_wave0_comb = (state_q == WAVE) &&
             (gemm_wave_q + 1 >= tk_q);
         load_next_exists_comb = (state_q == OUTPUT_PRELOAD) ?
-            next_exists_q : next_exists_comb;
+            next_exists_q : lookahead_exists_q;
         if (state_q == OUTPUT_PRELOAD) begin
             load_bm_comb = next_bm_q;
             load_bn_comb = next_bn_q;
@@ -346,13 +373,13 @@ module new_static_uopparse #(
             load_merge_batch_base_comb = next_merge_batch_base_q;
             load_group_comb = next_load_base_group_q;
         end else if (load_from_next_comb) begin
-            load_bm_comb = next_bm_comb;
-            load_bn_comb = next_bn_comb;
-            load_batch_comb = next_batch_idx_comb;
-            load_mbase_comb = next_mbase_comb;
-            load_nbase_comb = next_nbase_comb;
-            load_merge_count_comb = next_merge_count_comb;
-            load_merge_batch_base_comb = next_merge_batch_base_comb;
+            load_bm_comb = lookahead_bm_q;
+            load_bn_comb = lookahead_bn_q;
+            load_batch_comb = lookahead_batch_idx_q;
+            load_mbase_comb = lookahead_mbase_q;
+            load_nbase_comb = lookahead_nbase_q;
+            load_merge_count_comb = lookahead_merge_count_q;
+            load_merge_batch_base_comb = lookahead_merge_batch_base_q;
             // wave 0 of the next block is written opposite the final GEMM's
             // operand half, independent of whether TK is odd or even.
             load_group_comb = ~(load_base_group_q ^ ~tk_q[0]);
@@ -368,37 +395,37 @@ module new_static_uopparse #(
         end
     end
 
-    // Decode only the offset inside a merge chunk.  It is bounded by
-    // MERGE_CAP, unlike the old global flattened index, so a finite bank of
-    // constant-coefficient comparisons is sufficient for batch/M/N recovery.
-    count_t load_merge_local_idx_comb;
-    count_t load_merge_batch_offset_comb;
-    count_t load_merge_in_batch_comb;
+    count_t load_merge_batch_offset_q, load_merge_m_q, load_merge_n_q;
     count_t load_merge_batch_comb;
-    count_t load_merge_m_comb, load_merge_n_comb;
-    always_comb begin
-        load_merge_local_idx_comb =
-            (load_a_q < load_merge_count_comb) ? load_a_q : load_b_q;
-        load_merge_batch_offset_comb = '0;
-        load_merge_in_batch_comb = load_merge_local_idx_comb;
-        for (int batch_off = 1; batch_off < MERGE_CAP; batch_off++) begin
-            if (load_merge_local_idx_comb >=
-                count_t'(batch_off) * merge_tiles_per_batch_comb) begin
-                load_merge_batch_offset_comb = count_t'(batch_off);
-                load_merge_in_batch_comb = load_merge_local_idx_comb -
-                    count_t'(batch_off) * merge_tiles_per_batch_comb;
-            end
-        end
+    assign load_merge_batch_comb = load_merge_batch_base_comb + load_merge_batch_offset_q;
+    wire preload_advance = (state_q == PRELOAD) && load_issue_done_q &&
+        (load_count_q == 0) && lookahead_valid_q;
+    wire load_restart = (state_q == SETUP_BLOCK) || preload_advance ||
+        (!wave_is_final && wave_group_swap_ready) || kwave_advance ||
+        boundary_group_swap_ready;
 
-        load_merge_batch_comb =
-            load_merge_batch_base_comb + load_merge_batch_offset_comb;
-        load_merge_m_comb = '0;
-        load_merge_n_comb = load_merge_in_batch_comb;
-        for (int m_off = 1; m_off < MERGE_CAP; m_off++) begin
-            if (load_merge_in_batch_comb >= count_t'(m_off) * tn_q) begin
-                load_merge_m_comb = count_t'(m_off);
-                load_merge_n_comb = load_merge_in_batch_comb -
-                    count_t'(m_off) * tn_q;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            load_merge_batch_offset_q <= '0;
+            load_merge_m_q <= '0;
+            load_merge_n_q <= '0;
+        end else if (load_restart ||
+                     (load_fire && !load_is_b_o &&
+                      (load_a_q + 1 >= load_merge_count_comb))) begin
+            load_merge_batch_offset_q <= '0;
+            load_merge_m_q <= '0;
+            load_merge_n_q <= '0;
+        end else if (load_fire && merge_mode_q) begin
+            if (load_merge_n_q + 1 < tn_q) begin
+                load_merge_n_q <= load_merge_n_q + 1'b1;
+            end else begin
+                load_merge_n_q <= '0;
+                if (load_merge_m_q + 1 < tm_q) begin
+                    load_merge_m_q <= load_merge_m_q + 1'b1;
+                end else begin
+                    load_merge_m_q <= '0;
+                    load_merge_batch_offset_q <= load_merge_batch_offset_q + 1'b1;
+                end
             end
         end
     end
@@ -419,117 +446,158 @@ module new_static_uopparse #(
             ~output_acc_group_q : acc_group_q;
     end
 
+    typedef struct packed {
+        logic is_b, group;
+        logic [ADDR_WIDTH-1:0] base, batch_offset, row_offset, offset;
+        logic [ABUF_IDX_WIDTH-1:0] abuf;
+        logic [BBUF_IDX_WIDTH-1:0] bbuf;
+        logic [LOAD_ROWS_WIDTH-1:0] valid_rows;
+    } load_prepared_t;
+    typedef struct packed {
+        logic group, acc_group, accum;
+        logic [ABUF_IDX_WIDTH-1:0] abuf;
+        logic [BBUF_IDX_WIDTH-1:0] bbuf;
+        logic [PACC_IDX_WIDTH-1:0] pacc_row, pacc_col;
+    } gemm_prepared_t;
+    typedef struct packed {
+        logic group;
+        logic [ADDR_WIDTH-1:0] base, batch_offset, row_offset, offset;
+        logic [PACC_IDX_WIDTH-1:0] pacc_row, pacc_col;
+    } output_prepared_t;
+    load_prepared_t load_prepared_d, load_prepared_q;
+    gemm_prepared_t gemm_prepared_d, gemm_prepared_q;
+    output_prepared_t output_prepared_d, output_prepared_q;
+    logic load_candidate_valid, gemm_candidate_valid, output_candidate_valid;
+    logic load_pending_q, gemm_pending_q, output_pending_q;
+    count_t load_a_limit_comb, load_b_limit_comb, load_tile_comb, load_wave_comb;
+
+    assign load_valid_o = load_pending_q;
+    assign load_is_b_o = load_prepared_q.is_b;
+    assign load_group_o = load_prepared_q.group;
+    assign load_addr_o = (load_prepared_q.base + load_prepared_q.batch_offset) +
+                         (load_prepared_q.row_offset + load_prepared_q.offset);
+    assign load_abufidx_o = load_prepared_q.abuf;
+    assign load_bbufidx_o = load_prepared_q.bbuf;
+    assign load_valid_rows_o = load_prepared_q.valid_rows;
+    assign gemm_valid_o = gemm_pending_q;
+    assign gemm_group_o = gemm_prepared_q.group;
+    assign gemm_abufidx_o = gemm_prepared_q.abuf;
+    assign gemm_bbufidx_o = gemm_prepared_q.bbuf;
+    assign gemm_paccidx_o = pacc_slot(gemm_prepared_q.acc_group,
+        count_t'(PACC_IDX_WIDTH'(gemm_prepared_q.pacc_row + gemm_prepared_q.pacc_col)));
+    assign gemm_accum_o = gemm_prepared_q.accum;
+    assign output_valid_o = output_pending_q;
+    assign output_group_o = output_prepared_q.group;
+    assign output_addr_o = (output_prepared_q.base + output_prepared_q.batch_offset) +
+                           (output_prepared_q.row_offset + output_prepared_q.offset);
+    assign output_paccidx_o = pacc_slot(output_prepared_q.group,
+        count_t'(PACC_IDX_WIDTH'(output_prepared_q.pacc_row + output_prepared_q.pacc_col)));
+
     always_comb begin
-        load_valid_o = 1'b0;
-        load_is_b_o = 1'b0;
-        // The final GEMM wave preloads the next block's wave 0.  In that
-        // special case the address and parity must use wave zero explicitly;
-        // OUTPUT_PRELOAD resumes the normal parity walk at wave one.
-        load_group_o = load_next_block_wave0_comb ? load_group_comb :
+        load_prepared_d = '0;
+        gemm_prepared_d = '0;
+        output_prepared_d = '0;
+        load_candidate_valid = 1'b0;
+        gemm_candidate_valid = 1'b0;
+        output_candidate_valid = 1'b0;
+        load_wave_comb = load_next_block_wave0_comb ? '0 : load_wave_q;
+        load_prepared_d.group = load_next_block_wave0_comb ? load_group_comb :
             (load_group_comb ^ load_wave_q[0]);
-        load_addr_o = '0;
-        load_abufidx_o = '0;
-        load_bbufidx_o = '0;
-        load_valid_rows_o = '0;
+        load_a_limit_comb = merge_mode_q ? load_merge_count_comb : load_bm_comb;
+        load_b_limit_comb = merge_mode_q ? load_merge_count_comb : load_bn_comb;
+        load_tile_comb = '0;
 
-        gemm_valid_o = 1'b0;
-        gemm_group_o = gemm_base_group_comb ^ gemm_wave_q[0];
-        gemm_abufidx_o = abuf_slot(gemm_group_o, gemm_m_q);
-        gemm_bbufidx_o = bbuf_slot(gemm_group_o, gemm_n_q);
-        gemm_paccidx_o = pacc_slot(gemm_acc_group_comb,
-            gemm_m_q * gemm_bn_comb + gemm_n_q);
-        gemm_accum_o = gemm_wave_q != 0;
-
-        output_valid_o = 1'b0;
-        output_group_o = output_acc_group_q;
-        output_addr_o = '0;
-        output_paccidx_o = pacc_slot(output_acc_group_q,
-            output_m_q * output_bn_q + output_n_q);
-
-        if (load_active_q && (!load_from_next_comb || load_next_exists_comb) &&
-            ((state_q == PRELOAD) || (state_q == WAVE) ||
-             (state_q == OUTPUT_PRELOAD)) && !load_issue_done_q) begin
-            if (load_a_q < (load_from_next_comb ?
-                            (merge_mode_q ? load_merge_count_comb : load_bm_comb) :
-                            (merge_mode_q ? merge_count_q : bm_q))) begin
-                load_valid_o = 1'b1;
-                load_is_b_o = 1'b0;
-                if (merge_mode_q) begin
-                    load_addr_o = a_base_q +
-                        addr_count(load_merge_batch_comb) *
-                        addr_count(tm_q) * addr_count(tk_q) +
-                        addr_count(load_merge_m_comb) *
-                        addr_count(tk_q) +
-                        addr_count(load_next_block_wave0_comb ? 0 : load_wave_q);
-                    load_abufidx_o = abuf_slot(load_group_o, load_a_q);
-                    load_valid_rows_o = valid_rows(
-                        load_merge_m_comb, m_q, SUBTILE_M);
-                end else begin
-                    load_addr_o = a_base_q +
-                        addr_count(load_batch_comb) * addr_count(tm_q) *
-                        addr_count(tk_q) +
-                        (addr_count(load_mbase_comb) + addr_count(load_a_q)) *
-                        addr_count(tk_q) + addr_count(load_wave_q);
-                    load_abufidx_o = abuf_slot(load_group_o, load_a_q);
-                    load_valid_rows_o = valid_rows(
-                        load_mbase_comb + load_a_q, m_q, SUBTILE_M);
-                end
-            end else if (load_b_q < (load_from_next_comb ?
-                                     (merge_mode_q ? load_merge_count_comb : load_bn_comb) :
-                                     (merge_mode_q ? merge_count_q : bn_q))) begin
-                load_valid_o = 1'b1;
-                load_is_b_o = 1'b1;
-                if (merge_mode_q) begin
-                    load_addr_o = b_base_q +
-                        addr_count(load_merge_batch_comb) *
-                        addr_count(tk_q) * addr_count(tn_q) +
-                        addr_count(load_next_block_wave0_comb ? 0 : load_wave_q) *
-                        addr_count(tn_q) +
-                        addr_count(load_merge_n_comb);
-                    load_bbufidx_o = bbuf_slot(load_group_o, load_b_q);
-                    load_valid_rows_o = valid_rows(
-                        load_merge_n_comb, n_q, SUBTILE_N);
-                end else begin
-                    load_addr_o = b_base_q +
-                        addr_count(load_batch_comb) * addr_count(tk_q) *
-                        addr_count(tn_q) +
-                        addr_count(load_next_block_wave0_comb ? 0 : load_wave_q) *
-                        addr_count(tn_q) +
-                        addr_count(load_nbase_comb) + addr_count(load_b_q);
-                    load_bbufidx_o = bbuf_slot(load_group_o, load_b_q);
-                    load_valid_rows_o = valid_rows(
-                        load_nbase_comb + load_b_q, n_q, SUBTILE_N);
-                end
+        if (load_active_q && !load_issue_done_q &&
+            (!load_from_next_comb ||
+             (load_next_exists_comb && ((state_q != WAVE) || lookahead_valid_q))) &&
+            ((state_q == PRELOAD) || (state_q == WAVE) || (state_q == OUTPUT_PRELOAD))) begin
+            if (load_a_q < load_a_limit_comb) begin
+                load_candidate_valid = 1'b1;
+                load_prepared_d.base = a_base_q;
+                load_prepared_d.batch_offset =
+                    addr_count(merge_mode_q ? load_merge_batch_comb : load_batch_comb) * a_batch_stride_q;
+                load_tile_comb = merge_mode_q ? load_merge_m_q : load_mbase_comb + load_a_q;
+                load_prepared_d.row_offset = addr_count(load_tile_comb) * addr_count(tk_q);
+                load_prepared_d.offset = addr_count(load_wave_comb);
+                load_prepared_d.abuf = abuf_slot(load_prepared_d.group, load_a_q);
+                load_prepared_d.valid_rows = valid_rows(load_tile_comb, m_q, SUBTILE_M);
+            end else if (load_b_q < load_b_limit_comb) begin
+                load_candidate_valid = 1'b1;
+                load_prepared_d.is_b = 1'b1;
+                load_prepared_d.base = b_base_q;
+                load_prepared_d.batch_offset =
+                    addr_count(merge_mode_q ? load_merge_batch_comb : load_batch_comb) * b_batch_stride_q;
+                load_prepared_d.row_offset = addr_count(load_wave_comb) * addr_count(tn_q);
+                load_tile_comb = merge_mode_q ? load_merge_n_q : load_nbase_comb + load_b_q;
+                load_prepared_d.offset = addr_count(load_tile_comb);
+                load_prepared_d.bbuf = bbuf_slot(load_prepared_d.group, load_b_q);
+                load_prepared_d.valid_rows = valid_rows(load_tile_comb, n_q, SUBTILE_N);
             end
         end
 
         if (((state_q == WAVE) || gemm_from_next_comb) && !gemm_sent_q &&
             (merge_mode_q ? (gemm_m_q < gemm_merge_count_comb) :
              (gemm_m_q < gemm_bm_comb && gemm_n_q < gemm_bn_comb))) begin
-            gemm_valid_o = 1'b1;
-            gemm_abufidx_o = abuf_slot(gemm_group_o, gemm_m_q);
-            gemm_bbufidx_o = bbuf_slot(gemm_group_o,
+            gemm_candidate_valid = 1'b1;
+            gemm_prepared_d.group = gemm_base_group_comb ^ gemm_wave_q[0];
+            gemm_prepared_d.acc_group = gemm_acc_group_comb;
+            gemm_prepared_d.accum = gemm_wave_q != 0;
+            gemm_prepared_d.abuf = abuf_slot(gemm_prepared_d.group, gemm_m_q);
+            gemm_prepared_d.bbuf = bbuf_slot(gemm_prepared_d.group,
                 merge_mode_q ? gemm_m_q : gemm_n_q);
-            gemm_paccidx_o = pacc_slot(gemm_acc_group_comb,
-                merge_mode_q ? gemm_m_q : gemm_m_q * gemm_bn_comb + gemm_n_q);
+            gemm_prepared_d.pacc_row = merge_mode_q ? PACC_IDX_WIDTH'(gemm_m_q) :
+                PACC_IDX_WIDTH'(gemm_m_q) * PACC_IDX_WIDTH'(gemm_bn_comb);
+            gemm_prepared_d.pacc_col = merge_mode_q ? '0 : PACC_IDX_WIDTH'(gemm_n_q);
         end
 
         if ((state_q == OUTPUT_PRELOAD) && !output_issue_done_q &&
             (gemm_count_q[0] == 0) &&
             (merge_mode_q ? (output_m_q < output_merge_count_q) :
              (output_m_q < output_bm_q && output_n_q < output_bn_q))) begin
-            output_valid_o = 1'b1;
-            output_addr_o = c_base_q +
-                (merge_mode_q ?
-                    (addr_count(output_merge_base_q) + addr_count(output_m_q)) :
-                    (addr_count(output_batch_idx_q) * addr_count(tm_q) *
-                     addr_count(tn_q) +
-                     (addr_count(output_block_m_base_q) + addr_count(output_m_q)) *
-                     addr_count(tn_q) + addr_count(output_block_n_base_q) +
-                     addr_count(output_n_q)));
-            output_paccidx_o = pacc_slot(output_acc_group_q,
-                merge_mode_q ? output_m_q :
-                output_m_q * output_bn_q + output_n_q);
+            output_candidate_valid = 1'b1;
+            output_prepared_d.group = output_acc_group_q;
+            output_prepared_d.base = c_base_q;
+            if (merge_mode_q) begin
+                output_prepared_d.offset = addr_count(output_merge_base_q) + addr_count(output_m_q);
+                output_prepared_d.pacc_row = PACC_IDX_WIDTH'(output_m_q);
+            end else begin
+                output_prepared_d.batch_offset = addr_count(output_batch_idx_q) * c_batch_stride_q;
+                output_prepared_d.row_offset =
+                    addr_count(output_block_m_base_q + output_m_q) * addr_count(tn_q);
+                output_prepared_d.offset = addr_count(output_block_n_base_q + output_n_q);
+                output_prepared_d.pacc_row = PACC_IDX_WIDTH'(output_m_q) * PACC_IDX_WIDTH'(output_bn_q);
+                output_prepared_d.pacc_col = PACC_IDX_WIDTH'(output_n_q);
+            end
+        end
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            load_pending_q <= 1'b0;
+            gemm_pending_q <= 1'b0;
+            output_pending_q <= 1'b0;
+            load_prepared_q <= '0;
+            gemm_prepared_q <= '0;
+            output_prepared_q <= '0;
+        end else begin
+            if (load_pending_q) begin
+                if (load_ready_i) load_pending_q <= 1'b0;
+            end else if (load_candidate_valid) begin
+                load_prepared_q <= load_prepared_d;
+                load_pending_q <= 1'b1;
+            end
+            if (gemm_pending_q) begin
+                if (gemm_ready_i) gemm_pending_q <= 1'b0;
+            end else if (gemm_candidate_valid) begin
+                gemm_prepared_q <= gemm_prepared_d;
+                gemm_pending_q <= 1'b1;
+            end
+            if (output_pending_q) begin
+                if (output_ready_i) output_pending_q <= 1'b0;
+            end else if (output_candidate_valid) begin
+                output_prepared_q <= output_prepared_d;
+                output_pending_q <= 1'b1;
+            end
         end
     end
 
@@ -557,8 +625,9 @@ module new_static_uopparse #(
             next_merge_batch_count_q <= '0;
             bm_limit_q <= '0;
             bn_limit_q <= '0;
-            end else begin
-                // All three counters use net updates, so a completion and a new
+            merge_mode_q <= 1'b0;
+        end else begin
+            // All three counters use net updates, so a completion and a new
             // issue in one cycle do not overwrite one another.
             if (load_fire && !load_done_event)
                 load_count_q <= load_count_q + 1'b1;
@@ -601,21 +670,36 @@ module new_static_uopparse #(
                 bm_limit_q <= min_count(cmd_tm_comb, count_t'(block_m_i));
                 bn_limit_q <= min_count(cmd_tn_comb, count_t'(block_n_i));
                 batch_idx_q <= 0; block_m_base_q <= 0; block_n_base_q <= 0;
-                merge_mode_q <= cmd_merge_enabled_comb;
                 merge_base_q <= 0;
-                merge_count_q <= cmd_merge_enabled_comb ?
-                    cmd_merge_batch_count_comb * cmd_tiles_per_batch_comb : '0;
+                merge_count_q <= '0;
                 merge_batch_base_q <= '0;
-                merge_batch_count_q <= cmd_merge_enabled_comb ?
-                    cmd_merge_batch_count_comb : '0;
+                merge_batch_count_q <= '0;
                 load_base_group_q <= 1'b0; acc_group_q <= 1'b0;
                 load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
-                load_active_q <= 1'b1; load_issue_done_q <= 1'b0; load_ready_q <= 1'b0;
+                load_active_q <= 1'b0; load_issue_done_q <= 1'b0; load_ready_q <= 1'b0;
                 gemm_count_q[0] <= 0; gemm_count_q[1] <= 0;
                 output_count_q <= 0;
                 output_issue_done_q <= 1'b1;
-                state_q <= PRELOAD;
+                state_q <= SETUP_STRIDES;
             end else begin
+                if (state_q == SETUP_STRIDES) state_q <= SETUP_MERGE;
+                if (state_q == SETUP_MERGE) begin
+                    merge_mode_q <= (batch_q > 1) && (tile_area_q != 0) &&
+                        (tile_area_q <= (2*(DIM_WIDTH+1))'(MERGE_CAP >> 1));
+                    if ((batch_q > 1) && (tile_area_q != 0) &&
+                        (tile_area_q <= (2*(DIM_WIDTH+1))'(MERGE_CAP >> 1)))
+                        state_q <= SETUP_CAPACITY;
+                    else state_q <= SETUP_BLOCK;
+                end
+                if ((state_q == SETUP_CAPACITY) && merge_capacity_done)
+                    state_q <= SETUP_BLOCK;
+                if (state_q == SETUP_BLOCK) begin
+                    merge_batch_count_q <= merge_mode_q ? merge_capacity_q : '0;
+                    merge_count_q <= merge_mode_q ?
+                        count_t'(MERGE_CAP) - merge_capacity_left_q : '0;
+                    load_active_q <= 1'b1;
+                    state_q <= PRELOAD;
+                end
                 if (load_fire) begin
                     if (!load_is_b_o) load_a_q <= load_a_q + 1'b1;
                     else load_b_q <= load_b_q + 1'b1;
@@ -652,7 +736,7 @@ module new_static_uopparse #(
                          output_m_q + 1 >= output_merge_count_q))
                         output_issue_done_q <= 1'b1;
                 end
-                if ((state_q == PRELOAD) && load_issue_done_q && load_count_q == 0) begin
+                if (preload_advance) begin
                     gemm_wave_q <= 0; gemm_m_q <= 0; gemm_n_q <= 0;
                     gemm_sent_q <= 1'b0;
                     load_ready_q <= 1'b0;
@@ -661,7 +745,7 @@ module new_static_uopparse #(
                         load_active_q <= 1'b1; load_issue_done_q <= 1'b0;
                     end else begin
                         load_wave_q <= 0; load_a_q <= 0; load_b_q <= 0;
-                        load_active_q <= next_exists_comb;
+                        load_active_q <= lookahead_exists_q;
                         load_issue_done_q <= 1'b0;
                     end
                     state_q <= WAVE;
@@ -681,7 +765,7 @@ module new_static_uopparse #(
                             // preload the following block's wave 0 alongside it.
                             load_wave_q <= 0;
                             load_a_q <= 0; load_b_q <= 0;
-                            load_active_q <= next_exists_comb;
+                            load_active_q <= lookahead_exists_q;
                             load_issue_done_q <= 1'b0;
                         end
                     end else begin
@@ -695,15 +779,15 @@ module new_static_uopparse #(
                         output_merge_base_q <= merge_base_q;
                         output_merge_count_q <= merge_count_q;
                         output_acc_group_q <= acc_group_q;
-                        next_exists_q <= next_exists_comb;
-                        next_bm_q <= next_bm_comb; next_bn_q <= next_bn_comb;
-                        next_batch_idx_q <= next_batch_idx_comb;
-                        next_block_m_base_q <= next_mbase_comb;
-                        next_block_n_base_q <= next_nbase_comb;
-                        next_merge_base_q <= next_merge_base_comb;
-                        next_merge_count_q <= next_merge_count_comb;
-                        next_merge_batch_base_q <= next_merge_batch_base_comb;
-                        next_merge_batch_count_q <= next_merge_batch_count_comb;
+                        next_exists_q <= lookahead_exists_q;
+                        next_bm_q <= lookahead_bm_q; next_bn_q <= lookahead_bn_q;
+                        next_batch_idx_q <= lookahead_batch_idx_q;
+                        next_block_m_base_q <= lookahead_mbase_q;
+                        next_block_n_base_q <= lookahead_nbase_q;
+                        next_merge_base_q <= lookahead_merge_base_q;
+                        next_merge_count_q <= lookahead_merge_count_q;
+                        next_merge_batch_base_q <= lookahead_merge_batch_base_q;
+                        next_merge_batch_count_q <= lookahead_merge_batch_count_q;
                         next_load_base_group_q <= load_group_comb;
                         // Derive the next PACC half from the half being
                         // retired, rather than from a separately toggled
@@ -718,7 +802,7 @@ module new_static_uopparse #(
                         gemm_m_q <= 0; gemm_n_q <= 0;
                         gemm_sent_q <= 1'b0;
                         load_ready_q <= 1'b0;
-                        if (next_exists_comb && tk_q > 1) begin
+                        if (lookahead_exists_q && tk_q > 1) begin
                             load_wave_q <= 1; load_a_q <= 0; load_b_q <= 0;
                             load_active_q <= 1'b1; load_issue_done_q <= 1'b0;
                         end else load_active_q <= 1'b0;

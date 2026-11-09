@@ -347,17 +347,37 @@ bool ready_bursty(uint64_t cycle) {
     return phase < 5 || phase == 9 || phase == 12;
 }
 
+bool ready_long_stall(uint64_t cycle) {
+    return (cycle % 67) >= 53;
+}
+
 void run_sequence(const std::string& name,
                   const std::vector<Cmd>& cmds,
-                  ReadyFn ready_fn) {
+                  ReadyFn ready_fn,
+                  int reset_after = -1) {
     Tb tb;
     tb.reset();
+
+    if (reset_after >= 0) {
+        drive_cmd(tb.dut, cmds.front());
+        tb.dut.cmd_valid_i = 1;
+        tb.dut.uop_ready_i = 0;
+        tb.tick();
+        tb.dut.cmd_valid_i = 0;
+        for (int i = 0; i < reset_after; ++i) tb.tick();
+        tb.reset();
+        tb.dut.eval();
+        if (!tb.dut.cmd_ready_o || tb.dut.uop_valid_o)
+            fail(name + ": reset did not flush the prepared/stalled uop");
+    }
 
     const std::vector<Uop> expected = reference_for_cmds(cmds);
     size_t cmd_idx = 0;
     size_t exp_idx = 0;
     bool have_hold = false;
     Uop hold;
+    uint64_t last_issue_cycle = 0;
+    std::string last_issue_tag;
 
     const uint64_t max_cycles = 20000 + expected.size() * 20 + cmds.size() * 20;
     while (tb.cycle < max_cycles) {
@@ -392,6 +412,14 @@ void run_sequence(const std::string& name,
                     fail(os.str());
                 }
                 compare_uop(got, expected[exp_idx], exp_idx, tb.cycle);
+                if (last_issue_cycle && tb.cycle - last_issue_cycle < 2)
+                    fail(name + ": issue interval < 2 cycles");
+                if (ready_fn == ready_always && last_issue_cycle &&
+                    last_issue_tag == expected[exp_idx].tag &&
+                    tb.cycle - last_issue_cycle != 2)
+                    fail(name + ": continuous throughput is not one uop per two cycles");
+                last_issue_cycle = tb.cycle;
+                last_issue_tag = expected[exp_idx].tag;
                 ++exp_idx;
                 have_hold = false;
             } else {
@@ -574,6 +602,17 @@ int main(int argc, char** argv) {
         run_sequence("batched_independent", {batched_small}, ready_periodic_stall);
 
         run_sequence("target_extremes", target_extreme_cmds(), ready_bursty);
+        run_sequence("long_backpressure", target_extreme_cmds(), ready_long_stall);
+        run_sequence("two_cycle_continuous", target_extreme_cmds(), ready_always);
+        Cmd wrap{0xfffffff0u, 0xffffffe0u, 0xffffffd0u,
+                 static_cast<uint32_t>(3 * kSubtileM + 1),
+                 static_cast<uint32_t>(3 * kSubtileN + 1),
+                 static_cast<uint32_t>(3 * kSubtileK + 1), "address_wrap"};
+        wrap.batch = 3;
+        run_sequence("address_wrap", {wrap}, ready_periodic_stall);
+        run_sequence("reset_during_setup", {wrap}, ready_always, 0);
+        run_sequence("reset_during_prepare", {wrap}, ready_always, 1);
+        run_sequence("reset_with_stalled_uop", {wrap}, ready_always, 4);
         run_sequence("random_stress", random_cmds(seed), ready_periodic_stall);
 
         std::cout << "dynamic_uopparse tests passed\n";
