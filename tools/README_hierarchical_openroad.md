@@ -32,14 +32,18 @@ are read from OpenDB at runtime, never invented by dry run. Dry run does not sta
 OpenROAD, Yosys, KLayout or Make. It reads/hashes tool and ORFS files to record the
 toolchain identity, and sources the project environment script.
 
-There are 18 unique tasks:
+There are 12 unique tasks; SRAM modules are ordinary RTL inside their owning
+task and are never exported as separate hardware macros:
 
 | Tasks | Implementation |
 | --- | --- |
-| Six SRAM variants | Full behavioral storage mapped to standard cells and hardened |
-| Three PEs | Instantiate the matching published 2R1W SRAM; other PE logic remains local |
+| Three PEs | Inline 2R1W SRAM, FDOT and PACC RTL into each PE hard macro |
 | Three SAs | Instantiate 256/1024/4096 matching PE macros in a fixed grid |
-| Six `staticsrc/top_*.sv` modules | Instantiate the SA and operand 1R1W SRAM banks; remaining logic stays local |
+| Six `staticsrc/top_*.sv` modules | Instantiate the SA macro; inline operand 1R1W SRAM banks and remaining logic |
+
+Any SRAM reached inside other inlined logic is also retained in the same task.
+Storage capacity and RTL read/write behavior are preserved. Only PE and SA
+boundaries become child black boxes; there are no SRAM LEF/Liberty/GDS imports.
 
 The scheduler builds the task DAG before execution and maintains a ready queue
 and each node's remaining dependencies. Whenever any task finishes, its parents
@@ -55,7 +59,7 @@ the native tool defaults to one OpenROAD thread per task, independently controll
 by JSON `openroad_threads`. Changing only `-j`/`workers` preserves completed
 implementations and stage checkpoints when resuming the same workspace.
 Task logs include a stable dependency-order index, for example
-`[任务 7/18] pe__... synth @ 1000.0 ps`. The index identifies the module across
+`[任务 1/12] pe__... synth @ 1000.0 ps`. The index identifies the module across
 concurrent workers and restarts; it is not the number of completed tasks.
 Each backend stage log also records this label in its `TASK:` header.
 Memory mocking is disabled and the inferred memory limit defaults to 1,048,576
@@ -81,11 +85,11 @@ all signal pins, VDD/VSS and the clock attribute. Runtime hooks additionally
 check actual macro instance counts, overlap, core containment, VDD/VSS connections
 and routed completion. Macro placements are fixed (`place_macro` locks them).
 
-SRAMs have square floorplans. A PE centers its SRAM and gives its directional
-data ports corresponding sides. SA row 0 is at the top and column 0 is at the
-left. Top operand bank group A is on the left and B is above its SA. Bank groups
-are distinguished by their original instance hierarchy prefixes (`ab`/`bb` or
-`u_abuf`/`u_bbuf`). Default channels are 2 μm, halos 1 μm, and core margin 2 μm.
+PEs have square standard-cell floorplans, including their inlined storage, and
+give directional data ports corresponding sides. SA row 0 is at the top and
+column 0 is at the left. Top centers its single SA macro; operand banks are
+standard-cell logic placed with the other local logic. Default macro channels
+are 2 μm, halos 1 μm, and core margin 2 μm.
 Core sizing satisfies geometry and macro footprint plus local standard-cell
 area / 50%. Native placement snaps macro positions to routing tracks.
 
@@ -122,6 +126,28 @@ violations. Each retry reruns the complete implementation and extracted checks;
 remaining hold failures are reported as failures after the configured attempt
 limit. Negative slack is never rounded away or accepted.
 
+`hold_max_buffer_percent` defaults to **100**, replacing OpenROAD's default 20%
+hold-buffer budget. This is a count budget relative to design instances at the
+start of each repair call, not a placement-utilization percentage. Valid settings
+are integers 1..100. The installed OpenROAD API does not provide an unlimited
+setting: 100 is its maximum supported percentage, and 0 still leaves a finite
+minimum-count cap rather than disabling the limit.
+
+Generated `PRE_CTS_TCL` and `PRE_GLOBAL_ROUTE_TCL` hooks install a local adapter
+around ORFS `repair_timing_helper`, preserving its existing options and adding
+`-max_buffer_percent`. No installed OpenROAD/ORFS sources are modified. The
+adapter is idempotent and applies to every PE, SA and Top task, including
+standard-cell storage inside those tasks.
+
+If a lower configured budget triggers `RSZ-0060: Max buffer count reached` during
+CTS or routing, the runner raises that task's budget directly to 100 and retries
+the same stage/constraint once. Earlier verified stages are reused, and the
+failed log is archived as `*.buffer-cap-<percent>.log`. The increased budget is
+checkpointed before retry, retained across restart and carried into later sweep
+points. At 100%, another cap error is an explicit `hold_buffer_limit` failure;
+the runner never loops indefinitely or treats it as a frequency result. Setup,
+hold, routing and publication acceptance criteria remain unchanged.
+
 The effective hold repair margin is saved in each attempt's configuration,
 SQLite record, metrics and reports. Restart reconstructs the same per-attempt
 margin before reusing stage checkpoints. A completed attempt means its flow
@@ -141,7 +167,7 @@ I/O budget, not a proof of a globally optimal frequency.
 
 After real execution, `reports/` contains per-node JSON/Markdown and a
 `summary.json`, `summary.csv` and `summary.md`. The primary requested results are
-the three PEs, three SAs and six Tops; SRAM reports are also retained. Reports
+the three PEs, three SAs and six Tops. No standalone SRAM reports are generated. Reports
 distinguish the convergence point, the published implementation's estimated
 frequency and the actually verified operating frequency. All area/timing values
 in a published row come from the same attempt.
@@ -158,9 +184,17 @@ committed only after successful exit and artifact validation. Restart hashes
 completed artifacts before reuse. A changed RTL/config/tool/flow/child view
 invalidates the affected node and its parents. A new frequency has independent
 checkpoints; an interrupted frequency resumes at its first unverified stage.
+When a normal run opens an older 18-task workspace, obsolete standalone SRAM
+task records are moved transactionally into SQLite `retired_tasks`; their
+attempts, reports and published directories remain available as history. They
+are excluded from the new scheduler and report summaries. Read-only `--status`
+also excludes these legacy tasks from the current task list. The changed task
+decomposition invalidates old PE/SA/Top fingerprints and requires rebuilding
+those implementations with inlined memories.
 Each task also has an independent, transactionally saved `progress` cursor in
 SQLite. It records search/publication mode, iteration, target period, hold repair
 margin, current stage and the converged search metrics needed for publication.
+The cursor also records the effective hold-buffer budget.
 The next chosen constraint is saved before it starts, and the stage is saved
 before execution. Restart goes directly to this cursor, without replaying prior
 frequency points. Verified stages at the current point are checked and reused;
@@ -208,7 +242,7 @@ Tests use separate `SIMULATED-*` workspaces and a synthetic subprocess backend.
 They exercise real process groups, inherited locks, SQLite, checksums and
 SIGKILL at stage-write/commit and publication boundaries, not just in-memory
 exceptions. They also check configurable concurrency, starting a ready parent
-while an unrelated SRAM is still running, and checkpoint reuse after changing
+while an unrelated PE is still running, and checkpoint reuse after changing
 the worker count. Test artifacts and reports are explicitly marked synthetic and cannot
 be mixed with a native workspace. No real macro performance results are provided
 by these tests. A real physical end-to-end integration run remains to be performed
@@ -219,6 +253,7 @@ hold margin against the local ORFS timing helper when available, and simulates
 hold-only repair, combined setup/hold failures, exhausted retries and restart
 during an attempt with an increased hold margin. Full tests remain synthetic;
 loading a generated SDC into the local OpenROAD is a separate integration check.
-Reset-filter execution covers all 18 real manifest tasks. Increased-margin input
-generation is checked for SRAM, PE, SA and Top, so the repair policy is not
-restricted to the first failing SRAM or PE.
+Reset-filter execution covers all 12 real manifest tasks. Increased-margin input
+generation is checked for PE, SA and Top. Dry-run coverage verifies inlined
+SRAM sources, absence of SRAM black boxes, and the PE-to-SA-to-Top macro graph;
+layout checks cover PE standard-cell floorplans and the centered SA at Top.

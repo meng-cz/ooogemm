@@ -12,6 +12,7 @@
   "publication_margin": 0.02,
   "hold_slack_margin_ps": 5.0,
   "hold_retry_margin_step_ps": 5.0,
+  "hold_max_buffer_percent": 100,
   "max_search_iterations": 12,
   "max_publication_iterations": 3,
   "io_budget_fraction": 0.2,

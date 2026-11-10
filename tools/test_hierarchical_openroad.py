@@ -56,6 +56,7 @@ class FakeBackend:
         atomic_json(description, {"task": job["task"].record, "kind": job["task"].kind,
                     "dependencies": dict(job["task"].dependencies), "period": job["period"],
                     "hold_slack_margin_ps": job["hold_slack_margin_ps"],
+                    "hold_max_buffer_percent": job["hold_max_buffer_percent"],
                     "directory": str(job["directory"]), "work": str(self.work)})
         return [sys.executable, "-S", str(TEST_FILE), "_fake-stage", str(description), phase]
 
@@ -71,7 +72,8 @@ def fake_stage(description, phase):
     for path in paths.values():
         path.mkdir(parents=True, exist_ok=True)
     event = {"task": task.name, "phase": phase, "attempt": directory.name, "pid": os.getpid(),
-             "hold_slack_margin_ps": data["hold_slack_margin_ps"]}
+             "hold_slack_margin_ps": data["hold_slack_margin_ps"],
+             "hold_max_buffer_percent": data["hold_max_buffer_percent"]}
     journal(work / "journal.jsonl", {**event, "event": "start"})
     atomic_write(work / ("started-" + task.name), "SIMULATED TASK STARTED\n")
     wait_for = control.get("wait_for_task", {})
@@ -83,6 +85,10 @@ def fake_stage(description, phase):
                 return 8
             time.sleep(.01)
     outputs = h.phase_outputs(job, phase)
+    if (phase == control.get("buffer_cap_phase", "cts")
+            and data["hold_max_buffer_percent"] < control.get("required_buffer_percent", 0)):
+        print("[ERROR RSZ-0060] Max buffer count reached.", flush=True)
+        return 6
     if (control.get("sleep_task") == task.name and control.get("sleep_phase") == phase
             and directory.name.startswith(control.get("sleep_attempt", ""))):
         marker = work / "sleep_consumed"
@@ -145,14 +151,17 @@ def make_fixture(root, extra_roots=0):
     source.mkdir()
     ports = [{"name": n, "direction": d, "type": BIT} for n, d in
              (("clk", "input"), ("rst_n", "input"), ("d", "input"), ("q", "output"))]
+    # The artificial extra PE level stresses generic DAG depth in mock tests.
     specs = [
-        ("sram_a", "sram2r1w", [], {"SIZE": 8, "WIDTH": 1}),
-        ("sram_b", "sram1r1w", [], {"SIZE": 8, "WIDTH": 1}),
-        ("pe__fixture", "pe", [("sram_a", 1)], {}),
+        ("ram_a", "sram2r1w", [], {"SIZE": 8, "WIDTH": 1}),
+        ("ram_b", "sram1r1w", [], {"SIZE": 8, "WIDTH": 1}),
+        ("pe_leaf_a", "pe", [("ram_a", 1)], {"SIZE": 8, "WIDTH": 1}),
+        ("pe_leaf_b", "pe", [("ram_b", 1)], {"SIZE": 8, "WIDTH": 1}),
+        ("pe__fixture", "pe", [("pe_leaf_a", 1)], {}),
         ("sa__fixture", "sa", [("pe__fixture", 1)], {"SUBTILE_M": 1, "SUBTILE_N": 1}),
-        ("top_fixture", "top_static", [("sa__fixture", 1), ("sram_b", 2)], {"SUBTILE_M": 1, "SUBTILE_N": 1}),
+        ("top_fixture", "top_static", [("sa__fixture", 1), ("pe_leaf_b", 2)], {"SUBTILE_M": 1, "SUBTILE_N": 1}),
     ]
-    specs += [(f"sram_extra_{index}", "sram1r1w", [], {"SIZE": 8, "WIDTH": 1})
+    specs += [(f"pe_extra_{index}", "pe", [], {"SIZE": 8, "WIDTH": 1})
               for index in range(extra_roots)]
     modules = []
     for name, original, children, parameters in specs:
@@ -192,6 +201,19 @@ def coordinator(work, manifest):
 
 
 class PureFunctions(unittest.TestCase):
+    def test_hold_buffer_budget_config(self):
+        self.assertEqual(h.load_config()["hold_max_buffer_percent"], 100)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'config.json'
+            for value in (0, -1, 101, True, 100.5, "100", None):
+                with self.subTest(value=value):
+                    atomic_json(path, {"hold_max_buffer_percent": value})
+                    with self.assertRaises(FlowError):
+                        h.load_config(path)
+            for value in (1, 20, 100):
+                atomic_json(path, {"hold_max_buffer_percent": value})
+                self.assertEqual(h.load_config(path)["hold_max_buffer_percent"], value)
+
     def test_sweep_cursors_are_durable_independent_and_fingerprint_scoped(self):
         with tempfile.TemporaryDirectory(prefix="SIMULATED-sweep-cursor-") as tmp:
             root = Path(tmp)
@@ -200,7 +222,7 @@ class PureFunctions(unittest.TestCase):
             engine = h.Engine(graph, work, h.load_config(), FakeBackend(work))
             try:
                 engine.prepare(False)
-                for name, period in (("sram_a", 700), ("sram_b", 850)):
+                for name, period in (("pe_leaf_a", 700), ("pe_leaf_b", 850)):
                     point = engine.sweep_point(graph.tasks[name], name + "-fp", index=2, period=period)
                     engine.save_sweep(graph.tasks[name], dict(point, phase="route"))
             finally:
@@ -208,10 +230,10 @@ class PureFunctions(unittest.TestCase):
             engine = h.Engine(graph, work, h.load_config(), FakeBackend(work))
             try:
                 with patch.object(subprocess, "Popen", side_effect=AssertionError("backend invoked")):
-                    for name, period in (("sram_a", 700), ("sram_b", 850)):
+                    for name, period in (("pe_leaf_a", 700), ("pe_leaf_b", 850)):
                         point = engine.restore_sweep(graph.tasks[name], name + "-fp")
                         self.assertEqual((point["index"], point["period_ps"], point["phase"]), (2, period, "route"))
-                    fresh = engine.restore_sweep(graph.tasks["sram_a"], "changed-fp")
+                    fresh = engine.restore_sweep(graph.tasks["pe_leaf_a"], "changed-fp")
                     self.assertEqual((fresh["index"], fresh["period_ps"]), (0, 1000))
             finally:
                 engine.close()
@@ -278,24 +300,24 @@ class PureFunctions(unittest.TestCase):
             graph = h.Graph(make_fixture(tmp), expected=False)
             tasks = graph.tasks
             schedule = h.TaskSchedule(tasks, {name: "pending" for name in tasks})
-            self.assertEqual([schedule.pop_ready(), schedule.pop_ready()], ["sram_a", "sram_b"])
-            schedule.complete("sram_a", "done")
+            self.assertEqual([schedule.pop_ready(), schedule.pop_ready()], ["pe_leaf_a", "pe_leaf_b"])
+            schedule.complete("pe_leaf_a", "done")
             self.assertEqual(schedule.pop_ready(), "pe__fixture")
             schedule.complete("pe__fixture", "done")
             self.assertEqual(schedule.pop_ready(), "sa__fixture")
             schedule.complete("sa__fixture", "done")
             self.assertIsNone(schedule.pop_ready())  # Shared top still needs B.
-            schedule.complete("sram_b", "done")
+            schedule.complete("pe_leaf_b", "done")
             self.assertEqual(schedule.pop_ready(), "top_fixture")
             self.assertIsNone(schedule.pop_ready())
             # Initial failures propagate transitively before anything starts.
             statuses = {name: "pending" for name in tasks}
-            statuses["sram_a"] = "failed"
+            statuses["pe_leaf_a"] = "failed"
             failed = h.TaskSchedule(tasks, statuses)
             self.assertEqual({name for name, _ in failed.blocked},
                              {"pe__fixture", "sa__fixture", "top_fixture"})
-            self.assertEqual(failed.pop_ready(), "sram_b")
-            tasks["sram_a"].dependencies["top_fixture"] = 1
+            self.assertEqual(failed.pop_ready(), "pe_leaf_b")
+            tasks["pe_leaf_a"].dependencies["top_fixture"] = 1
             with self.assertRaisesRegex(FlowError, "Cyclic"):
                 h.TaskSchedule(tasks, statuses)
 
@@ -352,19 +374,40 @@ class PureFunctions(unittest.TestCase):
             try:
                 with patch.object(subprocess, "Popen", side_effect=AssertionError("backend invoked")):
                     plan = engine.dry_run()
-                self.assertEqual(Counter(t["kind"] for t in plan["tasks"]), {"sram": 6, "pe": 3, "sa": 3, "top": 6})
+                self.assertEqual(Counter(t["kind"] for t in plan["tasks"]), {"pe": 3, "sa": 3, "top": 6})
                 self.assertFalse(plan["backend_executed"])
                 for task in plan["tasks"]:
                     text = (Path(task["inputs"]) / "config.mk").read_text()
                     self.assertIn("SYNTH_MOCK_LARGE_MEMORIES = 0", text)
                     self.assertIn("NUM_CORES = 1", text)
                     self.assertIn("HOLD_SLACK_MARGIN = 5.0", text)
+                    self.assertIn('export PRE_CTS_TCL = ', text)
+                    self.assertIn('export PRE_GLOBAL_ROUTE_TCL = ', text)
+                    self.assertIn('set ::hr_hold_max_buffer_percent {100}', (Path(task['inputs']) / 'settings.tcl').read_text())
                     settings = (Path(task["inputs"]) / "job.json").read_text()
                     self.assertEqual(json.loads(settings)["hold_slack_margin_ps"], 5)
                     self.assertEqual(len(task["commands"]), 7)
+                    model = graph.tasks[task['name']]
+                    memories = [n for n in model.inline if graph.records[n]['original_module'] in ('sram1r1w', 'sram2r1w')]
+                    if model.kind in ('pe', 'top'):
+                        self.assertEqual(len(memories), 1)
+                        self.assertIn(graph.records[memories[0]]['file'], text)
+                    for memory in memories:
+                        self.assertFalse((Path(task['inputs']) / (memory + '.blackbox.sv')).exists())
+                        frozen = Path(task['inputs']) / 'rtl' / graph.records[memory]['file']
+                        self.assertEqual(frozen.read_bytes(), (graph.source_root / graph.records[memory]['file']).read_bytes())
+                    if task['kind'] == 'pe':
+                        self.assertEqual(task['dependencies'], {})
+                        self.assertNotIn('SYNTH_BLACKBOXES', text)
                     if task["kind"] == "top":
                         kinds = Counter(graph.tasks[n].kind for n in task["dependencies"])
-                        self.assertEqual(kinds, {"sa": 1, "sram": 1})
+                        self.assertEqual(kinds, {"sa": 1})
+                covered = {name for task in graph.tasks.values() for name in task.inline
+                           if graph.records[name]['original_module'] in ('sram1r1w', 'sram2r1w')}
+                expected = {name for name, record in graph.records.items()
+                            if record['original_module'] in ('sram1r1w', 'sram2r1w')}
+                self.assertEqual(covered, expected)
+                self.assertEqual(len(covered), 6)
             finally:
                 engine.close()
 
@@ -381,7 +424,7 @@ class PureFunctions(unittest.TestCase):
             if task.kind == "pe":
                 self.assertEqual(mapping["left_a_i"]["bits"][0]["rtl"], "left_a_i[0][0]")
 
-    def test_layout_4096_pes_and_bank_groups(self):
+    def test_layout_4096_pes_centered_sa_and_inlined_pe_storage(self):
         cfg = h.load_config()
         macros = [{"name": f"u.gen_pe_row[{r}].gen_pe_col[{c}].u_macro", "master": "pe__test__hard", "width_um": 10, "height_um": 12}
                   for r in range(64) for c in range(64)]
@@ -392,11 +435,36 @@ class PureFunctions(unittest.TestCase):
         positions = {p["name"]: p for p in result["placements"]}
         self.assertGreater(positions[macros[0]["name"]]["y"], positions[macros[-1]["name"]]["y"])
         top_macros = [{"name": "u.array.u_macro", "master": "sa__test__hard", "width_um": 30, "height_um": 30}]
-        top_macros += [{"name": f"u.{group}.gen_bank[{i}].u_macro", "master": "sram1r1w__test__hard", "width_um": 5, "height_um": 5}
-                       for group in ("ab", "bb") for i in range(2)]
         top = layout_plan(dict(req, kind="top", rows=2, cols=2, macros=top_macros))
-        self.assertEqual(len(top["placements"]), 5)
+        self.assertEqual(len(top["placements"]), 1)
         check_placements(top["placements"], top["core"])
+        placed = top['placements'][0]
+        self.assertLess(abs(placed['x'] + 15 - (top['core'][0] + top['core'][2]) / 2), .1)
+        self.assertLess(abs(placed['y'] + 15 - (top['core'][1] + top['core'][3]) / 2), .3)
+        pe = layout_plan(dict(req, kind='pe', macros=[], standard_cell_area_um2=2000))
+        self.assertEqual(pe['placements'], [])
+        self.assertGreaterEqual((pe['core'][2] - pe['core'][0]) * (pe['core'][3] - pe['core'][1]), 4000)
+        with self.assertRaises(FlowError):
+            layout_plan(dict(req, kind='pe', macros=top_macros))
+
+    def test_legacy_sram_tasks_are_archived_without_removing_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            graph = h.Graph(make_fixture(root), expected=False)
+            work = root / 'work'
+            engine = h.Engine(graph, work, h.load_config(), FakeBackend(work))
+            try:
+                artifact = work / 'old-sram.lef'
+                artifact.write_text('SIMULATED LEGACY VIEW\n')
+                legacy = {'name': 'ram_a', 'kind': 'sram', 'status': 'failed', 'progress': {'period_ps': 1000}}
+                engine.state.put('tasks', 'ram_a', legacy)
+                engine.prepare(False)
+                self.assertIsNone(engine.state.get('tasks', 'ram_a'))
+                self.assertEqual(engine.state.get('retired_tasks', 'ram_a'), legacy)
+                self.assertTrue(artifact.exists())
+                self.assertEqual(len(engine.state.all('tasks')), len(graph.tasks))
+            finally:
+                engine.close()
 
     def test_tcl_hooks_parse_and_sdc_budget(self):
         # Tcl parses procedure bodies without loading or invoking OpenROAD.
@@ -458,6 +526,10 @@ proc set_load {args} {}
                     self.assertEqual(job['hold_slack_margin_ps'], 10)
                     metadata = json.loads((job['inputs'] / 'job.json').read_text())
                     self.assertEqual(metadata['hold_slack_margin_ps'], 10)
+                    self.assertEqual(metadata['hold_max_buffer_percent'], 100)
+                    self.assertEqual(job['hold_max_buffer_percent'], 100)
+                    self.assertIn('export PRE_CTS_TCL = ', text)
+                    self.assertIn('export PRE_GLOBAL_ROUTE_TCL = ', text)
                     settings = (job['inputs'] / 'settings.tcl').read_text()
                     encoded = settings.split('binary decode hex ', 1)[1].split(']', 1)[0]
                     self.assertEqual(json.loads(bytes.fromhex(encoded))['hold_slack_margin_ps'], 10)
@@ -473,7 +545,7 @@ proc set_load {args} {}
             root = Path(tmp)
             graph = h.Graph(make_fixture(root), expected=False)
             config = dict(h.load_config(), hold_slack_margin_ps=10)
-            job = h.build_inputs(graph, graph.tasks['sram_a'], root / 'attempt', 1000,
+            job = h.build_inputs(graph, graph.tasks['pe_leaf_a'], root / 'attempt', 1000,
                                  config, FakeBackend(root), {}, synthetic=True)
             makefile = (job['inputs'] / 'config.mk').read_text()
             margin = next(line.split(' = ', 1)[1] for line in makefile.splitlines()
@@ -487,12 +559,20 @@ proc append_env_var {{var name option takes_value}} {{
 }}
 proc repair_timing {{args}} {{puts "REPAIR_ARGS=$args"}}
 set ::env(HOLD_SLACK_MARGIN) {margin}
+source {{{job['inputs'] / 'timing_repair.tcl'}}}
+repair_timing_helper -hold
+source {{{job['inputs'] / 'timing_repair.tcl'}}}
 repair_timing_helper
 """
             result = subprocess.run(['tclsh'], input=prelude, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stderr, '')
             self.assertIn('-hold_margin 10', result.stdout)
+            calls = [line for line in result.stdout.splitlines() if line.startswith('REPAIR_ARGS=')]
+            self.assertEqual(len(calls), 2)
+            for line in calls:
+                self.assertIn('-max_buffer_percent 100', line)
+                self.assertEqual(line.count('-max_buffer_percent'), 1)
 
     def test_runtime_floorplan_bridge_with_mocked_opendb(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -513,7 +593,7 @@ proc block {{method}} {{
 proc core {{method}} {{switch $method {{xMin {{return 0}} yMin {{return 0}} xMax {{return 10000}} yMax {{return 10000}}}}}}
 proc design_is_routed {{}} {{return 1}}
 set ::env(PLACE_SITE) asap7sc7p5t
-set hr_kind sram
+set hr_kind pe
 set hr_rows 1
 set hr_cols 1
 set hr_config_json {{{canonical(h.load_config())}}}
@@ -541,12 +621,12 @@ puts OK
             root = Path(tmp)
             manifest = make_fixture(root)
             graph = h.Graph(manifest, expected=False)
-            graph.tasks = {"sram_a": graph.tasks["sram_a"]}
+            graph.tasks = {"pe_leaf_a": graph.tasks["pe_leaf_a"]}
             work = root / "work"
             engine = h.Engine(graph, work, h.load_config(), FakeBackend(work))
             try:
                 self.assertEqual(engine.run(), 0)
-                pub = engine.state.get("tasks", "sram_a")["published"]
+                pub = engine.state.get("tasks", "pe_leaf_a")["published"]
             finally:
                 engine.close()
             before = (work / "journal.jsonl").read_text()
@@ -556,7 +636,7 @@ puts OK
             engine = h.Engine(graph, work, h.load_config(), FakeBackend(work))
             try:
                 self.assertEqual(engine.run(), 0)
-                recovered = engine.state.get("tasks", "sram_a")["published"]
+                recovered = engine.state.get("tasks", "pe_leaf_a")["published"]
                 self.assertTrue(engine.published_valid(recovered))
                 self.assertEqual(recovered["digest"], pub["digest"])
             finally:
@@ -647,25 +727,25 @@ class SubprocessRecovery(unittest.TestCase):
         self.control(config={"workers": 1})
         self.finish(self.launch())
         self.assertEqual(sum(e["event"] == "start" for e in self.journal()), starts)
-        # Changing only this SRAM's RTL invalidates its dependent chain, not B.
-        target = self.manifest.parent / "sram_a.sv"
+        # Changing only this PE's RTL invalidates its dependent chain, not B.
+        target = self.manifest.parent / "pe_leaf_a.sv"
         target.write_text(target.read_text() + "// input change\n")
         before = Counter(e["task"] for e in self.journal() if e["event"] == "start")
         self.finish(self.launch())
         after = Counter(e["task"] for e in self.journal() if e["event"] == "start")
-        self.assertEqual(before["sram_b"], after["sram_b"])
-        for task in ("sram_a", "pe__fixture", "sa__fixture", "top_fixture"):
+        self.assertEqual(before["pe_leaf_b"], after["pe_leaf_b"])
+        for task in ("pe_leaf_a", "pe__fixture", "sa__fixture", "top_fixture"):
             self.assertGreater(after[task], before[task])
 
-    def test_ready_parent_starts_while_unrelated_sram_is_still_running(self):
+    def test_ready_parent_starts_while_unrelated_pe_is_still_running(self):
         # B cannot finish its first stage until PE starts. A batch/layer barrier
         # would stall; a work-conserving scheduler must release PE after A.
-        self.control(wait_for_task={"task": "sram_b", "phase": "synth", "until": "pe__fixture"})
+        self.control(wait_for_task={"task": "pe_leaf_b", "phase": "synth", "until": "pe__fixture"})
         self.finish(self.launch())
         self.assert_complete()
         events = self.journal()
         pe_start = next(e["time"] for e in events if e["task"] == "pe__fixture" and e["event"] == "start")
-        b_first_end = next(e["time"] for e in events if e["task"] == "sram_b" and e["event"] == "end")
+        b_first_end = next(e["time"] for e in events if e["task"] == "pe_leaf_b" and e["event"] == "end")
         self.assertLess(pe_start, b_first_end)
 
     def test_configurable_worker_concurrency(self):
@@ -689,17 +769,17 @@ class SubprocessRecovery(unittest.TestCase):
                 self.assertEqual(peak, workers)
 
     def test_error_propagation_retry_and_missing_artifact(self):
-        self.control(fail_task="sram_a", fail_phase="place", fail_once=True)
+        self.control(fail_task="pe_leaf_a", fail_phase="place", fail_once=True)
         self.finish(self.launch(), 1)
         states = self.states()
-        self.assertEqual(states["sram_a"]["status"], "failed")
-        self.assertEqual(states["sram_a"]["error"]["exit_code"], 7)
+        self.assertEqual(states["pe_leaf_a"]["status"], "failed")
+        self.assertEqual(states["pe_leaf_a"]["error"]["exit_code"], 7)
         self.assertEqual(states["pe__fixture"]["status"], "blocked")
-        self.assertEqual(states["sram_b"]["status"], "done")
+        self.assertEqual(states["pe_leaf_b"]["status"], "done")
         self.control(retry_failed=True)
         self.finish(self.launch())
         self.assert_complete()
-        published = self.states()["sram_a"]["published"]
+        published = self.states()["pe_leaf_a"]["published"]
         Path(published["artifacts"]["lef"]).write_text("CORRUPTED")
         # Also damage a completed stage to exercise missing-artifact detection
         # on a required rebuild, not just reconstruction of a publication copy.
@@ -708,45 +788,45 @@ class SubprocessRecovery(unittest.TestCase):
             stages = [json.loads(t) for t, in db.execute("SELECT data FROM stages")]
         finally:
             db.close()
-        original = next(s for s in stages if s["task"] == "sram_a" and s["phase"] == "synth" and "publish-00" in s["key"])
+        original = next(s for s in stages if s["task"] == "pe_leaf_a" and s["phase"] == "synth" and "publish-00" in s["key"])
         Path(next(iter(original["artifacts"]))).unlink()
-        self.control(missing_task="sram_a", missing_phase="synth")
+        self.control(missing_task="pe_leaf_a", missing_phase="synth")
         self.finish(self.launch(), 1)
-        self.assertEqual(self.states()["sram_a"]["error"]["category"], "missing_artifact")
+        self.assertEqual(self.states()["pe_leaf_a"]["error"]["category"], "missing_artifact")
 
     def test_search_limit_and_publication_hold_failure(self):
         self.control(config={"max_search_iterations": 1})
         self.finish(self.launch(), 1)
-        self.assertEqual(self.states()["sram_a"]["error"]["category"], "nonconvergent")
+        self.assertEqual(self.states()["pe_leaf_a"]["error"]["category"], "nonconvergent")
         self.control(hold_slack=-1)
         self.finish(self.launch(), 1)
-        self.assertEqual(self.states()["sram_a"]["error"]["category"], "timing")
-        failure = self.states()["sram_a"]["error"]
+        self.assertEqual(self.states()["pe_leaf_a"]["error"]["category"], "timing")
+        failure = self.states()["pe_leaf_a"]["error"]
         self.assertEqual(failure["hold_ws_ps"], -1)
         self.assertEqual(failure["hold_slack_margin_ps"], 15)
-        self.assertNotIn("published", self.states()["sram_a"])
+        self.assertNotIn("published", self.states()["pe_leaf_a"])
 
     def test_adaptive_hold_repair_and_restart_reuses_correct_attempt(self):
-        # Keep this recovery fixture to one SRAM. Its simulated hold timing
+        # Keep this recovery fixture to one PE with inlined SRAM. Its simulated hold timing
         # requires >=8 ps of repair margin, independent of clock period.
         manifest = json.loads(self.manifest.read_text())
-        manifest["modules"] = [m for m in manifest["modules"] if m["name"] == "sram_a"]
+        manifest["modules"] = [m for m in manifest["modules"] if m["name"] in ("pe_leaf_a", "ram_a")]
         atomic_json(self.manifest, manifest)
-        self.control(hold_required_margin_ps=8, fail_task="sram_a", fail_phase="place",
+        self.control(hold_required_margin_ps=8, fail_task="pe_leaf_a", fail_phase="place",
                      fail_attempt="publish-01", fail_once=True)
         self.finish(self.launch(), 1)
-        self.assertEqual(self.states()["sram_a"]["error"]["category"], "tool")
+        self.assertEqual(self.states()["pe_leaf_a"]["error"]["category"], "tool")
         db = sqlite3.connect(self.work / "state.sqlite3")
         try:
             searches_before = db.execute("SELECT COUNT(*) FROM events WHERE kind='search_result'").fetchone()[0]
         finally:
             db.close()
-        saved = self.states()["sram_a"]["progress"]
+        saved = self.states()["pe_leaf_a"]["progress"]
         self.assertEqual((saved["mode"], saved["index"], saved["phase"], saved["hold_slack_margin_ps"]),
                          ("publish", 1, "place", 10))
         self.control(hold_required_margin_ps=8, retry_failed=True)
         self.finish(self.launch())
-        state = self.states()["sram_a"]
+        state = self.states()["pe_leaf_a"]
         self.assertEqual(state["status"], "done")
         self.assertEqual(state["published"]["metrics"]["hold_slack_margin_ps"], 10)
         self.assertEqual(state["published"]["metrics"]["hold_ws_ps"], 2)
@@ -771,20 +851,20 @@ class SubprocessRecovery(unittest.TestCase):
 
     def test_resume_latest_search_point_after_power_loss_and_legacy_state(self):
         manifest = json.loads(self.manifest.read_text())
-        manifest["modules"] = [m for m in manifest["modules"] if m["name"] == "sram_a"]
+        manifest["modules"] = [m for m in manifest["modules"] if m["name"] in ("pe_leaf_a", "ram_a")]
         atomic_json(self.manifest, manifest)
         for phase, legacy in (("inputs", False), ("route", False), ("route", True)):
             with self.subTest(phase=phase, legacy=legacy):
                 self.work = self.root / f"cursor-{phase}-{legacy}"
                 self.work.mkdir()
-                self.control(kill_event="sweep_checkpoint", kill_task="sram_a",
+                self.control(kill_event="sweep_checkpoint", kill_task="pe_leaf_a",
                              kill_mode="search", kill_index=1, kill_phase=phase)
                 process = self.launch()
                 process.wait(timeout=30)
                 self.assertEqual(process.returncode, -signal.SIGKILL)
                 self.kill_old_backends()
                 process.communicate(timeout=5)
-                point = self.states()["sram_a"]["progress"]
+                point = self.states()["pe_leaf_a"]["progress"]
                 self.assertEqual((point["mode"], point["index"], point["period_ps"], point["phase"]),
                                  ("search", 1, 857.1, phase))
                 with redirect_stdout(io.StringIO()) as output:
@@ -795,15 +875,15 @@ class SubprocessRecovery(unittest.TestCase):
                 try:
                     last_event = db.execute("SELECT MAX(id) FROM events").fetchone()[0]
                     if legacy:
-                        item = self.states()["sram_a"]
+                        item = self.states()["pe_leaf_a"]
                         item.pop("progress")
                         with db:
-                            db.execute("UPDATE tasks SET data=? WHERE name='sram_a'", (canonical(item),))
+                            db.execute("UPDATE tasks SET data=? WHERE name='pe_leaf_a'", (canonical(item),))
                 finally:
                     db.close()
                 self.control()
                 self.finish(self.launch())
-                self.assertEqual(self.states()["sram_a"]["status"], "done")
+                self.assertEqual(self.states()["pe_leaf_a"]["status"], "done")
                 db = sqlite3.connect(self.work / "state.sqlite3")
                 try:
                     resumed = [json.loads(data) for data, in db.execute(
@@ -814,8 +894,60 @@ class SubprocessRecovery(unittest.TestCase):
                 finally:
                     db.close()
 
+    def test_hold_buffer_cap_escalation_cts_route_and_restart(self):
+        manifest = json.loads(self.manifest.read_text())
+        manifest['modules'] = [m for m in manifest['modules'] if m['name'] in ('pe_leaf_a', 'ram_a')]
+        atomic_json(self.manifest, manifest)
+        for phase in ('cts', 'route'):
+            with self.subTest(phase=phase):
+                self.work = self.root / ('buffer-budget-' + phase)
+                self.work.mkdir()
+                controls = {'config': {'hold_max_buffer_percent': 20},
+                            'required_buffer_percent': 80, 'buffer_cap_phase': phase,
+                            'actual_period_ps': 1000}
+                if phase == 'cts':
+                    self.control(**controls, kill_event='hold_buffer_budget_retry', kill_task='pe_leaf_a')
+                    process = self.launch()
+                    process.wait(timeout=30)
+                    self.assertEqual(process.returncode, -signal.SIGKILL)
+                    self.kill_old_backends()
+                    process.communicate(timeout=5)
+                    point = self.states()['pe_leaf_a']['progress']
+                    self.assertEqual((point['index'], point['period_ps'], point['hold_max_buffer_percent']), (0, 1000, 100))
+                self.control(**controls)
+                self.finish(self.launch())
+                state = self.states()['pe_leaf_a']
+                self.assertEqual(state['status'], 'done')
+                self.assertEqual(state['published']['metrics']['hold_max_buffer_percent'], 100)
+                events = [e for e in self.journal() if e['event'] == 'start' and e['attempt'].startswith('search-00')]
+                retries = [e for e in events if e['phase'] == phase]
+                self.assertEqual([e['hold_max_buffer_percent'] for e in retries], [20, 100])
+                self.assertEqual(sum(e['phase'] == 'synth' for e in events), 1)
+                if phase == 'route':
+                    self.assertEqual(sum(e['phase'] == 'cts' for e in events), 1)
+                db = sqlite3.connect(self.work / 'state.sqlite3')
+                try:
+                    changes = [json.loads(s) for s, in db.execute("SELECT data FROM events WHERE kind='hold_buffer_budget_retry'")]
+                    self.assertEqual(len(changes), 1)
+                    self.assertTrue(Path(changes[0]['previous_log']).is_file())
+                    self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+                finally:
+                    db.close()
+
+    def test_hold_buffer_cap_at_max_is_bounded_failure(self):
+        manifest = json.loads(self.manifest.read_text())
+        manifest['modules'] = [m for m in manifest['modules'] if m['name'] in ('pe_leaf_a', 'ram_a')]
+        atomic_json(self.manifest, manifest)
+        self.control(required_buffer_percent=101, actual_period_ps=1000)
+        self.finish(self.launch(), 1)
+        failure = self.states()['pe_leaf_a']
+        self.assertEqual(failure['error']['category'], 'hold_buffer_limit')
+        self.assertEqual(failure['error']['hold_max_buffer_percent'], 100)
+        self.assertEqual(sum(e['phase'] == 'cts' and e['event'] == 'start' for e in self.journal()), 1)
+        self.assertNotIn('published', failure)
+
     def test_power_loss_during_stage_busy_lock_and_partial_rejection(self):
-        self.control(sleep_task="sram_a", sleep_phase="floorplan")
+        self.control(sleep_task="pe_leaf_a", sleep_phase="floorplan")
         process = self.launch()
         deadline = time.monotonic() + 15
         while not (self.work / "sleep_consumed").exists() and time.monotonic() < deadline:
@@ -831,13 +963,13 @@ class SubprocessRecovery(unittest.TestCase):
         process.communicate(timeout=5)
         self.finish(self.launch())
         self.assert_complete()
-        events = [e for e in self.journal() if e["event"] == "start" and e["task"] == "sram_a" and e["attempt"].startswith("search-00")]
+        events = [e for e in self.journal() if e["event"] == "start" and e["task"] == "pe_leaf_a" and e["attempt"].startswith("search-00")]
         counts = Counter(e["phase"] for e in events)
         self.assertEqual(counts["synth"], 1)
         self.assertEqual(counts["floorplan"], 2)
 
     def test_sigint_stops_workers_and_resumes(self):
-        self.control(sleep_task="sram_a", sleep_phase="floorplan")
+        self.control(sleep_task="pe_leaf_a", sleep_phase="floorplan")
         process = self.launch()
         deadline = time.monotonic() + 15
         while not (self.work / "sleep_consumed").exists() and time.monotonic() < deadline:
@@ -845,7 +977,7 @@ class SubprocessRecovery(unittest.TestCase):
         self.assertTrue((self.work / "sleep_consumed").exists())
         os.kill(process.pid, signal.SIGINT)
         self.finish(process, 130)
-        self.assertEqual(self.states()["sram_a"]["status"], "interrupted")
+        self.assertEqual(self.states()["pe_leaf_a"]["status"], "interrupted")
         self.finish(self.launch())
         self.assert_complete()
 
@@ -862,7 +994,7 @@ class SubprocessRecovery(unittest.TestCase):
         self.recover_kill("publication_renamed", None, expected_synth=1)
 
     def recover_kill(self, event, phase, expected_synth):
-        self.control(kill_event=event, kill_task="sram_a", kill_phase=phase)
+        self.control(kill_event=event, kill_task="pe_leaf_a", kill_phase=phase)
         process = self.launch()
         # Another worker may survive and hold the pipe/lock; wait for the killed
         # coordinator, then emulate power loss for its remaining process groups.
@@ -872,10 +1004,10 @@ class SubprocessRecovery(unittest.TestCase):
         process.communicate(timeout=5)
         self.finish(self.launch())
         self.assert_complete()
-        events = [e for e in self.journal() if e["event"] == "start" and e["task"] == "sram_a"
+        events = [e for e in self.journal() if e["event"] == "start" and e["task"] == "pe_leaf_a"
                   and e["phase"] == "synth" and e["attempt"].startswith("search-00")]
         self.assertEqual(len(events), expected_synth)
-        directories = [p for p in (self.work / "published/sram_a").iterdir() if not p.name.startswith(".")]
+        directories = [p for p in (self.work / "published/pe_leaf_a").iterdir() if not p.name.startswith(".")]
         self.assertEqual(len(directories), 1)
         self.assertEqual(len(list(directories[0].glob("publication.json"))), 1)
 

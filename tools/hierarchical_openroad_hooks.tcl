@@ -1,4 +1,24 @@
 # Runtime hooks. No command in this file runs on import or during dry run.
+proc hr_configure_timing_repair {} {
+  if {![info exists ::hr_hold_max_buffer_percent]
+      || ![string is integer -strict $::hr_hold_max_buffer_percent]
+      || $::hr_hold_max_buffer_percent < 1 || $::hr_hold_max_buffer_percent > 100} {
+    error "Hold buffer percentage must be an integer in 1..100"
+  }
+  if {[info commands ::repair_timing_helper] eq ""} {
+    error "ORFS repair_timing_helper is unavailable"
+  }
+  if {[info commands ::hr_original_repair_timing_helper] eq ""} {
+    rename ::repair_timing_helper ::hr_original_repair_timing_helper
+  }
+  proc ::repair_timing_helper {args} {
+    # Keep all ORFS setup/hold options. Supply the buffer budget explicitly;
+    # a same-named environment variable is not consumed by the ORFS helper.
+    ::hr_original_repair_timing_helper {*}$args -max_buffer_percent $::hr_hold_max_buffer_percent
+  }
+  puts "Hierarchical hold buffer budget: $::hr_hold_max_buffer_percent% of design instances"
+}
+
 proc hr_json_string {value} {
   return "\"[string map [list \\ \\\\ \" \\\" \n \\n \r \\r \t \\t] $value]\""
 }

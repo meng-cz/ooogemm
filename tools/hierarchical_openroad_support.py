@@ -197,14 +197,19 @@ def layout_plan(request):
     require(0 < util <= 1 and gap >= 0 and margin > 0, "Invalid physical configuration")
     for macro in macros:
         require(macro["width_um"] > 0 and macro["height_um"] > 0, "Invalid macro dimensions")
+    if kind == "pe":
+        require(not macros, "PE storage must be inlined; no child hard macros are expected")
+    if kind == "top":
+        require(len(macros) == 1, "Top requires exactly one SA macro")
     area = sum(m["width_um"] * m["height_um"] for m in macros) + request["standard_cell_area_um2"] / util
     planned = []
     def add(m, x, y):
         planned.append({**m, "x": x, "y": y, "orientation": "R0"})
     if not macros:
         width = height = max(math.sqrt(area), qy * 4)
-    elif kind == "pe":
-        require(len(macros) == 1, "PE requires exactly one SRAM macro")
+    elif kind == "top":
+        require(macros[0]["master"].startswith("sa__"),
+                "Top requires exactly one SA macro; operand SRAMs must be inlined")
         m = macros[0]
         width = max(math.sqrt(area), m["width_um"] + 2 * gap)
         height = max(area / width, m["height_um"] + 2 * gap)
@@ -230,33 +235,7 @@ def layout_plan(request):
             seen.add((r, c))
             add(inst, c * dx, (rows - 1 - r) * dy)
     else:
-        sa = [m for m in macros if m["master"].startswith("sa__")]
-        require(kind == "top" and len(sa) == 1, "Top requires exactly one SA macro")
-        groups = {}
-        for m in macros:
-            if m in sa:
-                continue
-            match = re.fullmatch(r"(.*)gen_bank\[(\d+)\](.*)", m["name"])
-            require(match, f"Unrecognized operand bank: {m['name']}")
-            groups.setdefault(match[1], []).append((int(match[2]), m))
-        require(len(groups) == 2, "Top requires two operand SRAM bank groups")
-        a, b = [sorted(v) for _, v in sorted(groups.items())]
-        require(len(a) == request["rows"] and len(b) == request["cols"], "Wrong operand bank count")
-        aw = max(m["width_um"] for _, m in a)
-        bh = max(m["height_um"] for _, m in b)
-        ah = sum(m["height_um"] + gap + qy for _, m in a)
-        bw = sum(m["width_um"] + gap + qx for _, m in b)
-        sw, sh = max(sa[0]["width_um"], bw), max(sa[0]["height_um"], ah)
-        width, height = aw + gap + sw, sh + gap + bh
-        scale = max(1, math.sqrt(area / (width * height)))
-        extra_x, extra_y = width * (scale - 1) / 2, height * (scale - 1) / 2
-        width, height = width * scale, height * scale
-        add(sa[0], extra_x + aw + gap + (sw - sa[0]["width_um"]) / 2,
-            extra_y + (sh - sa[0]["height_um"]) / 2)
-        for i, (_, m) in enumerate(a):
-            add(m, extra_x, extra_y + sh - (i + 1) * (m["height_um"] + gap + qy))
-        for i, (_, m) in enumerate(b):
-            add(m, extra_x + aw + gap + i * (m["width_um"] + gap + qx), extra_y + sh + gap)
+        raise FlowError(f"Unexpected hard macros in {kind}; PE storage must be inlined")
     # Reserve snapping slack at every edge; native place_macro snaps to tracks.
     width, height = ceil_grid(width + 2 * qx, qx), ceil_grid(height + 2 * qy, qy)
     ox, oy = ceil_grid(margin, qx), ceil_grid(margin, qy)
